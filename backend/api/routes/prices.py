@@ -1,12 +1,22 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import List, Optional
 from pydantic import BaseModel
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from backend.models.database import get_session, Product, PriceRecord
 
 router = APIRouter(prefix="/api/v1/prices", tags=["价格数据"])
+
+class PriceRecordCreate(BaseModel):
+    product_id: int
+    price: float
+    currency: Optional[str] = "CNY"
+    price_type: Optional[str] = "市场价"
+    trend: Optional[str] = "平"
+    change_percent: Optional[float] = 0.0
+    source: Optional[str] = "manual"
+    record_date: str  # YYYY-MM-DD format
 
 class PriceRecordResponse(BaseModel):
     id: int
@@ -175,3 +185,102 @@ async def get_stats_summary():
         "total_records": total_records or 0,
         "avg_price": avg_price
     }
+
+@router.post("", response_model=PriceRecordResponse)
+async def create_price_record(record: PriceRecordCreate):
+    """手动添加价格记录"""
+    session = get_session()
+
+    # 验证产品存在
+    product = session.query(Product).filter(Product.id == record.product_id).first()
+    if not product:
+        session.close()
+        raise HTTPException(status_code=404, detail="产品不存在")
+
+    # 检查重复记录
+    existing = session.query(PriceRecord).filter(
+        PriceRecord.product_id == record.product_id,
+        PriceRecord.record_date == datetime.strptime(record.record_date, "%Y-%m-%d").date(),
+        PriceRecord.source == record.source
+    ).first()
+    if existing:
+        session.close()
+        raise HTTPException(status_code=400, detail="该日期价格记录已存在")
+
+    new_record = PriceRecord(
+        product_id=record.product_id,
+        price=record.price,
+        currency=record.currency,
+        price_type=record.price_type,
+        trend=record.trend,
+        change_percent=record.change_percent,
+        source=record.source,
+        record_date=datetime.strptime(record.record_date, "%Y-%m-%d").date()
+    )
+    session.add(new_record)
+    session.commit()
+    session.refresh(new_record)
+    session.close()
+
+    return PriceRecordResponse(
+        id=new_record.id,
+        product_id=new_record.product_id,
+        product_name=product.product_name,
+        product_code=product.product_code,
+        price=new_record.price,
+        trend=new_record.trend,
+        change_percent=new_record.change_percent,
+        source=new_record.source,
+        record_date=new_record.record_date
+    )
+
+@router.put("/{record_id}", response_model=PriceRecordResponse)
+async def update_price_record(record_id: int, record: PriceRecordCreate):
+    """更新价格记录"""
+    session = get_session()
+    db_record = session.query(PriceRecord).filter(PriceRecord.id == record_id).first()
+
+    if not db_record:
+        session.close()
+        raise HTTPException(status_code=404, detail="价格记录不存在")
+
+    update_data = record.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        if field == 'record_date':
+            setattr(db_record, field, datetime.strptime(value, "%Y-%m-%d").date())
+        else:
+            setattr(db_record, field, value)
+
+    session.commit()
+    session.refresh(db_record)
+
+    product = session.query(Product).filter(Product.id == db_record.product_id).first()
+    session.close()
+
+    return PriceRecordResponse(
+        id=db_record.id,
+        product_id=db_record.product_id,
+        product_name=product.product_name if product else None,
+        product_code=product.product_code if product else None,
+        price=db_record.price,
+        trend=db_record.trend,
+        change_percent=db_record.change_percent,
+        source=db_record.source,
+        record_date=db_record.record_date
+    )
+
+@router.delete("/{record_id}")
+async def delete_price_record(record_id: int):
+    """删除价格记录"""
+    session = get_session()
+    record = session.query(PriceRecord).filter(PriceRecord.id == record_id).first()
+
+    if not record:
+        session.close()
+        raise HTTPException(status_code=404, detail="价格记录不存在")
+
+    session.delete(record)
+    session.commit()
+    session.close()
+
+    return {"message": "价格记录已删除"}

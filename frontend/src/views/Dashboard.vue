@@ -1,36 +1,40 @@
 <template>
   <div class="dashboard">
-    <header class="header">
-      <h1>采购分析助手 - 价格看板</h1>
-      <nav>
-        <router-link to="/">价格看板</router-link>
-        <router-link to="/compare">产品对比</router-link>
-      </nav>
+    <header class="page-header">
+      <div class="header-left">
+        <h1 class="page-title">价格看板</h1>
+        <p class="page-subtitle">实时监测市场动态</p>
+      </div>
+      <div class="header-right">
+        <div class="live-indicator">
+          <span class="live-dot"></span>
+          <span class="live-text">Live Data</span>
+        </div>
+      </div>
     </header>
 
-    <div class="content">
-      <div class="stats-cards">
-        <el-card class="stat-card">
-          <div class="stat-value">{{ stats.total_products }}</div>
-          <div class="stat-label">产品总数</div>
-        </el-card>
-        <el-card class="stat-card">
-          <div class="stat-value">{{ stats.total_records }}</div>
-          <div class="stat-label">价格记录</div>
-        </el-card>
-        <el-card class="stat-card">
-          <div class="stat-value">{{ stats.avg_price }}</div>
-          <div class="stat-label">平均价格 (元/吨)</div>
-        </el-card>
+    <div class="stats-grid">
+      <div class="stat-card" v-for="(stat, index) in statCards" :key="stat.label"
+           :style="{ animationDelay: `${index * 0.1}s` }">
+        <div class="stat-icon" :style="{ background: stat.bgColor }">{{ stat.icon }}</div>
+        <div class="stat-content">
+          <div class="stat-value">{{ stat.value }}</div>
+          <div class="stat-label">{{ stat.label }}</div>
+        </div>
       </div>
+    </div>
 
-      <el-card class="chart-card">
+    <div class="main-grid">
+      <el-card class="chart-card animate-in" style="animation-delay: 0.3s">
         <template #header>
           <div class="card-header">
-            <span>价格趋势</span>
+            <div class="header-title">
+              <span class="title-icon">◎</span>
+              <span>价格趋势</span>
+            </div>
             <div class="controls">
               <SourceSelector @update:source="val => { selectedSource = val; loadPriceHistory() }" />
-              <el-select v-model="selectedProduct" placeholder="选择产品" size="small" @change="loadPriceHistory">
+              <el-select v-model="selectedProduct" placeholder="选择产品" size="default" @change="loadPriceHistory">
                 <el-option
                   v-for="p in products"
                   :key="p.id"
@@ -44,32 +48,38 @@
         <div ref="chartRef" class="chart-container"></div>
       </el-card>
 
-      <el-card class="table-card">
+      <el-card class="table-card animate-in" style="animation-delay: 0.4s">
         <template #header>
-          <span>最新价格</span>
+          <div class="card-header">
+            <div class="header-title">
+              <span class="title-icon">◫</span>
+              <span>最新价格</span>
+            </div>
+            <span class="record-count">{{ latestPrices.length }} 条记录</span>
+          </div>
         </template>
-        <el-table :data="latestPrices" style="width: 100%" stripe>
-          <el-table-column prop="product_name" label="产品名称" />
-          <el-table-column prop="price" label="价格">
+        <el-table :data="latestPrices" style="width: 100%" size="large">
+          <el-table-column prop="product_name" label="产品名称" min-width="140" />
+          <el-table-column prop="price" label="价格" width="120">
             <template #default="{ row }">
-              {{ row.price }} 元/吨
+              <span class="price-value">¥{{ row.price.toLocaleString() }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="trend" label="趋势">
+          <el-table-column prop="trend" label="趋势" width="80">
             <template #default="{ row }">
               <span :class="['trend-badge', row.trend]">
                 {{ row.trend === '涨' ? '↑' : row.trend === '跌' ? '↓' : '—' }}
               </span>
             </template>
           </el-table-column>
-          <el-table-column prop="change_percent" label="涨跌幅">
+          <el-table-column prop="change_percent" label="涨跌幅" width="100">
             <template #default="{ row }">
-              <span :class="row.change_percent > 0 ? 'text-rise' : row.change_percent < 0 ? 'text-fall' : ''">
+              <span :class="row.change_percent > 0 ? 'text-rise' : row.change_percent < 0 ? 'text-fall' : 'text-flat'">
                 {{ row.change_percent > 0 ? '+' : '' }}{{ row.change_percent }}%
               </span>
             </template>
           </el-table-column>
-          <el-table-column prop="record_date" label="日期" />
+          <el-table-column prop="record_date" label="日期" width="110" />
         </el-table>
       </el-card>
     </div>
@@ -90,10 +100,19 @@ const selectedProduct = ref(null)
 const selectedSource = ref(null)
 let chartInstance = null
 
+const statCards = ref([
+  { icon: '◈', label: '产品总数', value: 0, bgColor: 'rgba(0, 212, 255, 0.15)' },
+  { icon: '◧', label: '价格记录', value: 0, bgColor: 'rgba(255, 107, 107, 0.15)' },
+  { icon: '◫', label: '平均价格', value: 0, bgColor: 'rgba(0, 196, 140, 0.15)' }
+])
+
 async function loadStats() {
   try {
     const res = await priceApi.getStatsSummary()
     stats.value = res.data
+    statCards.value[0].value = res.data.total_products || 0
+    statCards.value[1].value = res.data.total_records || 0
+    statCards.value[2].value = res.data.avg_price ? `¥${res.data.avg_price.toLocaleString()}` : '-'
   } catch (e) {
     console.error('Failed to load stats', e)
   }
@@ -141,25 +160,55 @@ function updateChart(data) {
   const prices = data.map(d => d.price)
 
   const option = {
+    backgroundColor: 'transparent',
     tooltip: {
       trigger: 'axis',
-      formatter: '{b}<br/>{a}: {c} 元/吨'
+      backgroundColor: '#21262d',
+      borderColor: '#30363d',
+      textStyle: { color: '#e8eaed' },
+      formatter: '{b}<br/><span style="color:#00d4ff">{a}: </span>{c} 元/吨'
+    },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      top: '10%',
+      containLabel: true
     },
     xAxis: {
       type: 'category',
-      data: dates
+      data: dates,
+      boundaryGap: false,
+      axisLine: { lineStyle: { color: '#30363d' } },
+      axisLabel: { color: '#8b949e', fontSize: 11 }
     },
     yAxis: {
       type: 'value',
-      name: '价格'
+      name: '价格 (元/吨)',
+      nameTextStyle: { color: '#8b949e', fontSize: 11 },
+      axisLine: { show: false },
+      axisLabel: { color: '#8b949e', fontSize: 11 },
+      splitLine: { lineStyle: { color: '#30363d', type: 'dashed' } }
     },
     series: [{
       name: '价格',
       type: 'line',
       smooth: true,
+      symbol: 'circle',
+      symbolSize: 6,
       data: prices,
-      itemStyle: { color: '#409eff' },
-      areaStyle: { color: 'rgba(64, 158, 255, 0.1)' }
+      itemStyle: { color: '#00d4ff' },
+      lineStyle: { width: 2 },
+      areaStyle: {
+        color: {
+          type: 'linear',
+          x: 0, y: 0, x2: 0, y2: 1,
+          colorStops: [
+            { offset: 0, color: 'rgba(0, 212, 255, 0.3)' },
+            { offset: 1, color: 'rgba(0, 212, 255, 0.02)' }
+          ]
+        }
+      }
     }]
   }
 
@@ -180,101 +229,217 @@ onUnmounted(() => {
 
 <style scoped>
 .dashboard {
+  padding: 32px;
   min-height: 100vh;
 }
 
-.header {
-  background: #fff;
-  padding: 16px 24px;
+.page-header {
   display: flex;
   justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 32px;
+}
+
+.page-title {
+  font-family: 'Outfit', sans-serif;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.page-subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.live-indicator {
+  display: flex;
   align-items: center;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--accent-cyan-dim);
+  border-radius: 20px;
+  border: 1px solid rgba(0, 212, 255, 0.3);
 }
 
-.header h1 {
-  font-size: 20px;
-  color: #303133;
+.live-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--accent-cyan);
+  border-radius: 50%;
+  animation: pulse 2s infinite;
 }
 
-.header nav a {
-  margin-left: 20px;
-  color: #606266;
-  text-decoration: none;
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.2); }
 }
 
-.header nav a.router-link-active {
-  color: #409eff;
+.live-text {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-cyan);
+  letter-spacing: 0.5px;
 }
 
-.content {
-  padding: 20px;
-}
-
-.stats-cards {
+.stats-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 20px;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 .stat-card {
-  text-align: center;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 24px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  opacity: 0;
+  animation: fadeInUp 0.5s ease-out forwards;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+}
+
+.stat-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  color: var(--accent-cyan);
+}
+
+.stat-content {
+  flex: 1;
 }
 
 .stat-value {
+  font-family: 'Outfit', sans-serif;
   font-size: 28px;
-  font-weight: bold;
-  color: #409eff;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
 }
 
 .stat-label {
-  font-size: 14px;
-  color: #909399;
-  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.main-grid {
+  display: grid;
+  gap: 20px;
 }
 
 .chart-card {
-  margin-bottom: 20px;
+  border-radius: 16px !important;
+}
+
+.table-card {
+  border-radius: 16px !important;
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding: 4px 0;
+}
+
+.header-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: 'Outfit', sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.title-icon {
+  font-size: 18px;
+  color: var(--accent-cyan);
 }
 
 .controls {
   display: flex;
-  gap: 10px;
+  gap: 12px;
+  align-items: center;
+}
+
+.record-count {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 4px 12px;
+  background: var(--bg-hover);
+  border-radius: 12px;
 }
 
 .chart-container {
-  height: 300px;
+  height: 320px;
+  margin-top: 16px;
+}
+
+.price-value {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 600;
+  color: var(--accent-cyan);
 }
 
 .trend-badge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-weight: bold;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 24px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .trend-badge.涨 {
-  background: #f56c6c;
-  color: #fff;
+  background: rgba(255, 107, 107, 0.2);
+  color: var(--rise-color);
 }
 
 .trend-badge.跌 {
-  background: #67c23a;
-  color: #fff;
+  background: rgba(0, 196, 140, 0.2);
+  color: var(--fall-color);
 }
 
 .trend-badge.平 {
-  background: #909399;
-  color: #fff;
+  background: rgba(139, 148, 158, 0.2);
+  color: var(--text-secondary);
 }
 
-.text-rise { color: #f56c6c; }
-.text-fall { color: #67c23a; }
+.text-rise { color: var(--rise-color); font-weight: 500; }
+.text-fall { color: var(--fall-color); font-weight: 500; }
+.text-flat { color: var(--text-secondary); }
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-in {
+  opacity: 0;
+  animation: fadeInUp 0.5s ease-out forwards;
+}
 </style>

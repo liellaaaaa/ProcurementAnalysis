@@ -13,12 +13,14 @@ app.add_middleware(
 )
 
 # Import routers
-from backend.api.routes import products, prices, scrapers
+from backend.api.routes import products, prices, scrapers, analytics, reports
 
 # Include routers
 app.include_router(products.router)
 app.include_router(prices.router)
 app.include_router(scrapers.router)
+app.include_router(analytics.router)
+app.include_router(reports.router)
 
 @app.get("/")
 async def root():

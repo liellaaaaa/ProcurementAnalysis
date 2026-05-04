@@ -24,5 +24,47 @@ export const productApi = {
   },
   createProduct(data) {
     return api.post('/products', data)
+  },
+  updateProduct(id, data) {
+    return api.put(`/products/${id}`, data)
+  },
+  deleteProduct(id) {
+    return api.delete(`/products/${id}`)
+  }
+}
+
+export const priceRecordApi = {
+  createPriceRecord(data) {
+    return api.post('/prices', data)
+  },
+  updatePriceRecord(id, data) {
+    return api.put(`/prices/${id}`, data)
+  },
+  deletePriceRecord(id) {
+    return api.delete(`/prices/${id}`)
+  }
+}
+
+export const reportApi = {
+  getWeeklyStats() {
+    return api.get('/prices/stats/weekly')
+  },
+  getMonthlyStats(month) {
+    return api.get('/prices/stats/monthly', { params: month ? { month } : {} })
+  },
+  getRanking(days = 7) {
+    return api.get('/prices/stats/ranking', { params: { days } })
+  },
+  getForecast(productId, days = 30) {
+    return api.get(`/prices/forecast/${productId}`, { params: { days } })
+  },
+  compareProducts(ids) {
+    return api.get('/prices/compare', { params: { product_ids: ids } })
+  },
+  downloadPdf(type = 'weekly') {
+    return api.get('/reports/pdf', { params: { report_type: type }, responseType: 'blob' })
+  },
+  downloadExcel(type = 'weekly') {
+    return api.get('/reports/excel', { params: { report_type: type }, responseType: 'blob' })
   }
 }

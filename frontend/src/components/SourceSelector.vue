@@ -1,5 +1,5 @@
 <template>
-  <el-select v-model="selectedSource" placeholder="选择数据源" size="small" @change="$emit('update:source', selectedSource)">
+  <el-select v-model="selectedSource" placeholder="数据源" size="default" clearable @change="$emit('update:source', selectedSource)">
     <el-option
       v-for="s in sources"
       :key="s"
@@ -26,7 +26,7 @@ const sources = ref([])
 const selectedSource = ref(props.modelValue)
 
 const sourceLabelMap = {
-  'shengyishe': '生意社'
+  'shengyishe': '◈ 生意社'
 }
 
 async function loadSources() {

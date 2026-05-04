@@ -14,7 +14,7 @@ class ShengyisheScraper(BaseScraper):
     BASE_URL = "https://www.100ppi.com"
     LIST_URL = "https://www.100ppi.com/mprice/mlist-1-14-{}.html"
     SOURCE_KEY = "shengyishe"
-    PAGES_TO_SCRAPE = 3
+    PAGES_TO_SCRAPE = 10
 
     def __init__(self, name: str = "shengyishe"):
         super().__init__(name)
