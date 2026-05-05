@@ -100,10 +100,10 @@ async def get_latest_prices(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100)
 ):
-    """获取各产品最新价格（分页+筛选）"""
+    """获取各产品最新价格（分页+筛选，同一产品聚合显示最低价~最高价）"""
     session = get_session()
 
-    # 子查询获取每个产品的最新日期
+    # 获取每个产品在最新日期的所有记录
     subquery = session.query(
         PriceRecord.product_id,
         func.max(PriceRecord.record_date).label('max_date')
@@ -122,21 +122,53 @@ async def get_latest_prices(
     if product_name:
         query = query.filter(Product.product_name.contains(product_name))
 
-    # 总数
-    total = query.count()
-    # 分页
-    results = query.order_by(PriceRecord.record_date.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    results = query.order_by(PriceRecord.record_date.desc()).all()
 
-    response = []
-    for pr, product_name, product_code in results:
-        response.append(PriceRecordResponse.from_record(pr, product_name, product_code))
+    # 按产品聚合：同一产品的多条记录（不同供应商/地区/品牌）合并
+    product_aggregated = {}
+    for pr, pname, pcode in results:
+        pid = pr.product_id
+        if pid not in product_aggregated:
+            product_aggregated[pid] = {
+                "product_id": pid,
+                "product_name": pname,
+                "product_code": pcode,
+                "min_price": pr.price,
+                "max_price": pr.price,
+                "change_percent": pr.change_percent,
+                "record_date": pr.record_date.strftime('%Y/%m/%d') if pr.record_date else '',
+                "trend": pr.trend,
+                "details": []
+            }
+        else:
+            if pr.price < product_aggregated[pid]["min_price"]:
+                product_aggregated[pid]["min_price"] = pr.price
+            if pr.price > product_aggregated[pid]["max_price"]:
+                product_aggregated[pid]["max_price"] = pr.price
+        # 记录详情
+        product_aggregated[pid]["details"].append({
+            "price": pr.price,
+            "region": pr.region,
+            "supplier": pr.supplier,
+            "brand": pr.brand,
+            "specification": pr.specification,
+            "change_percent": pr.change_percent,
+            "trend": pr.trend
+        })
+
+    # 排序：按产品ID保持一致性
+    sorted_products = sorted(product_aggregated.values(), key=lambda x: x["product_id"])
+    total = len(sorted_products)
+
+    # 分页
+    paginated = sorted_products[(page - 1) * page_size: page * page_size]
 
     session.close()
     return {
         "total": total,
         "page": page,
         "page_size": page_size,
-        "data": response
+        "data": paginated
     }
 
 @router.get("/history/{product_id}", response_model=List[PriceRecordResponse])
@@ -377,6 +409,169 @@ async def get_dashboard_history_compare(
 
     session.close()
     return {"series": list(product_data.values())}
+
+
+@router.get("/dashboard/heatmap")
+async def get_dashboard_heatmap(
+    days: int = Query(30, ge=7, le=90),
+    region: Optional[str] = None
+):
+    """获取产品-地区价格矩阵热力图"""
+    session = get_session()
+    start_date = (date.today() - timedelta(days=days)).isoformat()
+
+    # 获取每个产品-地区组合的最新记录
+    subquery = session.query(
+        PriceRecord.product_id,
+        PriceRecord.region,
+        func.max(PriceRecord.record_date).label('max_date')
+    ).group_by(
+        PriceRecord.product_id,
+        PriceRecord.region
+    ).subquery()
+
+    results = session.query(
+        PriceRecord,
+        Product.product_name
+    ).join(
+        Product
+    ).join(
+        subquery,
+        (PriceRecord.product_id == subquery.c.product_id) &
+        (PriceRecord.region == subquery.c.region) &
+        (PriceRecord.record_date == subquery.c.max_date)
+    ).filter(
+        PriceRecord.record_date >= start_date
+    ).all()
+
+    if not results:
+        session.close()
+        return {"products": [], "regions": [], "data": []}
+
+    # 收集所有产品和地区
+    product_map = {}  # product_id -> product_name
+    region_set = set()
+    matrix = {}  # (product_id, region) -> price
+
+    for pr, pname in results:
+        product_map[pr.product_id] = pname
+        if pr.region:
+            region_set.add(pr.region)
+        matrix[(pr.product_id, pr.region)] = pr.price
+
+    # 排序产品（按名称）和地区
+    sorted_products = sorted(product_map.items(), key=lambda x: x[1])
+    sorted_regions = sorted(region_set)
+
+    # 构建热力图数据
+    heatmap_data = []
+    for pid, pname in sorted_products:
+        for ridx, region in enumerate(sorted_regions):
+            price = matrix.get((pid, region))
+            if price is not None:
+                heatmap_data.append({
+                    "product_id": pid,
+                    "product_name": pname,
+                    "region": region,
+                    "price": price
+                })
+
+    session.close()
+    return {
+        "products": [{"id": p[0], "name": p[1]} for p in sorted_products],
+        "regions": sorted_regions,
+        "data": heatmap_data
+    }
+    """获取各产品每日涨跌热力图数据"""
+    session = get_session()
+    start_date = (date.today() - timedelta(days=days)).isoformat()
+
+    # 获取所有产品最新一条记录的产品ID（活跃产品）
+    active_subquery = session.query(
+        PriceRecord.product_id,
+        func.max(PriceRecord.record_date).label('max_date')
+    ).group_by(PriceRecord.product_id).subquery()
+
+    # 获取每个产品每天的平均价格
+    daily_prices = session.query(
+        PriceRecord.product_id,
+        func.date(PriceRecord.record_date).label('trade_date'),
+        func.avg(PriceRecord.price).label('avg_price')
+    ).filter(
+        PriceRecord.record_date >= start_date
+    ).group_by(
+        PriceRecord.product_id,
+        func.date(PriceRecord.record_date)
+    ).all()
+
+    # 获取每个产品每天的环比变化
+    price_map = {}
+    for dp in daily_prices:
+        key = (dp.product_id, dp.trade_date.isoformat() if hasattr(dp.trade_date, 'isoformat') else str(dp.trade_date))
+        price_map[key] = dp.avg_price
+
+    # 获取产品名称
+    product_ids = list(set(dp.product_id for dp in daily_prices))
+    products = {p.id: p.product_name for p in session.query(Product).filter(Product.id.in_(product_ids)).all()}
+
+    # 获取每个产品的最新价格用于计算涨跌幅基准
+    latest_prices = session.query(
+        PriceRecord.product_id,
+        func.max(PriceRecord.record_date).label('max_date'),
+        PriceRecord.price
+    ).join(
+        active_subquery,
+        (PriceRecord.product_id == active_subquery.c.product_id) &
+        (PriceRecord.record_date == active_subquery.c.max_date)
+    ).group_by(PriceRecord.product_id, PriceRecord.price).all()
+
+    latest_price_map = {}
+    for lp in latest_prices:
+        if lp.product_id not in latest_price_map:
+            latest_price_map[lp.product_id] = lp.price
+
+    # 构建热力图数据
+    # 找出所有日期
+    all_dates = sorted(set(dp.trade_date.isoformat() if hasattr(dp.trade_date, 'isoformat') else str(dp.trade_date) for dp in daily_prices))
+
+    # 计算每个产品每天的涨跌幅（相对于前一天）
+    heatmap_data = []
+    for pid in product_ids:
+        product_name = products.get(pid, "未知")
+        prev_price = None
+        for d in all_dates:
+            key = (pid, d)
+            if key in price_map:
+                curr_price = price_map[key]
+                if prev_price is not None and prev_price > 0:
+                    change_pct = ((curr_price - prev_price) / prev_price) * 100
+                else:
+                    # 第一天用最新价格对比
+                    if pid in latest_price_map and latest_price_map[pid] > 0:
+                        change_pct = ((curr_price - latest_price_map[pid]) / latest_price_map[pid]) * 100
+                    else:
+                        change_pct = 0
+                heatmap_data.append({
+                    "product_id": pid,
+                    "product_name": product_name,
+                    "date": d,
+                    "change_percent": round(change_pct, 2)
+                })
+                prev_price = curr_price
+            else:
+                heatmap_data.append({
+                    "product_id": pid,
+                    "product_name": product_name,
+                    "date": d,
+                    "change_percent": None
+                })
+
+    session.close()
+    return {
+        "dates": all_dates,
+        "products": [{"id": pid, "name": products.get(pid, "未知")} for pid in product_ids],
+        "data": heatmap_data
+    }
 
 
 @router.get("/dashboard/volatility")

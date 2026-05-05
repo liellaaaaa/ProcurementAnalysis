@@ -39,14 +39,13 @@
           <template #header>
             <div class="card-header">
               <div class="header-title">
-                <span class="title-icon">◎</span>
-                <span>价格走势对比</span>
+                <span class="title-icon">▦</span>
+                <span>产品-地区价格矩阵</span>
               </div>
               <div class="controls">
-                <el-select v-model="compareDays" placeholder="时间范围" size="default" style="width: 100px" @change="loadCompareData">
+                <el-select v-model="compareDays" placeholder="时间范围" size="default" style="width: 100px" @change="loadHeatmapData">
                   <el-option label="7天" :value="7" />
                   <el-option label="30天" :value="30" />
-                  <el-option label="90天" :value="90" />
                 </el-select>
               </div>
             </div>
@@ -120,21 +119,46 @@
           </div>
         </div>
       </template>
-      <el-table :data="latestPrices" style="width: 100%" size="large">
-        <el-table-column prop="product_name" label="产品名称" min-width="120" />
-        <el-table-column prop="specification" label="规格" min-width="160" show-overflow-tooltip />
-        <el-table-column prop="brand" label="品牌" width="100" show-overflow-tooltip />
-        <el-table-column prop="region" label="地区" width="90" />
-        <el-table-column prop="supplier" label="供应商" width="150" show-overflow-tooltip />
-        <el-table-column prop="price" label="价格" width="100">
+      <el-table :data="latestPrices" style="width: 100%" size="large" row-key="product_id" :expand-row-keys="expandedRows" @expand-change="handleExpandChange">
+        <el-table-column type="expand" width="50">
           <template #default="{ row }">
-            <span class="price-value">¥{{ row.price.toLocaleString() }}</span>
+            <div class="expand-content">
+              <p class="expand-title">各供应商/地区价格明细</p>
+              <el-table :data="row.details" size="small" class="detail-table">
+                <el-table-column prop="supplier" label="供应商" min-width="140" show-overflow-tooltip />
+                <el-table-column prop="region" label="地区" width="100" />
+                <el-table-column prop="brand" label="品牌" width="120" show-overflow-tooltip />
+                <el-table-column prop="specification" label="规格" min-width="160" show-overflow-tooltip />
+                <el-table-column prop="price" label="价格" width="100">
+                  <template #default="{ row: detail }">
+                    <span class="price-value">¥{{ detail.price.toLocaleString() }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="trend" label="趋势" width="70">
+                  <template #default="{ row: detail }">
+                    <span :class="['trend-badge', detail.trend]">
+                      {{ detail.trend === '涨' ? '↑' : detail.trend === '跌' ? '↓' : '—' }}
+                    </span>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="change_percent" label="涨跌幅" width="90">
+                  <template #default="{ row: detail }">
+                    <span :class="detail.change_percent > 0 ? 'text-rise' : detail.change_percent < 0 ? 'text-fall' : 'text-flat'">
+                      {{ detail.change_percent > 0 ? '+' : '' }}{{ detail.change_percent }}%
+                    </span>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
           </template>
         </el-table-column>
-        <el-table-column prop="trend" label="趋势" width="70">
+        <el-table-column prop="product_name" label="产品名称" min-width="120" />
+        <el-table-column label="价格区间" min-width="140">
           <template #default="{ row }">
-            <span :class="['trend-badge', row.trend]">
-              {{ row.trend === '涨' ? '↑' : row.trend === '跌' ? '↓' : '—' }}
+            <span class="price-range">
+              <span class="price-value">¥{{ row.min_price.toLocaleString() }}</span>
+              <span class="price-separator">~</span>
+              <span class="price-value">¥{{ row.max_price.toLocaleString() }}</span>
             </span>
           </template>
         </el-table-column>
@@ -145,7 +169,19 @@
             </span>
           </template>
         </el-table-column>
+        <el-table-column prop="trend" label="趋势" width="70">
+          <template #default="{ row }">
+            <span :class="['trend-badge', row.trend]">
+              {{ row.trend === '涨' ? '↑' : row.trend === '跌' ? '↓' : '—' }}
+            </span>
+          </template>
+        </el-table-column>
         <el-table-column prop="record_date" label="日期" width="100" />
+        <el-table-column label="供应商数" width="90">
+          <template #default="{ row }">
+            <span class="detail-count">{{ row.details ? row.details.length : 0 }}家</span>
+          </template>
+        </el-table-column>
       </el-table>
       <el-pagination
         v-if="pagination.total > 0"
@@ -176,7 +212,8 @@ const latestPrices = ref([])
 const selectedSource = ref(null)
 const searchKeyword = ref('')
 const dateRange = ref([])
-const compareDays = ref(30)
+const compareDays = ref(7)
+const expandedRows = ref([])
 
 const pagination = ref({ page: 1, pageSize: 20, total: 0 })
 
@@ -233,34 +270,112 @@ function handlePageChange(page) {
 }
 
 function handleDateRangeChange() {
-  loadCompareData()
+  loadHeatmapData()
   loadDistributionData()
 }
 
-async function loadCompareData() {
+function handleExpandChange(row) {
+  const id = row.product_id
+  if (expandedRows.value.includes(id)) {
+    expandedRows.value = []
+  } else {
+    expandedRows.value = [id]
+  }
+}
+
+async function loadHeatmapData() {
   if (!lineChart) return
   try {
-    const res = await priceApi.getDashboardHistoryCompare([], compareDays.value)
-    if (res.data.series && res.data.series.length > 0) {
-      const allDates = [...new Set(res.data.series.flatMap(s => s.dates))].sort()
-      const series = res.data.series.map((s, i) => {
-        const datePriceMap = {}
-        s.dates.forEach((d, idx) => { datePriceMap[d] = s.prices[idx] })
-        return {
-          name: s.name,
-          type: 'line',
-          smooth: true,
-          data: allDates.map(d => datePriceMap[d] || '-'),
-          emphasis: { focus: 'series' }
-        }
-      })
-      lineChart.setOption({
-        xAxis: { data: allDates },
-        series
-      })
+    const res = await priceApi.getDashboardHeatmap(compareDays.value)
+    const { products, regions, data } = res.data
+
+    if (!products || products.length === 0 || !regions || regions.length === 0) {
+      lineChart.setOption({ series: [{ data: [] }] })
+      return
     }
+
+    // 计算价格范围
+    const prices = data.map(d => d.price)
+    const minPrice = Math.min(...prices)
+    const maxPrice = Math.max(...prices)
+
+    // 构建矩阵热力图数据：[地区索引, 产品索引, 价格]
+    const heatmapData = data.map(d => [
+      regions.indexOf(d.region),
+      products.findIndex(p => p.id === d.product_id),
+      d.price
+    ])
+
+    lineChart.setOption({
+      tooltip: {
+        trigger: 'item',
+        backgroundColor: '#fff',
+        borderColor: '#ddd',
+        borderWidth: 1,
+        textStyle: { color: '#333', fontSize: 12 },
+        formatter: (params) => {
+          const region = regions[params.value[0]]
+          const product = products[params.value[1]].name
+          const price = params.value[2]
+          return `<strong>${product}</strong><br/>地区: ${region}<br/>价格: <strong style="color:#c62828">¥${price.toLocaleString()}</strong>`
+        }
+      },
+      grid: {
+        left: 10,
+        right: 80,
+        bottom: 15,
+        top: 10
+      },
+      xAxis: {
+        type: 'category',
+        data: regions,
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: { color: '#666', fontSize: 10, rotate: 30 },
+        splitArea: { show: false }
+      },
+      yAxis: {
+        type: 'category',
+        data: products.map(p => p.name),
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: { color: '#666', fontSize: 10, width: 100, overflow: 'truncate' },
+        splitArea: { show: false }
+      },
+      visualMap: {
+        type: 'continuous',
+        min: minPrice,
+        max: maxPrice,
+        calculable: true,
+        orient: 'vertical',
+        right: 0,
+        top: 'center',
+        textStyle: { color: '#666', fontSize: 10 },
+        inRange: {
+          color: ['#ffebee', '#ffcdd2', '#ef9a9a', '#e57373', '#c62828', '#7b0000']
+        },
+        formatter: (val) => `¥${val.toFixed(0)}`
+      },
+      series: [{
+        type: 'heatmap',
+        data: heatmapData,
+        emphasis: {
+          itemStyle: {
+            borderColor: '#333',
+            borderWidth: 2,
+            shadowBlur: 6,
+            shadowColor: 'rgba(0,0,0,0.25)'
+          }
+        },
+        itemStyle: {
+          borderColor: '#fff',
+          borderWidth: 1,
+          borderRadius: 2
+        }
+      }]
+    }, true)
   } catch (e) {
-    console.error('Failed to load compare data', e)
+    console.error('Failed to load heatmap data', e)
   }
 }
 
@@ -269,11 +384,13 @@ async function loadDistributionData() {
   try {
     const res = await priceApi.getDashboardDistribution(30)
     if (res.data.labels && res.data.labels.length > 0) {
+      const pieColors = ['#0077cc', '#00c48c', '#ff6b6b', '#ffd93d', '#9b59b6', '#3498db', '#e67e22', '#1abc9c', '#e91e63', '#6739b6']
       pieChart.setOption({
         series: [{
           data: res.data.labels.map((label, i) => ({
             name: label,
-            value: res.data.sizes[i]
+            value: res.data.sizes[i],
+            itemStyle: { color: pieColors[i % pieColors.length] }
           }))
         }]
       })
@@ -335,24 +452,24 @@ async function loadVolatilityData() {
 }
 
 function initCharts() {
-  // 折线图
+  // 热力图：产品-地区矩阵
   lineChart = echarts.init(lineChartRef.value)
   lineChart.setOption({
-    backgroundColor: 'transparent',
-    tooltip: { trigger: 'axis', backgroundColor: '#21262d', borderColor: '#30363d', textStyle: { color: '#e8eaed' } },
-    legend: { bottom: 0, textStyle: { color: '#8b949e' }, selectedMode: false },
-    grid: { left: '3%', right: '4%', bottom: '15%', top: '8%', containLabel: true },
-    xAxis: { type: 'category', boundaryGap: false, axisLine: { lineStyle: { color: '#30363d' } }, axisLabel: { color: '#8b949e', fontSize: 11 } },
-    yAxis: { type: 'value', name: '价格 (元/吨)', nameTextStyle: { color: '#8b949e' }, axisLine: { show: false }, axisLabel: { color: '#8b949e' }, splitLine: { lineStyle: { color: '#30363d', type: 'dashed' } } },
-    series: []
+    backgroundColor: '#ffffff',
+    tooltip: { trigger: 'item', backgroundColor: '#fff', borderColor: '#ddd', textStyle: { color: '#333' } },
+    grid: { left: 10, right: 80, bottom: 15, top: 10 },
+    xAxis: { type: 'category', data: [], axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: '#666', fontSize: 10, rotate: 30 }, splitArea: { show: false } },
+    yAxis: { type: 'category', data: [], axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: '#666', fontSize: 10, width: 100, overflow: 'truncate' }, splitArea: { show: false } },
+    visualMap: { type: 'continuous', min: 0, max: 10000, calculable: true, orient: 'vertical', right: 0, top: 'center', textStyle: { color: '#666', fontSize: 10 }, inRange: { color: ['#ffebee', '#ffcdd2', '#ef9a9a', '#e57373', '#c62828', '#7b0000'] }, formatter: (val) => `¥${val.toFixed(0)}` },
+    series: [{ type: 'heatmap', data: [], emphasis: { itemStyle: { borderColor: '#333', borderWidth: 2, shadowBlur: 6, shadowColor: 'rgba(0,0,0,0.25)' } }, itemStyle: { borderColor: '#fff', borderWidth: 1, borderRadius: 2 } }]
   })
 
   // 饼图
   pieChart = echarts.init(pieChartRef.value)
   pieChart.setOption({
-    backgroundColor: 'transparent',
-    tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
-    legend: { orient: 'vertical', right: 10, top: 'center', textStyle: { color: '#8b949e' } },
+    backgroundColor: '#ffffff',
+    tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)', backgroundColor: '#ffffff', borderColor: '#e4e7ed', textStyle: { color: '#1a1a2e' } },
+    legend: { orient: 'vertical', right: 10, top: 'center', textStyle: { color: '#5a6178' } },
     series: [{
       type: 'pie',
       radius: ['40%', '70%'],
@@ -365,15 +482,15 @@ function initCharts() {
   // 柱状图
   barChart = echarts.init(barChartRef.value)
   barChart.setOption({
-    backgroundColor: 'transparent',
-    tooltip: { trigger: 'axis', backgroundColor: '#21262d', borderColor: '#30363d', textStyle: { color: '#e8eaed' }, axisPointer: { type: 'shadow' } },
+    backgroundColor: '#ffffff',
+    tooltip: { trigger: 'axis', backgroundColor: '#ffffff', borderColor: '#e4e7ed', textStyle: { color: '#1a1a2e' }, axisPointer: { type: 'shadow' } },
     grid: { left: '3%', right: '8%', bottom: '3%', top: '3%', containLabel: true },
-    xAxis: { type: 'value', axisLine: { show: false }, axisLabel: { color: '#8b949e' }, splitLine: { lineStyle: { color: '#30363d', type: 'dashed' } } },
-    yAxis: { type: 'category', data: [], axisLine: { lineStyle: { color: '#30363d' } }, axisLabel: { color: '#8b949e', fontSize: 10 } },
+    xAxis: { type: 'value', axisLine: { show: false }, axisLabel: { color: '#5a6178' }, splitLine: { lineStyle: { color: '#e4e7ed', type: 'dashed' } } },
+    yAxis: { type: 'category', data: [], axisLine: { lineStyle: { color: '#e4e7ed' } }, axisLabel: { color: '#5a6178', fontSize: 10 } },
     series: [{
       type: 'bar',
       itemStyle: {
-        color: (params) => params.value >= 0 ? '#FF6B6B' : '#4ECDC4',
+        color: (params) => params.value >= 0 ? '#e53935' : '#2e7d32',
         borderRadius: [0, 4, 4, 0]
       },
       barWidth: '60%'
@@ -383,7 +500,7 @@ function initCharts() {
   // 仪表盘
   gaugeChart = echarts.init(gaugeChartRef.value)
   gaugeChart.setOption({
-    backgroundColor: 'transparent',
+    backgroundColor: '#ffffff',
     series: [{
       type: 'gauge',
       startAngle: 180,
@@ -393,12 +510,12 @@ function initCharts() {
       min: 0,
       max: 10,
       splitNumber: 5,
-      axisLine: { lineStyle: { width: 8, color: [[1, '#e0e0e0']] } },
-      pointer: { itemStyle: { color: '#FF6B6B' }, length: '60%', width: 6 },
-      axisTick: { length: 6, lineStyle: { color: '#8b949e' } },
-      splitLine: { length: 12, lineStyle: { color: '#8b949e' } },
-      axisLabel: { color: '#8b949e', distance: -30, fontSize: 10 },
-      detail: { valueAnimation: true, formatter: '{value}%', color: '#e8eaed', fontSize: 20, offsetCenter: [0, '30%'] },
+      axisLine: { lineStyle: { width: 8, color: [[1, '#e4e7ed']] } },
+      pointer: { itemStyle: { color: '#e53935' }, length: '60%', width: 6 },
+      axisTick: { length: 6, lineStyle: { color: '#5a6178' } },
+      splitLine: { length: 12, lineStyle: { color: '#5a6178' } },
+      axisLabel: { color: '#5a6178', distance: -30, fontSize: 10 },
+      detail: { valueAnimation: true, formatter: '{value}%', color: '#1a1a2e', fontSize: 20, offsetCenter: [0, '30%'] },
       data: [{ value: 0, name: '平均波动率' }]
     }]
   })
@@ -406,7 +523,7 @@ function initCharts() {
 
 async function loadAllDashboardData() {
   await Promise.all([
-    loadCompareData(),
+    loadHeatmapData(),
     loadDistributionData(),
     loadRankingData(),
     loadVolatilityData()
@@ -601,6 +718,44 @@ onUnmounted(() => {
 .trend-badge.涨 { background: rgba(255, 107, 107, 0.2); color: var(--rise-color); }
 .trend-badge.跌 { background: rgba(0, 196, 140, 0.2); color: var(--fall-color); }
 .trend-badge.平 { background: rgba(139, 148, 158, 0.2); color: var(--text-secondary); }
+
+.price-range {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'Outfit', sans-serif;
+}
+
+.price-separator {
+  color: var(--text-muted);
+  margin: 0 2px;
+}
+
+.detail-count {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 2px 8px;
+  background: var(--bg-hover);
+  border-radius: 8px;
+}
+
+.expand-content {
+  padding: 8px 16px;
+  background: var(--bg-elevated);
+  border-radius: 8px;
+  margin: 8px 0;
+}
+
+.expand-title {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  font-weight: 500;
+}
+
+.detail-table {
+  background: transparent !important;
+}
 
 .text-rise { color: var(--rise-color); font-weight: 500; }
 .text-fall { color: var(--fall-color); font-weight: 500; }

@@ -25,6 +25,9 @@ export const priceApi = {
   },
   getDashboardVolatility(days = 7) {
     return api.get('/prices/dashboard/volatility', { params: { days } })
+  },
+  getDashboardHeatmap(days = 7) {
+    return api.get('/prices/dashboard/heatmap', { params: { days } })
   }
 }
 
