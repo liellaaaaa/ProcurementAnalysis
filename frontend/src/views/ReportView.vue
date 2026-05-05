@@ -22,6 +22,12 @@
         <el-form-item label="月份" v-if="reportType === 'monthly'">
           <el-date-picker v-model="month" type="month" value-format="YYYY-MM" placeholder="选择月份" />
         </el-form-item>
+        <el-form-item label="开始日期" v-if="reportType === 'weekly'">
+          <el-date-picker v-model="startDate" type="date" value-format="YYYY-MM-DD" placeholder="选择开始日期" />
+        </el-form-item>
+        <el-form-item label="结束日期" v-if="reportType === 'weekly'">
+          <el-date-picker v-model="endDate" type="date" value-format="YYYY-MM-DD" placeholder="选择结束日期" />
+        </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="loadStats" class="query-btn">
             <span class="btn-icon">◎</span> 查询数据
@@ -146,6 +152,8 @@ import { reportApi } from '../api/price'
 
 const reportType = ref('weekly')
 const month = ref('')
+const startDate = ref('')
+const endDate = ref('')
 const stats = ref({})
 const forecastData = ref(null)
 const rankingData = ref({ rising: [], falling: [] })
@@ -160,6 +168,18 @@ const statCards = ref([
 onMounted(() => {
   loadStats()
 })
+
+function getEffectiveDates() {
+  let s = startDate.value
+  let e = endDate.value
+  if (reportType.value === 'monthly' && month.value) {
+    const [year, mon] = month.value.split('-')
+    const lastDay = new Date(year, mon, 0).getDate()
+    s = `${year}-${mon}-01`
+    e = `${year}-${mon}-${String(lastDay).padStart(2, '0')}`
+  }
+  return { startDate: s || null, endDate: e || null }
+}
 
 async function loadStats() {
   try {
@@ -200,7 +220,8 @@ async function loadStats() {
 
 async function downloadPdf() {
   try {
-    const res = await reportApi.downloadPdf(reportType.value)
+    const { startDate: s, endDate: e } = getEffectiveDates()
+    const res = await reportApi.downloadPdf(reportType.value, s, e)
     const blob = new Blob([res.data], { type: 'application/pdf' })
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -216,7 +237,8 @@ async function downloadPdf() {
 
 async function downloadExcel() {
   try {
-    const res = await reportApi.downloadExcel(reportType.value)
+    const { startDate: s, endDate: e } = getEffectiveDates()
+    const res = await reportApi.downloadExcel(reportType.value, s, e)
     const blob = new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
