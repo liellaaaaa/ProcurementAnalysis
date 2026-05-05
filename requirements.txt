@@ -23,3 +23,9 @@ pydantic==2.5.3
 
 # Utils
 python-dateutil==2.8.2
+
+# Charts
+numpy==1.26.3
+matplotlib==3.8.2
+openpyxl==3.1.2
+reportlab==4.5.0

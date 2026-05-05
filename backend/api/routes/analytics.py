@@ -7,6 +7,18 @@ from backend.models.database import get_session, Product, PriceRecord
 
 router = APIRouter(prefix="/api/v1/prices", tags=["价格分析"])
 
+
+def format_date(dt):
+    """统一日期格式为 yyyy/mm/dd"""
+    if isinstance(dt, str):
+        try:
+            dt = date.fromisoformat(dt[:10])
+        except:
+            return dt
+    if hasattr(dt, 'strftime'):
+        return dt.strftime('%Y/%m/%d')
+    return str(dt)
+
 def simple_linear_regression(values: List[float]) -> tuple:
     """简单线性回归，返回斜率和预测值"""
     if len(values) < 2:
@@ -244,7 +256,7 @@ async def compare_products(product_ids: str = Query(..., description="产品ID�
             "category": product.category,
             "unit": product.unit,
             "latest_price": latest_record.price if latest_record else None,
-            "latest_date": latest_record.record_date.isoformat() if latest_record else None,
+            "latest_date": format_date(latest_record.record_date) if latest_record else None,
             "avg_price_30d": round(sum(prices) / len(prices), 2) if prices else None,
             "max_price_30d": max(prices) if prices else None,
             "min_price_30d": min(prices) if prices else None,

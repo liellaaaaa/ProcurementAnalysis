@@ -5,6 +5,7 @@ from datetime import date, timedelta, datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 import asyncio
+import numpy
 from backend.models.database import get_session, Product, PriceRecord
 from backend.services.alert_service import check_and_trigger_alerts
 
@@ -33,7 +34,31 @@ class PriceRecordResponse(BaseModel):
     supplier: Optional[str] = None
     brand: Optional[str] = None
     specification: Optional[str] = None
-    record_date: date
+    record_date: str  # yyyy/mm/dd 格式
+
+    @staticmethod
+    def from_record(pr, product_name=None, product_code=None):
+        """从 PriceRecord 创建响应对象"""
+        record_date = pr.record_date
+        if hasattr(record_date, 'strftime'):
+            formatted_date = record_date.strftime('%Y/%m/%d')
+        else:
+            formatted_date = str(record_date)
+        return PriceRecordResponse(
+            id=pr.id,
+            product_id=pr.product_id,
+            product_name=product_name,
+            product_code=product_code,
+            price=pr.price,
+            trend=pr.trend,
+            change_percent=pr.change_percent,
+            source=pr.source,
+            region=pr.region,
+            supplier=pr.supplier,
+            brand=pr.brand,
+            specification=pr.specification,
+            record_date=formatted_date
+        )
 
     class Config:
         from_attributes = True
@@ -63,17 +88,7 @@ async def get_prices(
 
     response = []
     for pr, product_name, product_code in results:
-        response.append(PriceRecordResponse(
-            id=pr.id,
-            product_id=pr.product_id,
-            product_name=product_name,
-            product_code=product_code,
-            price=pr.price,
-            trend=pr.trend,
-            change_percent=pr.change_percent,
-            source=pr.source,
-            record_date=pr.record_date
-        ))
+        response.append(PriceRecordResponse.from_record(pr, product_name, product_code))
 
     session.close()
     return response
@@ -114,21 +129,7 @@ async def get_latest_prices(
 
     response = []
     for pr, product_name, product_code in results:
-        response.append(PriceRecordResponse(
-            id=pr.id,
-            product_id=pr.product_id,
-            product_name=product_name,
-            product_code=product_code,
-            price=pr.price,
-            trend=pr.trend,
-            change_percent=pr.change_percent,
-            source=pr.source,
-            region=pr.region,
-            supplier=pr.supplier,
-            brand=pr.brand,
-            specification=pr.specification,
-            record_date=pr.record_date
-        ))
+        response.append(PriceRecordResponse.from_record(pr, product_name, product_code))
 
     session.close()
     return {
@@ -163,17 +164,7 @@ async def get_price_history(
 
     response = []
     for pr, product_name, product_code in results:
-        response.append(PriceRecordResponse(
-            id=pr.id,
-            product_id=pr.product_id,
-            product_name=product_name,
-            product_code=product_code,
-            price=pr.price,
-            trend=pr.trend,
-            change_percent=pr.change_percent,
-            source=pr.source,
-            record_date=pr.record_date
-        ))
+        response.append(PriceRecordResponse.from_record(pr, product_name, product_code))
 
     session.close()
     return response
@@ -248,17 +239,7 @@ async def create_price_record(record: PriceRecordCreate):
 
     session.close()
 
-    return PriceRecordResponse(
-        id=new_record.id,
-        product_id=new_record.product_id,
-        product_name=product.product_name,
-        product_code=product.product_code,
-        price=new_record.price,
-        trend=new_record.trend,
-        change_percent=new_record.change_percent,
-        source=new_record.source,
-        record_date=new_record.record_date
-    )
+    return PriceRecordResponse.from_record(new_record, product.product_name, product.product_code)
 
 @router.put("/{record_id}", response_model=PriceRecordResponse)
 async def update_price_record(record_id: int, record: PriceRecordCreate):
@@ -283,17 +264,7 @@ async def update_price_record(record_id: int, record: PriceRecordCreate):
     product = session.query(Product).filter(Product.id == db_record.product_id).first()
     session.close()
 
-    return PriceRecordResponse(
-        id=db_record.id,
-        product_id=db_record.product_id,
-        product_name=product.product_name if product else None,
-        product_code=product.product_code if product else None,
-        price=db_record.price,
-        trend=db_record.trend,
-        change_percent=db_record.change_percent,
-        source=db_record.source,
-        record_date=db_record.record_date
-    )
+    return PriceRecordResponse.from_record(db_record, product.product_name if product else None, product.product_code if product else None)
 
 @router.delete("/{record_id}")
 async def delete_price_record(record_id: int):
@@ -310,3 +281,128 @@ async def delete_price_record(record_id: int):
     session.close()
 
     return {"message": "价格记录已删除"}
+
+
+# ============== Dashboard API ==============
+
+@router.get("/dashboard/distribution")
+async def get_dashboard_distribution(days: int = Query(30, ge=7, le=365)):
+    """获取各产品/分类价格占比（饼图数据）"""
+    session = get_session()
+    start_date = (date.today() - timedelta(days=days)).isoformat()
+
+    # 按产品统计价格记录数
+    results = session.query(
+        Product.product_name,
+        func.count(PriceRecord.id).label('count')
+    ).join(PriceRecord).filter(
+        PriceRecord.record_date >= start_date
+    ).group_by(Product.id).order_by(func.count(PriceRecord.id).desc()).limit(10).all()
+
+    session.close()
+
+    labels = [r.product_name[:15] for r in results]
+    sizes = [r.count for r in results]
+
+    return {"labels": labels, "sizes": sizes}
+
+
+@router.get("/dashboard/ranking")
+async def get_dashboard_ranking(limit: int = Query(10, ge=5, le=30), days: int = Query(7, ge=1, le=90)):
+    """获取涨跌排行（柱状图数据）"""
+    session = get_session()
+    start_date = (date.today() - timedelta(days=days)).isoformat()
+
+    # 获取每个产品的最新价格和变化率
+    subquery = session.query(
+        PriceRecord.product_id,
+        func.max(PriceRecord.record_date).label('max_date')
+    ).group_by(PriceRecord.product_id).subquery()
+
+    latest_prices = session.query(
+        PriceRecord.product_id,
+        PriceRecord.price,
+        PriceRecord.change_percent,
+        PriceRecord.record_date
+    ).join(
+        subquery,
+        (PriceRecord.product_id == subquery.c.product_id) &
+        (PriceRecord.record_date == subquery.c.max_date)
+    ).all()
+
+    product_ids = [lp.product_id for lp in latest_prices]
+    products = {p.id: p.product_name for p in session.query(Product).filter(Product.id.in_(product_ids)).all()}
+
+    ranking = []
+    for lp in latest_prices:
+        ranking.append({
+            "product_id": lp.product_id,
+            "product_name": products.get(lp.product_id, "未知"),
+            "latest_price": lp.price,
+            "change_percent": lp.change_percent or 0
+        })
+
+    # 按涨跌排序
+    ranking.sort(key=lambda x: x["change_percent"], reverse=True)
+    rising = ranking[:limit]
+    falling = ranking[-limit:][::-1]
+
+    session.close()
+    return {"rising": rising, "falling": falling}
+
+
+@router.get("/dashboard/history/compare")
+async def get_dashboard_history_compare(
+    product_ids: str = Query(..., description="逗号分隔的产品ID"),
+    days: int = Query(30, ge=7, le=365)
+):
+    """获取多产品历史价格对比（折线图数据）"""
+    session = get_session()
+    start_date = (date.today() - timedelta(days=days)).isoformat()
+
+    id_list = [int(pid.strip()) for pid in product_ids.split(",") if pid.strip().isdigit()]
+
+    results = session.query(PriceRecord, Product.product_name).join(Product).filter(
+        PriceRecord.product_id.in_(id_list),
+        PriceRecord.record_date >= start_date
+    ).order_by(PriceRecord.record_date.asc()).all()
+
+    # 按产品分组
+    product_data = {}
+    for pr, pname in results:
+        if pr.product_id not in product_data:
+            product_data[pr.product_id] = {"name": pname, "dates": [], "prices": []}
+        product_data[pr.product_id]["dates"].append(pr.record_date.isoformat())
+        product_data[pr.product_id]["prices"].append(pr.price)
+
+    session.close()
+    return {"series": list(product_data.values())}
+
+
+@router.get("/dashboard/volatility")
+async def get_dashboard_volatility(days: int = Query(7, ge=1, le=30)):
+    """获取价格波动幅度统计（仪表盘数据）"""
+    session = get_session()
+    start_date = (date.today() - timedelta(days=days)).isoformat()
+
+    stats = session.query(
+        func.avg(func.abs(PriceRecord.change_percent)).label('avg_volatility'),
+        func.max(func.abs(PriceRecord.change_percent)).label('max_volatility'),
+        func.count(func.distinct(PriceRecord.product_id)).label('active_products')
+    ).filter(
+        PriceRecord.record_date >= start_date
+    ).first()
+
+    # 获取今日最新价格产品数
+    today_count = session.query(func.count(func.distinct(PriceRecord.product_id))).filter(
+        PriceRecord.record_date >= date.today().isoformat()
+    ).scalar() or 0
+
+    session.close()
+
+    return {
+        "avg_volatility": round(stats.avg_volatility or 0, 2),
+        "max_volatility": round(stats.max_volatility or 0, 2),
+        "active_products": stats.active_products or 0,
+        "today_updated": today_count
+    }

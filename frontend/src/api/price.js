@@ -12,6 +12,19 @@ export const priceApi = {
   },
   getStatsSummary(source) {
     return api.get('/prices/stats/summary', { params: source ? { source } : {} })
+  },
+  // Dashboard API
+  getDashboardDistribution(days = 30) {
+    return api.get('/prices/dashboard/distribution', { params: { days } })
+  },
+  getDashboardRanking(limit = 10, days = 7) {
+    return api.get('/prices/dashboard/ranking', { params: { limit, days } })
+  },
+  getDashboardHistoryCompare(productIds, days = 30) {
+    return api.get('/prices/dashboard/history/compare', { params: { product_ids: productIds, days } })
+  },
+  getDashboardVolatility(days = 7) {
+    return api.get('/prices/dashboard/volatility', { params: { days } })
   }
 }
 
