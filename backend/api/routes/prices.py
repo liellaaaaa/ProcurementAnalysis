@@ -4,7 +4,9 @@ from pydantic import BaseModel
 from datetime import date, timedelta, datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+import asyncio
 from backend.models.database import get_session, Product, PriceRecord
+from backend.services.alert_service import check_and_trigger_alerts
 
 router = APIRouter(prefix="/api/v1/prices", tags=["价格数据"])
 
@@ -27,6 +29,10 @@ class PriceRecordResponse(BaseModel):
     trend: Optional[str] = None
     change_percent: Optional[float] = None
     source: Optional[str] = None
+    region: Optional[str] = None
+    supplier: Optional[str] = None
+    brand: Optional[str] = None
+    specification: Optional[str] = None
     record_date: date
 
     class Config:
@@ -72,19 +78,21 @@ async def get_prices(
     session.close()
     return response
 
-@router.get("/latest", response_model=List[PriceRecordResponse])
-async def get_latest_prices(source: Optional[str] = None):
-    """获取各产品最新价格"""
+@router.get("/latest", response_model=dict)
+async def get_latest_prices(
+    source: Optional[str] = None,
+    product_name: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100)
+):
+    """获取各产品最新价格（分页+筛选）"""
     session = get_session()
 
     # 子查询获取每个产品的最新日期
     subquery = session.query(
         PriceRecord.product_id,
         func.max(PriceRecord.record_date).label('max_date')
-    )
-    if source:
-        subquery = subquery.filter(PriceRecord.source == source)
-    subquery = subquery.group_by(PriceRecord.product_id).subquery()
+    ).group_by(PriceRecord.product_id).subquery()
 
     query = session.query(PriceRecord, Product.product_name, Product.product_code).join(
         Product
@@ -96,8 +104,13 @@ async def get_latest_prices(source: Optional[str] = None):
 
     if source:
         query = query.filter(PriceRecord.source == source)
+    if product_name:
+        query = query.filter(Product.product_name.contains(product_name))
 
-    results = query.all()
+    # 总数
+    total = query.count()
+    # 分页
+    results = query.order_by(PriceRecord.record_date.desc()).offset((page - 1) * page_size).limit(page_size).all()
 
     response = []
     for pr, product_name, product_code in results:
@@ -110,11 +123,20 @@ async def get_latest_prices(source: Optional[str] = None):
             trend=pr.trend,
             change_percent=pr.change_percent,
             source=pr.source,
+            region=pr.region,
+            supplier=pr.supplier,
+            brand=pr.brand,
+            specification=pr.specification,
             record_date=pr.record_date
         ))
 
     session.close()
-    return response
+    return {
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "data": response
+    }
 
 @router.get("/history/{product_id}", response_model=List[PriceRecordResponse])
 async def get_price_history(
@@ -220,6 +242,10 @@ async def create_price_record(record: PriceRecordCreate):
     session.add(new_record)
     session.commit()
     session.refresh(new_record)
+
+    # 检查预警触发
+    check_and_trigger_alerts(session, new_record.product_id, new_record.price)
+
     session.close()
 
     return PriceRecordResponse(

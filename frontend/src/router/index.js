@@ -3,6 +3,7 @@ import Dashboard from '../views/Dashboard.vue'
 import ProductCompare from '../views/ProductCompare.vue'
 import ProductManage from '../views/ProductManage.vue'
 import ReportView from '../views/ReportView.vue'
+import AlertView from '../views/AlertView.vue'
 
 const routes = [
   {
@@ -24,6 +25,11 @@ const routes = [
     path: '/reports',
     name: 'ReportView',
     component: ReportView
+  },
+  {
+    path: '/alerts',
+    name: 'AlertView',
+    component: AlertView
   }
 ]
 

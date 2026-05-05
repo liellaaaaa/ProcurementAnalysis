@@ -6,6 +6,7 @@ from playwright.sync_api import sync_playwright
 
 from backend.scrapers.base import BaseScraper, ScrapedItem
 from backend.models.database import get_session, Product, PriceRecord, ScraperLog
+from backend.services.alert_service import check_and_trigger_alerts
 
 
 class ShengyisheScraper(BaseScraper):
@@ -172,7 +173,7 @@ class ShengyisheScraper(BaseScraper):
         return None
 
     def save_to_db(self, items: List[ScrapedItem]) -> int:
-        """保存到数据库"""
+        """保存到数据库（支持同产品同日期不同地区/供应商的重复数据）"""
         session = get_session()
         saved_count = 0
 
@@ -192,22 +193,68 @@ class ShengyisheScraper(BaseScraper):
                     session.flush()
 
                 from datetime import datetime as dt
-                record = PriceRecord(
-                    product_id=product.id,
-                    price=item.price,
-                    price_type=item.price_type or "市场价",
-                    trend=item.trend or "平",
-                    change_percent=item.change_percent or 0.0,
-                    source=self.name,
-                    record_date=dt.strptime(item.record_date, "%Y-%m-%d").date()
-                )
-                session.add(record)
+                record_date = dt.strptime(item.record_date, "%Y-%m-%d").date()
+
+                # 计算涨跌幅：对比该产品昨日收盘价
+                prev_record = session.query(PriceRecord).filter(
+                    PriceRecord.product_id == product.id,
+                    PriceRecord.record_date < record_date
+                ).order_by(PriceRecord.record_date.desc()).first()
+
+                if prev_record and prev_record.price > 0:
+                    change_percent = round(((item.price - prev_record.price) / prev_record.price) * 100, 2)
+                    trend = "涨" if change_percent > 0 else "跌" if change_percent < 0 else "平"
+                else:
+                    change_percent = 0.0
+                    trend = "平"
+
+                # 检查是否已存在相同 product_id + record_date + source + region + supplier 的记录
+                region_val = item.raw_data.get('region')
+                supplier_val = item.raw_data.get('supplier')
+                existing = session.query(PriceRecord).filter(
+                    PriceRecord.product_id == product.id,
+                    PriceRecord.record_date == record_date,
+                    PriceRecord.source == self.name,
+                    PriceRecord.region == region_val,
+                    PriceRecord.supplier == supplier_val
+                ).first()
+
+                if existing:
+                    # 更新已有记录
+                    existing.price = item.price
+                    existing.price_type = item.price_type or "市场价"
+                    existing.trend = trend
+                    existing.change_percent = change_percent
+                    existing.brand = item.raw_data.get('brand')
+                    existing.specification = item.raw_data.get('specification')
+                else:
+                    record = PriceRecord(
+                        product_id=product.id,
+                        price=item.price,
+                        price_type=item.price_type or "市场价",
+                        trend=trend,
+                        change_percent=change_percent,
+                        source=self.name,
+                        region=region_val,
+                        supplier=supplier_val,
+                        brand=item.raw_data.get('brand'),
+                        specification=item.raw_data.get('specification'),
+                        record_date=record_date
+                    )
+                    session.add(record)
                 saved_count += 1
             except Exception as e:
                 print(f"Error saving item: {e}")
                 session.rollback()
 
         session.commit()
+
+        # 检查预警触发（针对每个保存的产品）
+        for item in items:
+            product = session.query(Product).filter_by(product_code=item.product_code).first()
+            if product:
+                check_and_trigger_alerts(session, product.id, item.price)
+
         session.close()
         return saved_count
 

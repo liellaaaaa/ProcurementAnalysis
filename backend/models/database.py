@@ -35,11 +35,15 @@ class PriceRecord(Base):
     trend = Column(String(10))  # 涨/跌/平
     change_percent = Column(Float)
     source = Column(String(50))
+    region = Column(String(50))      # 地区/产地
+    supplier = Column(String(100))   # 供应商
+    brand = Column(String(100))      # 品牌
+    specification = Column(String(200))  # 规格
     record_date = Column(Date, nullable=False)
     created_at = Column(DateTime, default=datetime.now)
 
     __table_args__ = (
-        UniqueConstraint("product_id", "record_date", "source", name="uq_price_date_source"),
+        UniqueConstraint("product_id", "record_date", "source", "region", "supplier", name="uq_price_date_source_region_supplier"),
     )
 
 class AlertConfig(Base):

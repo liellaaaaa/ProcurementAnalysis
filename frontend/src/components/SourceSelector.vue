@@ -1,5 +1,12 @@
 <template>
-  <el-select v-model="selectedSource" placeholder="数据源" size="default" clearable @change="$emit('update:source', selectedSource)">
+  <el-select
+    v-model="selectedSource"
+    placeholder="数据源"
+    size="default"
+    clearable
+    @change="$emit('update:source', selectedSource)"
+    style="width: 120px"
+  >
     <el-option
       v-for="s in sources"
       :key="s"

@@ -55,32 +55,60 @@
               <span class="title-icon">◫</span>
               <span>最新价格</span>
             </div>
-            <span class="record-count">{{ latestPrices.length }} 条记录</span>
+            <div class="controls">
+              <el-input
+                v-model="searchKeyword"
+                placeholder="搜索产品"
+                size="default"
+                style="width: 160px"
+                clearable
+                @input="debouncedSearch"
+              />
+              <el-select v-model="selectedSource" placeholder="数据源" size="default" clearable @change="loadLatestPrices" style="width: 120px">
+                <el-option label="全部" :value="null" />
+                <el-option label="生意社" value="shengyishe" />
+              </el-select>
+              <span class="record-count">{{ pagination.total }} 条记录</span>
+            </div>
           </div>
         </template>
         <el-table :data="latestPrices" style="width: 100%" size="large">
-          <el-table-column prop="product_name" label="产品名称" min-width="140" />
-          <el-table-column prop="price" label="价格" width="120">
+          <el-table-column prop="product_name" label="产品名称" min-width="120" />
+          <el-table-column prop="specification" label="规格" min-width="160" show-overflow-tooltip />
+          <el-table-column prop="brand" label="品牌" width="100" show-overflow-tooltip />
+          <el-table-column prop="region" label="地区" width="90" />
+          <el-table-column prop="supplier" label="供应商" width="150" show-overflow-tooltip />
+          <el-table-column prop="price" label="价格" width="100">
             <template #default="{ row }">
               <span class="price-value">¥{{ row.price.toLocaleString() }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="trend" label="趋势" width="80">
+          <el-table-column prop="trend" label="趋势" width="70">
             <template #default="{ row }">
               <span :class="['trend-badge', row.trend]">
                 {{ row.trend === '涨' ? '↑' : row.trend === '跌' ? '↓' : '—' }}
               </span>
             </template>
           </el-table-column>
-          <el-table-column prop="change_percent" label="涨跌幅" width="100">
+          <el-table-column prop="change_percent" label="涨跌幅" width="90">
             <template #default="{ row }">
               <span :class="row.change_percent > 0 ? 'text-rise' : row.change_percent < 0 ? 'text-fall' : 'text-flat'">
                 {{ row.change_percent > 0 ? '+' : '' }}{{ row.change_percent }}%
               </span>
             </template>
           </el-table-column>
-          <el-table-column prop="record_date" label="日期" width="110" />
+          <el-table-column prop="record_date" label="日期" width="100" />
         </el-table>
+        <el-pagination
+          v-if="pagination.total > 0"
+          background
+          layout="prev, pager, next"
+          :total="pagination.total"
+          :page-size="pagination.pageSize"
+          :current-page="pagination.page"
+          @current-change="handlePageChange"
+          style="margin-top: 16px; justify-content: center"
+        />
       </el-card>
     </div>
   </div>
@@ -98,7 +126,10 @@ const latestPrices = ref([])
 const products = ref([])
 const selectedProduct = ref(null)
 const selectedSource = ref(null)
+const searchKeyword = ref('')
+const pagination = ref({ page: 1, pageSize: 20, total: 0 })
 let chartInstance = null
+let searchTimer = null
 
 const statCards = ref([
   { icon: '◈', label: '产品总数', value: 0, bgColor: 'rgba(0, 212, 255, 0.15)' },
@@ -120,11 +151,25 @@ async function loadStats() {
 
 async function loadLatestPrices() {
   try {
-    const res = await priceApi.getLatestPrices(selectedSource.value)
-    latestPrices.value = res.data
+    const res = await priceApi.getLatestPrices(selectedSource.value, pagination.value.page, pagination.value.pageSize, searchKeyword.value)
+    latestPrices.value = res.data.data
+    pagination.value.total = res.data.total
   } catch (e) {
     console.error('Failed to load prices', e)
   }
+}
+
+function debouncedSearch() {
+  clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => {
+    pagination.value.page = 1
+    loadLatestPrices()
+  }, 300)
+}
+
+function handlePageChange(page) {
+  pagination.value.page = page
+  loadLatestPrices()
 }
 
 async function loadProducts() {

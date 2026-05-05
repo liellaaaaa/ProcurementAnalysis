@@ -8,27 +8,90 @@
       <div class="nav-links">
         <router-link to="/" class="nav-link">
           <span class="link-icon">◎</span>
-          Dashboard
+          数据看板
         </router-link>
         <router-link to="/compare" class="nav-link">
           <span class="link-icon">⬡</span>
-          Compare
+          产品对比
         </router-link>
         <router-link to="/manage" class="nav-link">
           <span class="link-icon">◧</span>
-          Manage
+          产品管理
         </router-link>
         <router-link to="/reports" class="nav-link">
           <span class="link-icon">◫</span>
-          Reports
+          报表中心
+        </router-link>
+        <router-link to="/alerts" class="nav-link">
+          <span class="link-icon">⚠</span>
+          价格预警
         </router-link>
       </div>
     </nav>
+
+    <!-- 数据新鲜度提示弹窗 -->
+    <el-dialog
+      v-model="showFreshnessDialog"
+      title="数据更新提醒"
+      width="480px"
+      :close-on-click-modal="false"
+      :show-close="false"
+    >
+      <div v-if="freshnessData.any_needs_update" class="freshness-warning">
+        <p>以下数据源需要更新：</p>
+        <ul>
+          <li v-for="s in freshnessData.sources" :key="s.source" :class="{ 'needs-update': s.needs_update }">
+            <strong>{{ s.source }}</strong>: {{ s.message }}
+          </li>
+        </ul>
+      </div>
+      <div v-else class="freshness-ok">
+        <p>所有数据已是最新</p>
+      </div>
+      <template #footer>
+        <el-button @click="showFreshnessDialog = false">稍后</el-button>
+        <el-button v-if="freshnessData.any_needs_update" type="primary" @click="triggerUpdate">
+          立即更新
+        </el-button>
+      </template>
+    </el-dialog>
+
     <router-view />
   </div>
 </template>
 
 <script setup>
+import { ref, onMounted } from 'vue'
+import { scraperApi } from './api/price'
+
+const showFreshnessDialog = ref(false)
+const freshnessData = ref({ any_needs_update: false, sources: [] })
+
+async function checkFreshness() {
+  try {
+    const res = await scraperApi.checkFreshness()
+    freshnessData.value = res.data
+    if (res.data.any_needs_update) {
+      showFreshnessDialog.value = true
+    }
+  } catch (e) {
+    console.error('Failed to check freshness', e)
+  }
+}
+
+async function triggerUpdate() {
+  showFreshnessDialog.value = false
+  try {
+    await scraperApi.runScraper('shengyishe')
+    window.location.reload()
+  } catch (e) {
+    console.error('Update failed', e)
+  }
+}
+
+onMounted(() => {
+  checkFreshness()
+})
 </script>
 
 <style>
@@ -167,6 +230,26 @@ body {
   color: var(--text-primary) !important;
 }
 
+.el-select .el-input__wrapper {
+  background-color: var(--bg-secondary) !important;
+  border-color: var(--border-color) !important;
+  box-shadow: none !important;
+}
+
+.el-select .el-input__wrapper .el-input__inner {
+  color: var(--text-primary) !important;
+}
+
+.el-select__wrapper {
+  background-color: var(--bg-secondary) !important;
+  border-color: var(--border-color) !important;
+  box-shadow: none !important;
+}
+
+.el-select__wrapper .el-select__caret {
+  color: var(--text-secondary) !important;
+}
+
 .el-select-dropdown {
   background-color: var(--bg-card) !important;
   border-color: var(--border-color) !important;
@@ -230,7 +313,23 @@ body {
   background: var(--text-muted);
 }
 
-/* Animations */
+.freshness-warning ul {
+  margin: 12px 0 0 20px;
+  line-height: 1.8;
+}
+
+.freshness-warning li {
+  color: var(--text-secondary);
+}
+
+.freshness-warning li.needs-update {
+  color: var(--rise-color);
+}
+
+.freshness-ok p {
+  color: var(--fall-color);
+  font-size: 16px;
+}
 @keyframes fadeInUp {
   from {
     opacity: 0;

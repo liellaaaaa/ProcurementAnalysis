@@ -4,8 +4,8 @@ export const priceApi = {
   getPrices(params) {
     return api.get('/prices', { params })
   },
-  getLatestPrices(source) {
-    return api.get('/prices/latest', { params: source ? { source } : {} })
+  getLatestPrices(source, page = 1, pageSize = 20, productName = null) {
+    return api.get('/prices/latest', { params: { source, page, page_size: pageSize, product_name: productName } })
   },
   getPriceHistory(productId, days = 30, source) {
     return api.get(`/prices/history/${productId}`, { params: source ? { days, source } : { days } })
@@ -66,5 +66,41 @@ export const reportApi = {
   },
   downloadExcel(type = 'weekly') {
     return api.get('/reports/excel', { params: { report_type: type }, responseType: 'blob' })
+  }
+}
+
+export const alertApi = {
+  getAlertConfigs(params) {
+    return api.get('/alerts/configs', { params })
+  },
+  createAlertConfig(data) {
+    return api.post('/alerts/configs', data)
+  },
+  updateAlertConfig(id, data) {
+    return api.put(`/alerts/configs/${id}`, data)
+  },
+  deleteAlertConfig(id) {
+    return api.delete(`/alerts/configs/${id}`)
+  },
+  getAlertRecords(params) {
+    return api.get('/alerts', { params })
+  },
+  markAsRead(id) {
+    return api.put(`/alerts/${id}/read`)
+  },
+  markAllAsRead() {
+    return api.put('/alerts/read-all')
+  },
+  deleteAlertRecord(id) {
+    return api.delete(`/alerts/${id}`)
+  }
+}
+
+export const scraperApi = {
+  checkFreshness() {
+    return api.get('/check-freshness')
+  },
+  runScraper(source) {
+    return api.post(`/scrapers/${source}/run`)
   }
 }
