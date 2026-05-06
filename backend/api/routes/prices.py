@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 import asyncio
 import numpy
-from backend.models.database import get_session, Product, PriceRecord
+from backend.models.database import get_session, Product, PriceRecord, Category, ProductCategory
 from backend.services.alert_service import check_and_trigger_alerts
 
 router = APIRouter(prefix="/api/v1/prices", tags=["价格数据"])
@@ -97,6 +97,8 @@ async def get_prices(
 async def get_latest_prices(
     source: Optional[str] = None,
     product_name: Optional[str] = None,
+    category_id: Optional[int] = None,
+    subcategory_id: Optional[int] = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100)
 ):
@@ -121,6 +123,17 @@ async def get_latest_prices(
         query = query.filter(PriceRecord.source == source)
     if product_name:
         query = query.filter(Product.product_name.contains(product_name))
+
+    # Filter by category (一级品类)
+    if category_id:
+        subcat_ids = [c.id for c in session.query(Category).filter(Category.parent_id == category_id).all()]
+        pc_query = session.query(ProductCategory.product_id).filter(ProductCategory.category_id.in_(subcat_ids + [category_id]))
+        query = query.filter(PriceRecord.product_id.in_(pc_query))
+
+    # Filter by subcategory (二级品类)
+    if subcategory_id:
+        pc_query = session.query(ProductCategory.product_id).filter(ProductCategory.category_id == subcategory_id)
+        query = query.filter(PriceRecord.product_id.in_(pc_query))
 
     results = query.order_by(PriceRecord.record_date.desc()).all()
 
@@ -223,12 +236,16 @@ async def get_stats_summary():
 
     avg_price = round(avg_price_result, 2) if avg_price_result else 0
 
+    # 今日更新记录数
+    today_count = session.query(func.count(PriceRecord.id)).filter(PriceRecord.record_date == date.today()).scalar()
+
     session.close()
 
     return {
         "total_products": total_products or 0,
         "total_records": total_records or 0,
-        "avg_price": avg_price
+        "avg_price": avg_price,
+        "today_records": today_count or 0
     }
 
 @router.post("", response_model=PriceRecordResponse)
@@ -318,18 +335,33 @@ async def delete_price_record(record_id: int):
 # ============== Dashboard API ==============
 
 @router.get("/dashboard/distribution")
-async def get_dashboard_distribution(days: int = Query(30, ge=7, le=365)):
+async def get_dashboard_distribution(
+    days: int = Query(30, ge=7, le=365),
+    category_id: Optional[int] = None,
+    subcategory_id: Optional[int] = None
+):
     """获取各产品/分类价格占比（饼图数据）"""
     session = get_session()
     start_date = (date.today() - timedelta(days=days)).isoformat()
 
-    # 按产品统计价格记录数
-    results = session.query(
+    query = session.query(
         Product.product_name,
         func.count(PriceRecord.id).label('count')
     ).join(PriceRecord).filter(
         PriceRecord.record_date >= start_date
-    ).group_by(Product.id).order_by(func.count(PriceRecord.id).desc()).limit(10).all()
+    )
+
+    # Filter by category
+    if category_id:
+        subcat_ids = [c.id for c in session.query(Category).filter(Category.parent_id == category_id).all()]
+        pc_query = session.query(ProductCategory.product_id).filter(ProductCategory.category_id.in_(subcat_ids + [category_id]))
+        query = query.filter(PriceRecord.product_id.in_(pc_query))
+
+    if subcategory_id:
+        pc_query = session.query(ProductCategory.product_id).filter(ProductCategory.category_id == subcategory_id)
+        query = query.filter(PriceRecord.product_id.in_(pc_query))
+
+    results = query.group_by(Product.id).order_by(func.count(PriceRecord.id).desc()).limit(10).all()
 
     session.close()
 
@@ -340,7 +372,12 @@ async def get_dashboard_distribution(days: int = Query(30, ge=7, le=365)):
 
 
 @router.get("/dashboard/ranking")
-async def get_dashboard_ranking(limit: int = Query(10, ge=5, le=30), days: int = Query(7, ge=1, le=90)):
+async def get_dashboard_ranking(
+    limit: int = Query(10, ge=5, le=30),
+    days: int = Query(7, ge=1, le=90),
+    category_id: Optional[int] = None,
+    subcategory_id: Optional[int] = None
+):
     """获取涨跌排行（柱状图数据）"""
     session = get_session()
     start_date = (date.today() - timedelta(days=days)).isoformat()
@@ -351,7 +388,7 @@ async def get_dashboard_ranking(limit: int = Query(10, ge=5, le=30), days: int =
         func.max(PriceRecord.record_date).label('max_date')
     ).group_by(PriceRecord.product_id).subquery()
 
-    latest_prices = session.query(
+    query = session.query(
         PriceRecord.product_id,
         PriceRecord.price,
         PriceRecord.change_percent,
@@ -360,7 +397,19 @@ async def get_dashboard_ranking(limit: int = Query(10, ge=5, le=30), days: int =
         subquery,
         (PriceRecord.product_id == subquery.c.product_id) &
         (PriceRecord.record_date == subquery.c.max_date)
-    ).all()
+    )
+
+    # Filter by category
+    if category_id:
+        subcat_ids = [c.id for c in session.query(Category).filter(Category.parent_id == category_id).all()]
+        pc_query = session.query(ProductCategory.product_id).filter(ProductCategory.category_id.in_(subcat_ids + [category_id]))
+        query = query.filter(PriceRecord.product_id.in_(pc_query))
+
+    if subcategory_id:
+        pc_query = session.query(ProductCategory.product_id).filter(ProductCategory.category_id == subcategory_id)
+        query = query.filter(PriceRecord.product_id.in_(pc_query))
+
+    latest_prices = query.all()
 
     product_ids = [lp.product_id for lp in latest_prices]
     products = {p.id: p.product_name for p in session.query(Product).filter(Product.id.in_(product_ids)).all()}
@@ -414,7 +463,9 @@ async def get_dashboard_history_compare(
 @router.get("/dashboard/heatmap")
 async def get_dashboard_heatmap(
     days: int = Query(30, ge=7, le=90),
-    region: Optional[str] = None
+    region: Optional[str] = None,
+    category_id: Optional[int] = None,
+    subcategory_id: Optional[int] = None
 ):
     """获取产品-地区价格矩阵热力图"""
     session = get_session()
@@ -430,7 +481,7 @@ async def get_dashboard_heatmap(
         PriceRecord.region
     ).subquery()
 
-    results = session.query(
+    query = session.query(
         PriceRecord,
         Product.product_name
     ).join(
@@ -442,7 +493,19 @@ async def get_dashboard_heatmap(
         (PriceRecord.record_date == subquery.c.max_date)
     ).filter(
         PriceRecord.record_date >= start_date
-    ).all()
+    )
+
+    # Filter by category
+    if category_id:
+        subcat_ids = [c.id for c in session.query(Category).filter(Category.parent_id == category_id).all()]
+        pc_query = session.query(ProductCategory.product_id).filter(ProductCategory.category_id.in_(subcat_ids + [category_id]))
+        query = query.filter(PriceRecord.product_id.in_(pc_query))
+
+    if subcategory_id:
+        pc_query = session.query(ProductCategory.product_id).filter(ProductCategory.category_id == subcategory_id)
+        query = query.filter(PriceRecord.product_id.in_(pc_query))
+
+    results = query.all()
 
     if not results:
         session.close()
@@ -480,96 +543,6 @@ async def get_dashboard_heatmap(
     return {
         "products": [{"id": p[0], "name": p[1]} for p in sorted_products],
         "regions": sorted_regions,
-        "data": heatmap_data
-    }
-    """获取各产品每日涨跌热力图数据"""
-    session = get_session()
-    start_date = (date.today() - timedelta(days=days)).isoformat()
-
-    # 获取所有产品最新一条记录的产品ID（活跃产品）
-    active_subquery = session.query(
-        PriceRecord.product_id,
-        func.max(PriceRecord.record_date).label('max_date')
-    ).group_by(PriceRecord.product_id).subquery()
-
-    # 获取每个产品每天的平均价格
-    daily_prices = session.query(
-        PriceRecord.product_id,
-        func.date(PriceRecord.record_date).label('trade_date'),
-        func.avg(PriceRecord.price).label('avg_price')
-    ).filter(
-        PriceRecord.record_date >= start_date
-    ).group_by(
-        PriceRecord.product_id,
-        func.date(PriceRecord.record_date)
-    ).all()
-
-    # 获取每个产品每天的环比变化
-    price_map = {}
-    for dp in daily_prices:
-        key = (dp.product_id, dp.trade_date.isoformat() if hasattr(dp.trade_date, 'isoformat') else str(dp.trade_date))
-        price_map[key] = dp.avg_price
-
-    # 获取产品名称
-    product_ids = list(set(dp.product_id for dp in daily_prices))
-    products = {p.id: p.product_name for p in session.query(Product).filter(Product.id.in_(product_ids)).all()}
-
-    # 获取每个产品的最新价格用于计算涨跌幅基准
-    latest_prices = session.query(
-        PriceRecord.product_id,
-        func.max(PriceRecord.record_date).label('max_date'),
-        PriceRecord.price
-    ).join(
-        active_subquery,
-        (PriceRecord.product_id == active_subquery.c.product_id) &
-        (PriceRecord.record_date == active_subquery.c.max_date)
-    ).group_by(PriceRecord.product_id, PriceRecord.price).all()
-
-    latest_price_map = {}
-    for lp in latest_prices:
-        if lp.product_id not in latest_price_map:
-            latest_price_map[lp.product_id] = lp.price
-
-    # 构建热力图数据
-    # 找出所有日期
-    all_dates = sorted(set(dp.trade_date.isoformat() if hasattr(dp.trade_date, 'isoformat') else str(dp.trade_date) for dp in daily_prices))
-
-    # 计算每个产品每天的涨跌幅（相对于前一天）
-    heatmap_data = []
-    for pid in product_ids:
-        product_name = products.get(pid, "未知")
-        prev_price = None
-        for d in all_dates:
-            key = (pid, d)
-            if key in price_map:
-                curr_price = price_map[key]
-                if prev_price is not None and prev_price > 0:
-                    change_pct = ((curr_price - prev_price) / prev_price) * 100
-                else:
-                    # 第一天用最新价格对比
-                    if pid in latest_price_map and latest_price_map[pid] > 0:
-                        change_pct = ((curr_price - latest_price_map[pid]) / latest_price_map[pid]) * 100
-                    else:
-                        change_pct = 0
-                heatmap_data.append({
-                    "product_id": pid,
-                    "product_name": product_name,
-                    "date": d,
-                    "change_percent": round(change_pct, 2)
-                })
-                prev_price = curr_price
-            else:
-                heatmap_data.append({
-                    "product_id": pid,
-                    "product_name": product_name,
-                    "date": d,
-                    "change_percent": None
-                })
-
-    session.close()
-    return {
-        "dates": all_dates,
-        "products": [{"id": pid, "name": products.get(pid, "未知")} for pid in product_ids],
         "data": heatmap_data
     }
 

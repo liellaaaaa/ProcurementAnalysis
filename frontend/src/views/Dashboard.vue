@@ -6,6 +6,11 @@
         <p class="page-subtitle">采购价格分析仪表台</p>
       </div>
       <div class="header-right">
+        <CategorySelector
+          v-model="selectedCategoryId"
+          v-model:subcategoryValue="selectedSubcategoryId"
+          @change="handleCategoryChange"
+        />
         <el-date-picker
           v-model="dateRange"
           type="daterange"
@@ -13,7 +18,7 @@
           start-placeholder="开始日期"
           end-placeholder="结束日期"
           size="default"
-          style="width: 260px"
+          style="width: 260px; margin-left: 8px"
           @change="handleDateRangeChange"
         />
       </div>
@@ -33,8 +38,8 @@
 
     <!-- 图表区域 -->
     <div class="charts-grid">
-      <!-- 左侧：折线图 + 饼图 -->
-      <div class="charts-left">
+      <!-- 热力图：全宽显示 -->
+      <div class="charts-full">
         <el-card class="chart-card animate-in" style="animation-delay: 0.2s">
           <template #header>
             <div class="card-header">
@@ -50,9 +55,12 @@
               </div>
             </div>
           </template>
-          <div ref="lineChartRef" class="chart-container"></div>
+          <div ref="lineChartRef" class="chart-container-large"></div>
         </el-card>
+      </div>
 
+      <!-- 下方：饼图 + 柱状图 -->
+      <div class="charts-left">
         <el-card class="chart-card animate-in" style="animation-delay: 0.3s">
           <template #header>
             <div class="card-header">
@@ -66,7 +74,6 @@
         </el-card>
       </div>
 
-      <!-- 右侧：柱状图 + 仪表盘 -->
       <div class="charts-right">
         <el-card class="chart-card animate-in" style="animation-delay: 0.4s">
           <template #header>
@@ -78,18 +85,6 @@
             </div>
           </template>
           <div ref="barChartRef" class="chart-container-small"></div>
-        </el-card>
-
-        <el-card class="chart-card animate-in" style="animation-delay: 0.5s">
-          <template #header>
-            <div class="card-header">
-              <div class="header-title">
-                <span class="title-icon">◔</span>
-                <span>价格波动监控</span>
-              </div>
-            </div>
-          </template>
-          <div ref="gaugeChartRef" class="chart-container-small"></div>
         </el-card>
       </div>
     </div>
@@ -201,15 +196,17 @@
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { priceApi, productApi } from '../api/price'
 import * as echarts from 'echarts'
+import CategorySelector from '../components/CategorySelector.vue'
 
 const lineChartRef = ref(null)
 const pieChartRef = ref(null)
 const barChartRef = ref(null)
-const gaugeChartRef = ref(null)
 
 const stats = ref({ total_products: 0, total_records: 0, avg_price: 0 })
 const latestPrices = ref([])
 const selectedSource = ref(null)
+const selectedCategoryId = ref(null)
+const selectedSubcategoryId = ref(null)
 const searchKeyword = ref('')
 const dateRange = ref([])
 const compareDays = ref(7)
@@ -220,7 +217,6 @@ const pagination = ref({ page: 1, pageSize: 20, total: 0 })
 let lineChart = null
 let pieChart = null
 let barChart = null
-let gaugeChart = null
 let searchTimer = null
 
 const statCards = ref([
@@ -232,15 +228,12 @@ const statCards = ref([
 
 async function loadStats() {
   try {
-    const [summaryRes, volatilityRes] = await Promise.all([
-      priceApi.getStatsSummary(),
-      priceApi.getDashboardVolatility(1)
-    ])
+    const summaryRes = await priceApi.getStatsSummary()
     stats.value = summaryRes.data
     statCards.value[0].value = summaryRes.data.total_products || 0
     statCards.value[1].value = summaryRes.data.total_records || 0
     statCards.value[2].value = summaryRes.data.avg_price ? `¥${summaryRes.data.avg_price.toLocaleString()}` : '-'
-    statCards.value[3].value = volatilityRes.data.today_updated || 0
+    statCards.value[3].value = summaryRes.data.today_records || 0
   } catch (e) {
     console.error('Failed to load stats', e)
   }
@@ -248,7 +241,15 @@ async function loadStats() {
 
 async function loadLatestPrices() {
   try {
-    const res = await priceApi.getLatestPrices(selectedSource.value, pagination.value.page, pagination.value.pageSize, searchKeyword.value)
+    const params = {
+      source: selectedSource.value,
+      page: pagination.value.page,
+      page_size: pagination.value.pageSize,
+      product_name: searchKeyword.value || null,
+      category_id: selectedCategoryId.value || null,
+      subcategory_id: selectedSubcategoryId.value || null
+    }
+    const res = await priceApi.getLatestPrices(params)
     latestPrices.value = res.data.data
     pagination.value.total = res.data.total
   } catch (e) {
@@ -274,6 +275,14 @@ function handleDateRangeChange() {
   loadDistributionData()
 }
 
+function handleCategoryChange({ categoryId, subcategoryId }) {
+  selectedCategoryId.value = categoryId
+  selectedSubcategoryId.value = subcategoryId
+  pagination.value.page = 1
+  loadLatestPrices()
+  loadAllDashboardData()
+}
+
 function handleExpandChange(row) {
   const id = row.product_id
   if (expandedRows.value.includes(id)) {
@@ -286,7 +295,12 @@ function handleExpandChange(row) {
 async function loadHeatmapData() {
   if (!lineChart) return
   try {
-    const res = await priceApi.getDashboardHeatmap(compareDays.value)
+    const params = {
+      days: compareDays.value,
+      category_id: selectedCategoryId.value || null,
+      subcategory_id: selectedSubcategoryId.value || null
+    }
+    const res = await priceApi.getDashboardHeatmap(params)
     const { products, regions, data } = res.data
 
     if (!products || products.length === 0 || !regions || regions.length === 0) {
@@ -322,8 +336,8 @@ async function loadHeatmapData() {
       },
       grid: {
         left: 10,
-        right: 80,
-        bottom: 15,
+        right: 120,
+        bottom: 60,
         top: 10
       },
       xAxis: {
@@ -339,7 +353,7 @@ async function loadHeatmapData() {
         data: products.map(p => p.name),
         axisLine: { show: false },
         axisTick: { show: false },
-        axisLabel: { color: '#666', fontSize: 10, width: 100, overflow: 'truncate' },
+        axisLabel: { color: '#666', fontSize: 11, width: 150, overflow: 'truncate' },
         splitArea: { show: false }
       },
       visualMap: {
@@ -348,7 +362,7 @@ async function loadHeatmapData() {
         max: maxPrice,
         calculable: true,
         orient: 'vertical',
-        right: 0,
+        right: 10,
         top: 'center',
         textStyle: { color: '#666', fontSize: 10 },
         inRange: {
@@ -382,7 +396,12 @@ async function loadHeatmapData() {
 async function loadDistributionData() {
   if (!pieChart) return
   try {
-    const res = await priceApi.getDashboardDistribution(30)
+    const params = {
+      days: 30,
+      category_id: selectedCategoryId.value || null,
+      subcategory_id: selectedSubcategoryId.value || null
+    }
+    const res = await priceApi.getDashboardDistribution(params)
     if (res.data.labels && res.data.labels.length > 0) {
       const pieColors = ['#0077cc', '#00c48c', '#ff6b6b', '#ffd93d', '#9b59b6', '#3498db', '#e67e22', '#1abc9c', '#e91e63', '#6739b6']
       pieChart.setOption({
@@ -403,7 +422,13 @@ async function loadDistributionData() {
 async function loadRankingData() {
   if (!barChart) return
   try {
-    const res = await priceApi.getDashboardRanking(10, 7)
+    const params = {
+      limit: 10,
+      days: 7,
+      category_id: selectedCategoryId.value || null,
+      subcategory_id: selectedSubcategoryId.value || null
+    }
+    const res = await priceApi.getDashboardRanking(params)
     const rising = res.data.rising || []
     if (rising.length > 0) {
       const categories = rising.map(r => r.product_name.substring(0, 8))
@@ -418,49 +443,16 @@ async function loadRankingData() {
   }
 }
 
-async function loadVolatilityData() {
-  if (!gaugeChart) return
-  try {
-    const res = await priceApi.getDashboardVolatility(7)
-    const value = res.data.avg_volatility || 0
-    const maxVal = Math.max(res.data.max_volatility || 10, 10)
-    gaugeChart.setOption({
-      series: [{
-        type: 'gauge',
-        startAngle: 180,
-        endAngle: 0,
-        min: 0,
-        max: maxVal,
-        splitNumber: 5,
-        axisLine: {
-          lineStyle: {
-            width: 8,
-            color: [[0.3, '#4ECDC4'], [0.7, '#45B7D1'], [1, '#FF6B6B']]
-          }
-        },
-        pointer: { itemStyle: { color: '#FF6B6B' }, length: '60%', width: 6 },
-        axisTick: { length: 6, lineStyle: { color: '#8b949e' } },
-        splitLine: { length: 12, lineStyle: { color: '#8b949e' } },
-        axisLabel: { color: '#8b949e', distance: -30, fontSize: 10 },
-        detail: { valueAnimation: true, formatter: '{value}%', color: '#e8eaed', fontSize: 20, offsetCenter: [0, '30%'] },
-        data: [{ value: value, name: '平均波动率' }]
-      }]
-    })
-  } catch (e) {
-    console.error('Failed to load volatility data', e)
-  }
-}
-
 function initCharts() {
   // 热力图：产品-地区矩阵
   lineChart = echarts.init(lineChartRef.value)
   lineChart.setOption({
     backgroundColor: '#ffffff',
     tooltip: { trigger: 'item', backgroundColor: '#fff', borderColor: '#ddd', textStyle: { color: '#333' } },
-    grid: { left: 10, right: 80, bottom: 15, top: 10 },
+    grid: { left: 10, right: 120, bottom: 60, top: 10 },
     xAxis: { type: 'category', data: [], axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: '#666', fontSize: 10, rotate: 30 }, splitArea: { show: false } },
-    yAxis: { type: 'category', data: [], axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: '#666', fontSize: 10, width: 100, overflow: 'truncate' }, splitArea: { show: false } },
-    visualMap: { type: 'continuous', min: 0, max: 10000, calculable: true, orient: 'vertical', right: 0, top: 'center', textStyle: { color: '#666', fontSize: 10 }, inRange: { color: ['#ffebee', '#ffcdd2', '#ef9a9a', '#e57373', '#c62828', '#7b0000'] }, formatter: (val) => `¥${val.toFixed(0)}` },
+    yAxis: { type: 'category', data: [], axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: '#666', fontSize: 11, width: 150, overflow: 'truncate' }, splitArea: { show: false } },
+    visualMap: { type: 'continuous', min: 0, max: 10000, calculable: true, orient: 'vertical', right: 10, top: 'center', textStyle: { color: '#666', fontSize: 10 }, inRange: { color: ['#ffebee', '#ffcdd2', '#ef9a9a', '#e57373', '#c62828', '#7b0000'] }, formatter: (val) => `¥${val.toFixed(0)}` },
     series: [{ type: 'heatmap', data: [], emphasis: { itemStyle: { borderColor: '#333', borderWidth: 2, shadowBlur: 6, shadowColor: 'rgba(0,0,0,0.25)' } }, itemStyle: { borderColor: '#fff', borderWidth: 1, borderRadius: 2 } }]
   })
 
@@ -496,37 +488,13 @@ function initCharts() {
       barWidth: '60%'
     }]
   })
-
-  // 仪表盘
-  gaugeChart = echarts.init(gaugeChartRef.value)
-  gaugeChart.setOption({
-    backgroundColor: '#ffffff',
-    series: [{
-      type: 'gauge',
-      startAngle: 180,
-      endAngle: 0,
-      center: ['50%', '75%'],
-      radius: '90%',
-      min: 0,
-      max: 10,
-      splitNumber: 5,
-      axisLine: { lineStyle: { width: 8, color: [[1, '#e4e7ed']] } },
-      pointer: { itemStyle: { color: '#e53935' }, length: '60%', width: 6 },
-      axisTick: { length: 6, lineStyle: { color: '#5a6178' } },
-      splitLine: { length: 12, lineStyle: { color: '#5a6178' } },
-      axisLabel: { color: '#5a6178', distance: -30, fontSize: 10 },
-      detail: { valueAnimation: true, formatter: '{value}%', color: '#1a1a2e', fontSize: 20, offsetCenter: [0, '30%'] },
-      data: [{ value: 0, name: '平均波动率' }]
-    }]
-  })
 }
 
 async function loadAllDashboardData() {
   await Promise.all([
     loadHeatmapData(),
     loadDistributionData(),
-    loadRankingData(),
-    loadVolatilityData()
+    loadRankingData()
   ])
 }
 
@@ -540,7 +508,6 @@ onMounted(async () => {
     lineChart?.resize()
     pieChart?.resize()
     barChart?.resize()
-    gaugeChart?.resize()
   })
 })
 
@@ -548,7 +515,6 @@ onUnmounted(() => {
   lineChart?.dispose()
   pieChart?.dispose()
   barChart?.dispose()
-  gaugeChart?.dispose()
 })
 </script>
 
@@ -590,6 +556,11 @@ onUnmounted(() => {
   grid-template-columns: 1fr 1fr;
   gap: 20px;
   margin-bottom: 24px;
+}
+
+.charts-full {
+  grid-column: 1 / -1;
+  margin-bottom: 0;
 }
 
 .charts-left, .charts-right {
@@ -639,6 +610,11 @@ onUnmounted(() => {
 
 .chart-container {
   height: 320px;
+  margin-top: 16px;
+}
+
+.chart-container-large {
+  height: 480px;
   margin-top: 16px;
 }
 

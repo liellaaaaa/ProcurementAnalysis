@@ -34,10 +34,15 @@
       v-model="showFreshnessDialog"
       title="数据更新提醒"
       width="480px"
-      :close-on-click-modal="false"
-      :show-close="false"
+      :close-on-click-modal="updating ? false : true"
+      :show-close="!updating"
     >
-      <div v-if="freshnessData.any_needs_update" class="freshness-warning">
+      <div v-if="updating" class="freshness-loading">
+        <el-icon class="loading-icon is-loading"><Loading /></el-icon>
+        <p>正在抓取数据，请稍候...</p>
+        <p class="loading-tip">抓取完成后可正常操作系统</p>
+      </div>
+      <div v-else-if="freshnessData.any_needs_update" class="freshness-warning">
         <p>以下数据源需要更新：</p>
         <ul>
           <li v-for="s in freshnessData.sources" :key="s.source" :class="{ 'needs-update': s.needs_update }">
@@ -49,8 +54,8 @@
         <p>所有数据已是最新</p>
       </div>
       <template #footer>
-        <el-button @click="showFreshnessDialog = false">稍后</el-button>
-        <el-button v-if="freshnessData.any_needs_update" type="primary" @click="triggerUpdate">
+        <el-button v-if="!updating" @click="handleLater">稍后</el-button>
+        <el-button v-if="!updating && freshnessData.any_needs_update" type="primary" @click="triggerUpdate">
           立即更新
         </el-button>
       </template>
@@ -63,9 +68,12 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { scraperApi } from './api/price'
+import { Loading } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 
 const showFreshnessDialog = ref(false)
 const freshnessData = ref({ any_needs_update: false, sources: [] })
+const updating = ref(false)
 
 async function checkFreshness() {
   try {
@@ -79,13 +87,22 @@ async function checkFreshness() {
   }
 }
 
-async function triggerUpdate() {
+function handleLater() {
   showFreshnessDialog.value = false
+}
+
+async function triggerUpdate() {
+  updating.value = true
   try {
     await scraperApi.runScraper('shengyishe')
+    ElMessage.success('数据更新成功')
+    // 刷新页面以显示新数据
     window.location.reload()
   } catch (e) {
     console.error('Update failed', e)
+    ElMessage.error('数据更新失败：' + (e?.response?.data?.detail || e.message || '请稍后重试'))
+    updating.value = false
+    showFreshnessDialog.value = false
   }
 }
 
@@ -335,6 +352,28 @@ body ::selection {
 .freshness-ok p {
   color: var(--fall-color);
   font-size: 16px;
+}
+
+.freshness-loading {
+  text-align: center;
+  padding: 20px 0;
+}
+
+.freshness-loading .loading-icon {
+  font-size: 48px;
+  color: var(--accent-cyan);
+  margin-bottom: 16px;
+}
+
+.freshness-loading p {
+  color: var(--text-primary);
+  font-size: 16px;
+  margin: 8px 0;
+}
+
+.freshness-loading .loading-tip {
+  color: var(--text-muted);
+  font-size: 14px;
 }
 
 .el-pagination {

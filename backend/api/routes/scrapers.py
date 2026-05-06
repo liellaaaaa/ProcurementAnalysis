@@ -36,6 +36,8 @@ async def check_data_freshness():
 
     source_status = []
     for source, latest_date in results:
+        if source == 'manual':
+            continue
         if latest_date:
             days_diff = (today - latest_date).days
             needs_update = days_diff > 0
@@ -55,9 +57,11 @@ async def check_data_freshness():
                 "message": "暂无数据，请抓取"
             })
 
-    # 检查是否有完全没数据的源
+    # 检查是否有完全没数据的源（排除 manual）
     registered_sources = ScraperRegistry.list_sources()
     for src in registered_sources:
+        if src == 'manual':
+            continue
         if not any(s['source'] == src for s in source_status):
             source_status.append({
                 "source": src,

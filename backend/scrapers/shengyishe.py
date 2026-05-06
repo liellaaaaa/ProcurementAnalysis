@@ -1,4 +1,5 @@
 import re
+import sys
 from datetime import datetime
 from typing import List, Dict, Optional
 
@@ -287,6 +288,7 @@ def run_scraper():
     except Exception as e:
         scraper.log_scraper_run("failed", 0, str(e))
         print(f"Scraper failed: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

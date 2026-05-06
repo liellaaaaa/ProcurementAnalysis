@@ -4,8 +4,8 @@ export const priceApi = {
   getPrices(params) {
     return api.get('/prices', { params })
   },
-  getLatestPrices(source, page = 1, pageSize = 20, productName = null) {
-    return api.get('/prices/latest', { params: { source, page, page_size: pageSize, product_name: productName } })
+  getLatestPrices(params) {
+    return api.get('/prices/latest', { params })
   },
   getPriceHistory(productId, days = 30, source) {
     return api.get(`/prices/history/${productId}`, { params: source ? { days, source } : { days } })
@@ -14,11 +14,11 @@ export const priceApi = {
     return api.get('/prices/stats/summary', { params: source ? { source } : {} })
   },
   // Dashboard API
-  getDashboardDistribution(days = 30) {
-    return api.get('/prices/dashboard/distribution', { params: { days } })
+  getDashboardDistribution(params) {
+    return api.get('/prices/dashboard/distribution', { params })
   },
-  getDashboardRanking(limit = 10, days = 7) {
-    return api.get('/prices/dashboard/ranking', { params: { limit, days } })
+  getDashboardRanking(params) {
+    return api.get('/prices/dashboard/ranking', { params })
   },
   getDashboardHistoryCompare(productIds, days = 30) {
     return api.get('/prices/dashboard/history/compare', { params: { product_ids: productIds, days } })
@@ -26,8 +26,8 @@ export const priceApi = {
   getDashboardVolatility(days = 7) {
     return api.get('/prices/dashboard/volatility', { params: { days } })
   },
-  getDashboardHeatmap(days = 7) {
-    return api.get('/prices/dashboard/heatmap', { params: { days } })
+  getDashboardHeatmap(params) {
+    return api.get('/prices/dashboard/heatmap', { params })
   }
 }
 
@@ -123,6 +123,33 @@ export const scraperApi = {
     return api.get('/check-freshness')
   },
   runScraper(source) {
-    return api.post(`/scrapers/${source}/run`)
+    return api.post(`/scrapers/${source}/run`, {}, { timeout: 300000 })
+  }
+}
+
+export const categoryApi = {
+  getCategories() {
+    return api.get('/categories')
+  },
+  getLevelOneCategories() {
+    return api.get('/categories/level-one')
+  },
+  getLevelTwoCategories(parentId) {
+    return api.get(`/categories/level-two/${parentId}`)
+  },
+  createCategory(data) {
+    return api.post('/categories', data)
+  },
+  updateCategory(id, data) {
+    return api.put(`/categories/${id}`, data)
+  },
+  deleteCategory(id) {
+    return api.delete(`/categories/${id}`)
+  },
+  getProductCategories(productId) {
+    return api.get(`/categories/product/${productId}`)
+  },
+  setProductCategories(productId, categoryIds) {
+    return api.post(`/categories/product/${productId}`, { category_ids: categoryIds })
   }
 }
