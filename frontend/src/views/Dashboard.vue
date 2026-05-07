@@ -294,9 +294,8 @@ function handleExpandChange(row) {
   }
 }
 
-function handleFilter1Change({ categoryId, subcategoryId }) {
-  filter1CategoryId.value = categoryId
-  filter1SubcategoryId.value = subcategoryId
+function handleFilter1Change() {
+  // 直接使用当前的 filter1CategoryId/SubcategoryId/DateRange ref 值重新加载图表
   loadFilter1Charts()
 }
 
@@ -375,9 +374,17 @@ async function loadIndicatorCards() {
 async function loadLineChartData() {
   if (!lineChart) return
   try {
+    // 如果设置了日期范围，使用日期范围计算天数
+    let days = compareDays.value
+    if (filter1DateRange.value && filter1DateRange.value.length === 2) {
+      const start = new Date(filter1DateRange.value[0])
+      const end = new Date(filter1DateRange.value[1])
+      days = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1
+    }
+
     const res = await priceApi.getDashboardHistoryCompare(
       null,
-      compareDays.value,
+      days,
       filter1CategoryId.value || null,
       filter1SubcategoryId.value || null
     )
@@ -453,9 +460,17 @@ async function loadLineChartData() {
 async function loadRankingData() {
   if (!barChart) return
   try {
+    // 如果设置了日期范围，使用日期范围计算天数
+    let days = compareDays.value
+    if (filter1DateRange.value && filter1DateRange.value.length === 2) {
+      const start = new Date(filter1DateRange.value[0])
+      const end = new Date(filter1DateRange.value[1])
+      days = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1
+    }
+
     const params = {
       limit: 10,
-      days: compareDays.value,
+      days: days,
       category_id: filter1CategoryId.value || null,
       subcategory_id: filter1SubcategoryId.value || null
     }
