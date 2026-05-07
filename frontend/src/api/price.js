@@ -20,14 +20,21 @@ export const priceApi = {
   getDashboardRanking(params) {
     return api.get('/prices/dashboard/ranking', { params })
   },
-  getDashboardHistoryCompare(productIds, days = 30) {
-    return api.get('/prices/dashboard/history/compare', { params: { product_ids: productIds, days } })
+  getDashboardHistoryCompare(productIds, days = 30, categoryId, subcategoryId) {
+    const params = { days }
+    if (productIds) params.product_ids = productIds
+    if (categoryId) params.category_id = categoryId
+    if (subcategoryId) params.subcategory_id = subcategoryId
+    return api.get('/prices/dashboard/history/compare', { params })
   },
   getDashboardVolatility(days = 7) {
     return api.get('/prices/dashboard/volatility', { params: { days } })
   },
   getDashboardHeatmap(params) {
     return api.get('/prices/dashboard/heatmap', { params })
+  },
+  getDashboardCalendar(params) {
+    return api.get('/prices/dashboard/calendar', { params })
   }
 }
 

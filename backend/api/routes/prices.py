@@ -346,7 +346,7 @@ async def get_dashboard_distribution(
 
     query = session.query(
         Product.product_name,
-        func.count(PriceRecord.id).label('count')
+        func.avg(PriceRecord.price).label('avg_price')
     ).join(PriceRecord).filter(
         PriceRecord.record_date >= start_date
     )
@@ -361,12 +361,12 @@ async def get_dashboard_distribution(
         pc_query = session.query(ProductCategory.product_id).filter(ProductCategory.category_id == subcategory_id)
         query = query.filter(PriceRecord.product_id.in_(pc_query))
 
-    results = query.group_by(Product.id).order_by(func.count(PriceRecord.id).desc()).limit(10).all()
+    results = query.group_by(Product.id).order_by(func.avg(PriceRecord.price).desc()).limit(10).all()
 
     session.close()
 
     labels = [r.product_name[:15] for r in results]
-    sizes = [r.count for r in results]
+    sizes = [round(r.avg_price, 2) for r in results]
 
     return {"labels": labels, "sizes": sizes}
 
@@ -434,30 +434,54 @@ async def get_dashboard_ranking(
 
 @router.get("/dashboard/history/compare")
 async def get_dashboard_history_compare(
-    product_ids: str = Query(..., description="逗号分隔的产品ID"),
-    days: int = Query(30, ge=7, le=365)
+    product_ids: Optional[str] = Query(None, description="逗号分隔的产品ID，留空则返回分类下所有产品"),
+    days: int = Query(30, ge=7, le=365),
+    category_id: Optional[int] = Query(None),
+    subcategory_id: Optional[int] = Query(None)
 ):
     """获取多产品历史价格对比（折线图数据）"""
     session = get_session()
     start_date = (date.today() - timedelta(days=days)).isoformat()
 
-    id_list = [int(pid.strip()) for pid in product_ids.split(",") if pid.strip().isdigit()]
+    results = []
+    if product_ids and product_ids.strip():
+        # 指定了产品ID
+        id_list = [int(pid.strip()) for pid in product_ids.split(",") if pid.strip().isdigit()]
+        results = session.query(PriceRecord, Product.product_name).join(Product).filter(
+            PriceRecord.product_id.in_(id_list),
+            PriceRecord.record_date >= start_date
+        ).order_by(PriceRecord.record_date.asc()).all()
+    else:
+        # 未指定产品ID，按分类获取
+        query = session.query(Product).distinct()
+        if subcategory_id:
+            pc_query = session.query(ProductCategory.product_id).filter(ProductCategory.category_id == subcategory_id)
+            query = query.filter(Product.id.in_(pc_query))
+        elif category_id:
+            subcat_ids = [c.id for c in session.query(Category).filter(Category.parent_id == category_id).all()]
+            pc_query = session.query(ProductCategory.product_id).filter(ProductCategory.category_id.in_(subcat_ids + [category_id]))
+            query = query.filter(Product.id.in_(pc_query))
 
-    results = session.query(PriceRecord, Product.product_name).join(Product).filter(
-        PriceRecord.product_id.in_(id_list),
-        PriceRecord.record_date >= start_date
-    ).order_by(PriceRecord.record_date.asc()).all()
+        products = query.limit(10).all()
+        if products:
+            product_ids_list = [p.id for p in products]
+            results = session.query(PriceRecord, Product.product_name).join(Product).filter(
+                PriceRecord.product_id.in_(product_ids_list),
+                PriceRecord.record_date >= start_date
+            ).order_by(PriceRecord.record_date.asc()).all()
 
     # 按产品分组
     product_data = {}
     for pr, pname in results:
         if pr.product_id not in product_data:
-            product_data[pr.product_id] = {"name": pname, "dates": [], "prices": []}
-        product_data[pr.product_id]["dates"].append(pr.record_date.isoformat())
-        product_data[pr.product_id]["prices"].append(pr.price)
+            product_data[pr.product_id] = {"name": pname, "data": []}
+        product_data[pr.product_id]["data"].append(pr.price)
+
+    # 收集所有日期
+    all_dates = sorted(set(pr.record_date.isoformat() for pr, _ in results))
 
     session.close()
-    return {"series": list(product_data.values())}
+    return {"dates": all_dates, "series": list(product_data.values())}
 
 
 @router.get("/dashboard/heatmap")
@@ -545,6 +569,44 @@ async def get_dashboard_heatmap(
         "regions": sorted_regions,
         "data": heatmap_data
     }
+
+
+@router.get("/dashboard/calendar")
+async def get_dashboard_calendar(
+    days: int = Query(30, ge=7, le=90),
+    category_id: Optional[int] = None,
+    subcategory_id: Optional[int] = None
+):
+    """获取价格日历热力图数据（过去N天每日平均价格）"""
+    session = get_session()
+    start_date = (date.today() - timedelta(days=days)).isoformat()
+
+    # 查询每日平均价格
+    query = session.query(
+        PriceRecord.record_date,
+        func.avg(PriceRecord.price).label('avg_price')
+    ).filter(
+        PriceRecord.record_date >= start_date
+    ).group_by(
+        PriceRecord.record_date
+    ).order_by(
+        PriceRecord.record_date.asc()
+    )
+
+    # Filter by category
+    if category_id:
+        subcat_ids = [c.id for c in session.query(Category).filter(Category.parent_id == category_id).all()]
+        pc_query = session.query(ProductCategory.product_id).filter(ProductCategory.category_id.in_(subcat_ids + [category_id]))
+        query = query.filter(PriceRecord.product_id.in_(pc_query))
+
+    if subcategory_id:
+        pc_query = session.query(ProductCategory.product_id).filter(ProductCategory.category_id == subcategory_id)
+        query = query.filter(PriceRecord.product_id.in_(pc_query))
+
+    results = query.all()
+    session.close()
+
+    return [{"date": r.record_date.isoformat(), "price": round(r.avg_price, 2)} for r in results]
 
 
 @router.get("/dashboard/volatility")

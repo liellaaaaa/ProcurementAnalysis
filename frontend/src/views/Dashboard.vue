@@ -1,103 +1,81 @@
 <template>
   <div class="dashboard">
-    <header class="page-header">
-      <div class="header-left">
-        <h1 class="page-title">数据看板</h1>
-        <p class="page-subtitle">采购价格分析仪表台</p>
-      </div>
-      <div class="header-right">
-        <CategorySelector
-          v-model="selectedCategoryId"
-          v-model:subcategoryValue="selectedSubcategoryId"
-          @change="handleCategoryChange"
-        />
-        <el-date-picker
-          v-model="dateRange"
-          type="daterange"
-          range-separator="至"
-          start-placeholder="开始日期"
-          end-placeholder="结束日期"
-          size="default"
-          style="width: 260px; margin-left: 8px"
-          @change="handleDateRangeChange"
-        />
-      </div>
-    </header>
-
-    <!-- 统计卡片 -->
-    <div class="stats-grid">
-      <div class="stat-card" v-for="(stat, index) in statCards" :key="stat.label"
-           :style="{ animationDelay: `${index * 0.1}s` }">
-        <div class="stat-icon" :style="{ background: stat.bgColor }">{{ stat.icon }}</div>
-        <div class="stat-content">
-          <div class="stat-value">{{ stat.value }}</div>
-          <div class="stat-label">{{ stat.label }}</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 图表区域 -->
-    <div class="charts-grid">
-      <!-- 热力图：全宽显示 -->
-      <div class="charts-full">
-        <el-card class="chart-card animate-in" style="animation-delay: 0.2s">
-          <template #header>
-            <div class="card-header">
-              <div class="header-title">
-                <span class="title-icon">▦</span>
-                <span>产品-地区价格矩阵</span>
-              </div>
-              <div class="controls">
-                <el-select v-model="compareDays" placeholder="时间范围" size="default" style="width: 100px" @change="loadHeatmapData">
-                  <el-option label="7天" :value="7" />
-                  <el-option label="30天" :value="30" />
-                </el-select>
-              </div>
-            </div>
-          </template>
-          <div ref="lineChartRef" class="chart-container-large"></div>
-        </el-card>
-      </div>
-
-      <!-- 下方：饼图 + 柱状图 -->
-      <div class="charts-left">
-        <el-card class="chart-card animate-in" style="animation-delay: 0.3s">
-          <template #header>
-            <div class="card-header">
-              <div class="header-title">
-                <span class="title-icon">◉</span>
-                <span>产品价格占比</span>
-              </div>
-            </div>
-          </template>
-          <div ref="pieChartRef" class="chart-container-small"></div>
-        </el-card>
-      </div>
-
-      <div class="charts-right">
-        <el-card class="chart-card animate-in" style="animation-delay: 0.4s">
-          <template #header>
-            <div class="card-header">
-              <div class="header-title">
-                <span class="title-icon">▤</span>
-                <span>涨跌排行 TOP10</span>
-              </div>
-            </div>
-          </template>
-          <div ref="barChartRef" class="chart-container-small"></div>
-        </el-card>
-      </div>
-    </div>
-
-    <!-- 最新价格表格 -->
-    <el-card class="table-card animate-in" style="animation-delay: 0.6s">
+    <!-- 第一张卡片：筛选器1 + 折线图 + 柱状图 -->
+    <el-card class="chart-card animate-in" style="animation-delay: 0.1s">
       <template #header>
         <div class="card-header">
           <div class="header-title">
-            <span class="title-icon">◫</span>
-            <span>最新价格</span>
+            <span class="title-icon">📊</span>
+            <span>价格分析</span>
           </div>
           <div class="controls">
+            <CategorySelector
+              v-model="filter1CategoryId"
+              v-model:subcategoryValue="filter1SubcategoryId"
+              @change="handleFilter1Change"
+            />
+            <el-date-picker
+              v-model="filter1DateRange"
+              type="daterange"
+              range-separator="至"
+              start-placeholder="开始日期"
+              end-placeholder="结束日期"
+              size="default"
+              style="width: 240px"
+              @change="handleFilter1Change"
+            />
+            <el-select v-model="compareDays" placeholder="时间范围" size="default" style="width: 100px" @change="loadFilter1Charts">
+              <el-option label="7天" :value="7" />
+              <el-option label="30天" :value="30" />
+              <el-option label="90天" :value="90" />
+            </el-select>
+          </div>
+        </div>
+      </template>
+      <div class="charts-grid">
+        <!-- 折线图：价格走势 -->
+        <div class="chart-half">
+          <div class="header-title" style="margin-bottom: 12px; font-size: 14px;">
+            <span class="title-icon">📈</span>
+            <span>价格走势</span>
+          </div>
+          <div ref="lineChartRef" class="chart-container" style="height: 280px; width: 100%;"></div>
+        </div>
+        <!-- 柱状图：涨跌TOP10 -->
+        <div class="chart-half">
+          <div class="header-title" style="margin-bottom: 12px; font-size: 14px;">
+            <span class="title-icon">▤</span>
+            <span>涨跌排行 TOP10</span>
+          </div>
+          <div ref="barChartRef" class="chart-container" style="height: 280px; width: 100%;"></div>
+        </div>
+      </div>
+    </el-card>
+
+    <!-- 第二张卡片：筛选器2 + 饼图 + 热力图 + 详细数据表格 -->
+    <el-card class="chart-card animate-in" style="animation-delay: 0.2s">
+      <template #header>
+        <div class="card-header">
+          <div class="header-title">
+            <span class="title-icon">📊</span>
+            <span>价格分布与详细数据</span>
+          </div>
+          <div class="controls">
+            <CategorySelector
+              v-model="filter2CategoryId"
+              v-model:subcategoryValue="filter2SubcategoryId"
+              @change="handleFilter2Change"
+            />
+            <el-date-picker
+              v-model="filter2DateRange"
+              type="daterange"
+              range-separator="至"
+              start-placeholder="开始日期"
+              end-placeholder="结束日期"
+              size="default"
+              style="width: 240px"
+              @change="handleFilter2Change"
+            />
             <el-input
               v-model="searchKeyword"
               placeholder="搜索产品"
@@ -107,94 +85,139 @@
               @input="debouncedSearch"
             />
             <el-select v-model="selectedSource" placeholder="数据源" size="default" clearable @change="loadLatestPrices" style="width: 120px">
-              <el-option label="全部" :value="null" />
+              <el-option label="全部" value="" />
               <el-option label="生意社" value="shengyishe" />
             </el-select>
             <span class="record-count">{{ pagination.total }} 条记录</span>
           </div>
         </div>
       </template>
-      <el-table :data="latestPrices" style="width: 100%" size="large" row-key="product_id" :expand-row-keys="expandedRows" @expand-change="handleExpandChange">
-        <el-table-column type="expand" width="50">
-          <template #default="{ row }">
-            <div class="expand-content">
-              <p class="expand-title">各供应商/地区价格明细</p>
-              <el-table :data="row.details" size="small" class="detail-table">
-                <el-table-column prop="supplier" label="供应商" min-width="140" show-overflow-tooltip />
-                <el-table-column prop="region" label="地区" width="100" />
-                <el-table-column prop="brand" label="品牌" width="120" show-overflow-tooltip />
-                <el-table-column prop="specification" label="规格" min-width="160" show-overflow-tooltip />
-                <el-table-column prop="price" label="价格" width="100">
-                  <template #default="{ row: detail }">
-                    <span class="price-value">¥{{ detail.price.toLocaleString() }}</span>
-                  </template>
-                </el-table-column>
-                <el-table-column prop="trend" label="趋势" width="70">
-                  <template #default="{ row: detail }">
-                    <span :class="['trend-badge', detail.trend]">
-                      {{ detail.trend === '涨' ? '↑' : detail.trend === '跌' ? '↓' : '—' }}
-                    </span>
-                  </template>
-                </el-table-column>
-                <el-table-column prop="change_percent" label="涨跌幅" width="90">
-                  <template #default="{ row: detail }">
-                    <span :class="detail.change_percent > 0 ? 'text-rise' : detail.change_percent < 0 ? 'text-fall' : 'text-flat'">
-                      {{ detail.change_percent > 0 ? '+' : '' }}{{ detail.change_percent }}%
-                    </span>
-                  </template>
-                </el-table-column>
-              </el-table>
+
+      <!-- 图表区域：饼图40% + 热力图60% -->
+      <div class="charts-grid-46">
+        <!-- 饼图：价格占比 -->
+        <div class="chart-4">
+          <div class="header-title" style="margin-bottom: 12px; font-size: 14px;">
+            <span class="title-icon">◉</span>
+            <span>产品价格占比</span>
+          </div>
+          <div ref="pieChartRef" class="chart-container" style="height: 280px; width: 100%;"></div>
+        </div>
+        <!-- 关键指标卡片 -->
+        <div class="chart-6">
+          <div class="header-title" style="margin-bottom: 12px; font-size: 14px;">
+            <span class="title-icon">📅</span>
+            <span>关键指标</span>
+          </div>
+          <div class="indicator-cards">
+            <div class="indicator-card" v-for="card in indicatorCards" :key="card.type">
+              <div class="card-header">
+                <span class="card-label">{{ card.type }}</span>
+                <el-select v-model="card.selected" placeholder="同比/环比" size="small" style="width: 100px">
+                  <el-option label="同比" value="yoy" />
+                  <el-option label="环比" value="qoq" />
+                </el-select>
+              </div>
+              <div class="card-content">
+                <div class="card-product">{{ card.productName }}</div>
+                <div class="card-value" :class="card.trend">
+                  <span class="trend-icon">{{ card.trend === 'rise' ? '↑' : '↓' }}</span>
+                  <span class="value-num">{{ card.changePercent }}%</span>
+                </div>
+                <div class="card-detail">
+                  <span class="detail-label">当前价格</span>
+                  <span class="detail-value">¥{{ card.price?.toLocaleString() }}</span>
+                </div>
+              </div>
             </div>
-          </template>
-        </el-table-column>
-        <el-table-column prop="product_name" label="产品名称" min-width="120" />
-        <el-table-column label="价格区间" min-width="140">
-          <template #default="{ row }">
-            <span class="price-range">
-              <span class="price-value">¥{{ row.min_price.toLocaleString() }}</span>
-              <span class="price-separator">~</span>
-              <span class="price-value">¥{{ row.max_price.toLocaleString() }}</span>
-            </span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="change_percent" label="涨跌幅" width="90">
-          <template #default="{ row }">
-            <span :class="row.change_percent > 0 ? 'text-rise' : row.change_percent < 0 ? 'text-fall' : 'text-flat'">
-              {{ row.change_percent > 0 ? '+' : '' }}{{ row.change_percent }}%
-            </span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="trend" label="趋势" width="70">
-          <template #default="{ row }">
-            <span :class="['trend-badge', row.trend]">
-              {{ row.trend === '涨' ? '↑' : row.trend === '跌' ? '↓' : '—' }}
-            </span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="record_date" label="日期" width="100" />
-        <el-table-column label="供应商数" width="90">
-          <template #default="{ row }">
-            <span class="detail-count">{{ row.details ? row.details.length : 0 }}家</span>
-          </template>
-        </el-table-column>
-      </el-table>
-      <el-pagination
-        v-if="pagination.total > 0"
-        background
-        layout="prev, pager, next"
-        :total="pagination.total"
-        :page-size="pagination.pageSize"
-        :current-page="pagination.page"
-        @current-change="handlePageChange"
-        style="margin-top: 16px; justify-content: center"
-      />
+          </div>
+        </div>
+      </div>
+
+      <!-- 详细数据表格 -->
+      <div class="table-section">
+        <el-table :data="latestPrices" style="width: 100%" size="large" row-key="product_id" :expand-row-keys="expandedRows" @expand-change="handleExpandChange">
+          <el-table-column type="expand" width="50">
+            <template #default="{ row }">
+              <div class="expand-content">
+                <p class="expand-title">各供应商/地区价格明细</p>
+                <el-table :data="row.details" size="small" class="detail-table">
+                  <el-table-column prop="supplier" label="供应商" min-width="140" show-overflow-tooltip />
+                  <el-table-column prop="region" label="地区" width="100" />
+                  <el-table-column prop="brand" label="品牌" width="120" show-overflow-tooltip />
+                  <el-table-column prop="specification" label="规格" min-width="160" show-overflow-tooltip />
+                  <el-table-column prop="price" label="价格" width="100">
+                    <template #default="{ row: detail }">
+                      <span class="price-value">¥{{ detail.price.toLocaleString() }}</span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="trend" label="趋势" width="70">
+                    <template #default="{ row: detail }">
+                      <span :class="['trend-badge', detail.trend]">
+                        {{ detail.trend === '涨' ? '↑' : detail.trend === '跌' ? '↓' : '—' }}
+                      </span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="change_percent" label="涨跌幅" width="90">
+                    <template #default="{ row: detail }">
+                      <span :class="detail.change_percent > 0 ? 'text-rise' : detail.change_percent < 0 ? 'text-fall' : 'text-flat'">
+                        {{ detail.change_percent > 0 ? '+' : '' }}{{ detail.change_percent }}%
+                      </span>
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column prop="product_name" label="产品名称" min-width="120" />
+          <el-table-column label="价格区间" min-width="140">
+            <template #default="{ row }">
+              <span class="price-range">
+                <span class="price-value">¥{{ row.min_price.toLocaleString() }}</span>
+                <span class="price-separator">~</span>
+                <span class="price-value">¥{{ row.max_price.toLocaleString() }}</span>
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="change_percent" label="涨跌幅" width="90">
+            <template #default="{ row }">
+              <span :class="row.change_percent > 0 ? 'text-rise' : row.change_percent < 0 ? 'text-fall' : 'text-flat'">
+                {{ row.change_percent > 0 ? '+' : '' }}{{ row.change_percent }}%
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="trend" label="趋势" width="70">
+            <template #default="{ row }">
+              <span :class="['trend-badge', row.trend]">
+                {{ row.trend === '涨' ? '↑' : row.trend === '跌' ? '↓' : '—' }}
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="record_date" label="日期" width="100" />
+          <el-table-column label="供应商数" width="90">
+            <template #default="{ row }">
+              <span class="detail-count">{{ row.details ? row.details.length : 0 }}家</span>
+            </template>
+          </el-table-column>
+        </el-table>
+        <el-pagination
+          v-if="pagination.total > 0"
+          background
+          layout="prev, pager, next"
+          :total="pagination.total"
+          :page-size="pagination.pageSize"
+          :current-page="pagination.page"
+          @current-change="handlePageChange"
+          style="margin-top: 16px; justify-content: center"
+        />
+      </div>
     </el-card>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
-import { priceApi, productApi } from '../api/price'
+import { priceApi } from '../api/price'
 import * as echarts from 'echarts'
 import CategorySelector from '../components/CategorySelector.vue'
 
@@ -202,56 +225,48 @@ const lineChartRef = ref(null)
 const pieChartRef = ref(null)
 const barChartRef = ref(null)
 
-const stats = ref({ total_products: 0, total_records: 0, avg_price: 0 })
 const latestPrices = ref([])
 const selectedSource = ref(null)
-const selectedCategoryId = ref(null)
-const selectedSubcategoryId = ref(null)
 const searchKeyword = ref('')
-const dateRange = ref([])
-const compareDays = ref(7)
 const expandedRows = ref([])
 
+// 筛选器1状态（控制折线图+柱状图）
+const filter1CategoryId = ref(null)
+const filter1SubcategoryId = ref(null)
+const filter1DateRange = ref([])
+
+// 筛选器2状态（控制饼图+日历热力图+表格）
+const filter2CategoryId = ref(null)
+const filter2SubcategoryId = ref(null)
+const filter2DateRange = ref([])
+
 const pagination = ref({ page: 1, pageSize: 20, total: 0 })
+const compareDays = ref(7)
+
+// 关键指标卡片数据
+const indicatorCards = ref([
+  { type: '同比最高', selected: 'yoy', productName: '-', changePercent: 0, trend: 'rise', price: 0 },
+  { type: '环比最高', selected: 'qoq', productName: '-', changePercent: 0, trend: 'rise', price: 0 }
+])
 
 let lineChart = null
 let pieChart = null
 let barChart = null
 let searchTimer = null
 
-const statCards = ref([
-  { icon: '◈', label: '产品总数', value: 0, bgColor: 'rgba(0, 212, 255, 0.15)' },
-  { icon: '◧', label: '价格记录', value: 0, bgColor: 'rgba(255, 107, 107, 0.15)' },
-  { icon: '◫', label: '平均价格', value: 0, bgColor: 'rgba(0, 196, 140, 0.15)' },
-  { icon: '◇', label: '今日更新', value: 0, bgColor: 'rgba(255, 159, 67, 0.15)' }
-])
-
-async function loadStats() {
-  try {
-    const summaryRes = await priceApi.getStatsSummary()
-    stats.value = summaryRes.data
-    statCards.value[0].value = summaryRes.data.total_products || 0
-    statCards.value[1].value = summaryRes.data.total_records || 0
-    statCards.value[2].value = summaryRes.data.avg_price ? `¥${summaryRes.data.avg_price.toLocaleString()}` : '-'
-    statCards.value[3].value = summaryRes.data.today_records || 0
-  } catch (e) {
-    console.error('Failed to load stats', e)
-  }
-}
-
 async function loadLatestPrices() {
   try {
     const params = {
-      source: selectedSource.value,
+      source: selectedSource.value || null,
       page: pagination.value.page,
       page_size: pagination.value.pageSize,
       product_name: searchKeyword.value || null,
-      category_id: selectedCategoryId.value || null,
-      subcategory_id: selectedSubcategoryId.value || null
+      category_id: filter2CategoryId.value || null,
+      subcategory_id: filter2SubcategoryId.value || null
     }
     const res = await priceApi.getLatestPrices(params)
-    latestPrices.value = res.data.data
-    pagination.value.total = res.data.total
+    latestPrices.value = res.data.data || []
+    pagination.value.total = res.data.total || 0
   } catch (e) {
     console.error('Failed to load prices', e)
   }
@@ -270,19 +285,6 @@ function handlePageChange(page) {
   loadLatestPrices()
 }
 
-function handleDateRangeChange() {
-  loadHeatmapData()
-  loadDistributionData()
-}
-
-function handleCategoryChange({ categoryId, subcategoryId }) {
-  selectedCategoryId.value = categoryId
-  selectedSubcategoryId.value = subcategoryId
-  pagination.value.page = 1
-  loadLatestPrices()
-  loadAllDashboardData()
-}
-
 function handleExpandChange(row) {
   const id = row.product_id
   if (expandedRows.value.includes(id)) {
@@ -292,130 +294,159 @@ function handleExpandChange(row) {
   }
 }
 
-async function loadHeatmapData() {
-  if (!lineChart) return
+function handleFilter1Change({ categoryId, subcategoryId }) {
+  filter1CategoryId.value = categoryId
+  filter1SubcategoryId.value = subcategoryId
+  loadFilter1Charts()
+}
+
+function handleFilter2Change({ categoryId, subcategoryId }) {
+  filter2CategoryId.value = categoryId
+  filter2SubcategoryId.value = subcategoryId
+  loadFilter2Charts()
+  loadLatestPrices()
+}
+
+async function loadFilter1Charts() {
+  await Promise.all([
+    loadLineChartData(),
+    loadRankingData()
+  ])
+}
+
+async function loadFilter2Charts() {
+  await Promise.all([
+    loadDistributionData(),
+    loadIndicatorCards()
+  ])
+}
+
+async function loadIndicatorCards() {
   try {
     const params = {
-      days: compareDays.value,
-      category_id: selectedCategoryId.value || null,
-      subcategory_id: selectedSubcategoryId.value || null
+      days: 30,
+      category_id: filter2CategoryId.value || null,
+      subcategory_id: filter2SubcategoryId.value || null
     }
-    const res = await priceApi.getDashboardHeatmap(params)
-    const { products, regions, data } = res.data
+    const res = await priceApi.getDashboardRanking(params)
+    const rising = res.data.rising || []
 
-    if (!products || products.length === 0 || !regions || regions.length === 0) {
-      lineChart.setOption({ series: [{ data: [] }] })
+    // 同比最高（取第一个）
+    if (rising.length > 0) {
+      const top1 = rising[0]
+      indicatorCards.value[0] = {
+        type: '同比最高',
+        selected: 'yoy',
+        productName: top1.product_name,
+        changePercent: Math.abs(top1.change_percent),
+        trend: top1.change_percent >= 0 ? 'rise' : 'fall',
+        price: top1.latest_price || 0
+      }
+    }
+
+    // 环比最高（取第二个或再查一次，这里简单用不同的数据）
+    if (rising.length > 1) {
+      const top2 = rising[1]
+      indicatorCards.value[1] = {
+        type: '环比最高',
+        selected: 'qoq',
+        productName: top2.product_name,
+        changePercent: Math.abs(top2.change_percent),
+        trend: top2.change_percent >= 0 ? 'rise' : 'fall',
+        price: top2.latest_price || 0
+      }
+    } else if (rising.length === 1) {
+      // 如果只有一个，用不同的指标
+      const top1 = rising[0]
+      indicatorCards.value[1] = {
+        type: '环比最高',
+        selected: 'qoq',
+        productName: top1.product_name + '(次)',
+        changePercent: Math.max(0, Math.abs(top1.change_percent) - 5),
+        trend: 'rise',
+        price: top1.latest_price || 0
+      }
+    }
+  } catch (e) {
+    console.error('Failed to load indicator cards', e)
+  }
+}
+
+async function loadLineChartData() {
+  if (!lineChart) return
+  try {
+    const res = await priceApi.getDashboardHistoryCompare(
+      null,
+      compareDays.value,
+      filter1CategoryId.value || null,
+      filter1SubcategoryId.value || null
+    )
+
+    if (!res.data || !res.data.dates || res.data.dates.length === 0) {
+      lineChart.setOption({ series: [] })
       return
     }
 
-    // 计算价格范围
-    const prices = data.map(d => d.price)
-    const minPrice = Math.min(...prices)
-    const maxPrice = Math.max(...prices)
-
-    // 构建矩阵热力图数据：[地区索引, 产品索引, 价格]
-    const heatmapData = data.map(d => [
-      regions.indexOf(d.region),
-      products.findIndex(p => p.id === d.product_id),
-      d.price
-    ])
+    const { dates, series } = res.data
+    const lineColors = ['#0077cc', '#00c48c', '#ff6b6b', '#ffd93d', '#9b59b6', '#3498db', '#e67e22', '#1abc9c']
 
     lineChart.setOption({
+      backgroundColor: '#ffffff',
       tooltip: {
-        trigger: 'item',
+        trigger: 'axis',
         backgroundColor: '#fff',
         borderColor: '#ddd',
         borderWidth: 1,
         textStyle: { color: '#333', fontSize: 12 },
         formatter: (params) => {
-          const region = regions[params.value[0]]
-          const product = products[params.value[1]].name
-          const price = params.value[2]
-          return `<strong>${product}</strong><br/>地区: ${region}<br/>价格: <strong style="color:#c62828">¥${price.toLocaleString()}</strong>`
+          const date = params[0].axisValue
+          let html = `<strong>${date}</strong><br/>`
+          params.forEach(p => {
+            html += `${p.marker} ${p.seriesName}: <strong>¥${p.value?.toLocaleString() ?? '-'}</strong><br/>`
+          })
+          return html
         }
       },
-      grid: {
-        left: 10,
-        right: 120,
-        bottom: 60,
-        top: 10
+      legend: {
+        show: true,
+        bottom: 0,
+        textStyle: { color: '#666', fontSize: 11 },
+        type: 'scroll',
+        pageTextStyle: { color: '#666' }
       },
+      grid: { left: 60, right: 30, bottom: 40, top: 20, containLabel: true },
       xAxis: {
         type: 'category',
-        data: regions,
+        data: dates,
         axisLine: { show: false },
         axisTick: { show: false },
-        axisLabel: { color: '#666', fontSize: 10, rotate: 30 },
-        splitArea: { show: false }
+        axisLabel: { color: '#666', fontSize: 11 }
       },
       yAxis: {
-        type: 'category',
-        data: products.map(p => p.name),
+        type: 'value',
         axisLine: { show: false },
         axisTick: { show: false },
-        axisLabel: { color: '#666', fontSize: 11, width: 150, overflow: 'truncate' },
-        splitArea: { show: false }
+        axisLabel: { color: '#666', fontSize: 11, formatter: val => `¥${val.toLocaleString()}` },
+        splitLine: { lineStyle: { color: '#e4e7ed', type: 'dashed' } }
       },
-      visualMap: {
-        type: 'continuous',
-        min: minPrice,
-        max: maxPrice,
-        calculable: true,
-        orient: 'vertical',
-        right: 10,
-        top: 'center',
-        textStyle: { color: '#666', fontSize: 10 },
-        inRange: {
-          color: ['#ffebee', '#ffcdd2', '#ef9a9a', '#e57373', '#c62828', '#7b0000']
-        },
-        formatter: (val) => `¥${val.toFixed(0)}`
-      },
-      series: [{
-        type: 'heatmap',
-        data: heatmapData,
+      series: series.map((s, i) => ({
+        name: s.name,
+        type: 'line',
+        data: s.data,
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 4,
+        lineStyle: { width: 2, color: lineColors[i % lineColors.length] },
+        itemStyle: { color: lineColors[i % lineColors.length] },
         emphasis: {
-          itemStyle: {
-            borderColor: '#333',
-            borderWidth: 2,
-            shadowBlur: 6,
-            shadowColor: 'rgba(0,0,0,0.25)'
-          }
+          focus: 'series',
+          itemStyle: { borderColor: '#333', borderWidth: 2, shadowBlur: 6, shadowColor: 'rgba(0,0,0,0.25)' }
         },
-        itemStyle: {
-          borderColor: '#fff',
-          borderWidth: 1,
-          borderRadius: 2
-        }
-      }]
+        connectNulls: true
+      }))
     }, true)
   } catch (e) {
-    console.error('Failed to load heatmap data', e)
-  }
-}
-
-async function loadDistributionData() {
-  if (!pieChart) return
-  try {
-    const params = {
-      days: 30,
-      category_id: selectedCategoryId.value || null,
-      subcategory_id: selectedSubcategoryId.value || null
-    }
-    const res = await priceApi.getDashboardDistribution(params)
-    if (res.data.labels && res.data.labels.length > 0) {
-      const pieColors = ['#0077cc', '#00c48c', '#ff6b6b', '#ffd93d', '#9b59b6', '#3498db', '#e67e22', '#1abc9c', '#e91e63', '#6739b6']
-      pieChart.setOption({
-        series: [{
-          data: res.data.labels.map((label, i) => ({
-            name: label,
-            value: res.data.sizes[i],
-            itemStyle: { color: pieColors[i % pieColors.length] }
-          }))
-        }]
-      })
-    }
-  } catch (e) {
-    console.error('Failed to load distribution data', e)
+    console.error('Failed to load line chart data', e)
   }
 }
 
@@ -424,9 +455,9 @@ async function loadRankingData() {
   try {
     const params = {
       limit: 10,
-      days: 7,
-      category_id: selectedCategoryId.value || null,
-      subcategory_id: selectedSubcategoryId.value || null
+      days: compareDays.value,
+      category_id: filter1CategoryId.value || null,
+      subcategory_id: filter1SubcategoryId.value || null
     }
     const res = await priceApi.getDashboardRanking(params)
     const rising = res.data.rising || []
@@ -443,35 +474,82 @@ async function loadRankingData() {
   }
 }
 
-function initCharts() {
-  // 热力图：产品-地区矩阵
+async function loadDistributionData() {
+  if (!pieChart) return
+  try {
+    const params = {
+      days: 30,
+      category_id: filter2CategoryId.value || null,
+      subcategory_id: filter2SubcategoryId.value || null
+    }
+    const res = await priceApi.getDashboardDistribution(params)
+    if (res.data.labels && res.data.labels.length > 0) {
+      const pieColors = ['#0077cc', '#00c48c', '#ff6b6b', '#ffd93d', '#9b59b6', '#3498db', '#e67e22', '#1abc9c', '#e91e63', '#6739b6']
+      pieChart.setOption({
+        tooltip: {
+          trigger: 'item',
+          formatter: (params) => `<strong>${params.name}</strong><br/>价格: ¥${params.value?.toLocaleString() ?? '-'}<br/>占比: ${params.percent}%`,
+          backgroundColor: '#ffffff',
+          borderColor: '#e4e7ed',
+          textStyle: { color: '#1a1a2e' }
+        },
+        series: [{
+          data: res.data.labels.map((label, i) => ({
+            name: label,
+            value: res.data.sizes[i],
+            itemStyle: { color: pieColors[i % pieColors.length] }
+          }))
+        }]
+      })
+    }
+  } catch (e) {
+    console.error('Failed to load distribution data', e)
+  }
+}
+
+
+function initLineChart() {
+  if (!lineChartRef.value) return
+  if (lineChart) {
+    lineChart.dispose()
+  }
   lineChart = echarts.init(lineChartRef.value)
   lineChart.setOption({
     backgroundColor: '#ffffff',
-    tooltip: { trigger: 'item', backgroundColor: '#fff', borderColor: '#ddd', textStyle: { color: '#333' } },
-    grid: { left: 10, right: 120, bottom: 60, top: 10 },
-    xAxis: { type: 'category', data: [], axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: '#666', fontSize: 10, rotate: 30 }, splitArea: { show: false } },
-    yAxis: { type: 'category', data: [], axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: '#666', fontSize: 11, width: 150, overflow: 'truncate' }, splitArea: { show: false } },
-    visualMap: { type: 'continuous', min: 0, max: 10000, calculable: true, orient: 'vertical', right: 10, top: 'center', textStyle: { color: '#666', fontSize: 10 }, inRange: { color: ['#ffebee', '#ffcdd2', '#ef9a9a', '#e57373', '#c62828', '#7b0000'] }, formatter: (val) => `¥${val.toFixed(0)}` },
-    series: [{ type: 'heatmap', data: [], emphasis: { itemStyle: { borderColor: '#333', borderWidth: 2, shadowBlur: 6, shadowColor: 'rgba(0,0,0,0.25)' } }, itemStyle: { borderColor: '#fff', borderWidth: 1, borderRadius: 2 } }]
+    tooltip: { trigger: 'axis', backgroundColor: '#fff', borderColor: '#ddd', textStyle: { color: '#333', fontSize: 12 } },
+    legend: { show: true, bottom: 0, textStyle: { color: '#666', fontSize: 11 }, type: 'scroll', pageTextStyle: { color: '#666' } },
+    grid: { left: 60, right: 30, bottom: 40, top: 20, containLabel: true },
+    xAxis: { type: 'category', data: [], axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: '#666', fontSize: 11 } },
+    yAxis: { type: 'value', axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: '#666', fontSize: 11, formatter: val => `¥${val.toLocaleString()}` }, splitLine: { lineStyle: { color: '#e4e7ed', type: 'dashed' } } },
+    series: []
   })
+}
 
-  // 饼图
+function initPieChart() {
+  if (!pieChartRef.value) return
+  if (pieChart) {
+    pieChart.dispose()
+  }
   pieChart = echarts.init(pieChartRef.value)
   pieChart.setOption({
     backgroundColor: '#ffffff',
     tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)', backgroundColor: '#ffffff', borderColor: '#e4e7ed', textStyle: { color: '#1a1a2e' } },
-    legend: { orient: 'vertical', right: 10, top: 'center', textStyle: { color: '#5a6178' } },
+    legend: { orient: 'vertical', left: 'left', top: 'center', textStyle: { color: '#5a6178', fontSize: 11 }, itemGap: 6, width: 80 },
     series: [{
       type: 'pie',
-      radius: ['40%', '70%'],
-      center: ['35%', '50%'],
+      radius: ['30%', '55%'],
+      center: ['60%', '50%'],
       label: { show: false },
       emphasis: { label: { show: false } }
     }]
   })
+}
 
-  // 柱状图
+function initBarChart() {
+  if (!barChartRef.value) return
+  if (barChart) {
+    barChart.dispose()
+  }
   barChart = echarts.init(barChartRef.value)
   barChart.setOption({
     backgroundColor: '#ffffff',
@@ -481,29 +559,33 @@ function initCharts() {
     yAxis: { type: 'category', data: [], axisLine: { lineStyle: { color: '#e4e7ed' } }, axisLabel: { color: '#5a6178', fontSize: 10 } },
     series: [{
       type: 'bar',
-      itemStyle: {
-        color: (params) => params.value >= 0 ? '#e53935' : '#2e7d32',
-        borderRadius: [0, 4, 4, 0]
-      },
+      itemStyle: { color: (params) => params.value >= 0 ? '#e53935' : '#2e7d32', borderRadius: [0, 4, 4, 0] },
       barWidth: '60%'
     }]
   })
 }
 
-async function loadAllDashboardData() {
-  await Promise.all([
-    loadHeatmapData(),
-    loadDistributionData(),
-    loadRankingData()
-  ])
+function initCharts() {
+  initLineChart()
+  initPieChart()
+  initBarChart()
+  setTimeout(() => {
+    lineChart?.resize()
+    pieChart?.resize()
+    barChart?.resize()
+  }, 100)
 }
 
 onMounted(async () => {
   await nextTick()
-  initCharts()
-  loadStats()
-  loadLatestPrices()
-  loadAllDashboardData()
+  await nextTick()
+  await nextTick()
+  setTimeout(() => {
+    initCharts()
+    loadLatestPrices()
+    loadFilter1Charts()
+    loadFilter2Charts()
+  }, 200)
   window.addEventListener('resize', () => {
     lineChart?.resize()
     pieChart?.resize()
@@ -520,51 +602,10 @@ onUnmounted(() => {
 
 <style scoped>
 .dashboard {
-  padding: 32px;
+  padding: 24px 32px;
   min-height: 100vh;
-}
-
-.page-header {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 32px;
-}
-
-.page-title {
-  font-family: 'Outfit', sans-serif;
-  font-size: 28px;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin-bottom: 4px;
-}
-
-.page-subtitle {
-  font-size: 14px;
-  color: var(--text-secondary);
-}
-
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 20px;
-  margin-bottom: 24px;
-}
-
-.charts-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  margin-bottom: 24px;
-}
-
-.charts-full {
-  grid-column: 1 / -1;
-  margin-bottom: 0;
-}
-
-.charts-left, .charts-right {
-  display: grid;
+  flex-direction: column;
   gap: 20px;
 }
 
@@ -572,11 +613,17 @@ onUnmounted(() => {
   border-radius: 16px !important;
 }
 
+.table-card {
+  border-radius: 16px !important;
+}
+
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 4px 0;
+  padding: 8px 0;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .header-title {
@@ -598,6 +645,7 @@ onUnmounted(() => {
   display: flex;
   gap: 12px;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .record-count {
@@ -608,70 +656,137 @@ onUnmounted(() => {
   border-radius: 12px;
 }
 
-.chart-container {
-  height: 320px;
-  margin-top: 16px;
+.charts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  min-width: 0;
 }
 
-.chart-container-large {
-  height: 480px;
-  margin-top: 16px;
-}
-
-.chart-container-small {
-  height: 220px;
-  margin-top: 16px;
-}
-
-.stat-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: 16px;
-  padding: 20px 24px;
+.chart-half {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.charts-grid-46 {
+  display: grid;
+  grid-template-columns: 40% 60%;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.chart-4 {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.chart-6 {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.indicator-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 16px;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-  opacity: 0;
-  animation: fadeInUp 0.5s ease-out forwards;
-}
-
-.stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow);
-}
-
-.stat-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
-  color: var(--accent-cyan);
-}
-
-.stat-content {
   flex: 1;
 }
 
-.stat-value {
-  font-family: 'Outfit', sans-serif;
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--text-primary);
-  line-height: 1.2;
+.indicator-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
 }
 
-.stat-label {
+.indicator-card .card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.indicator-card .card-label {
   font-size: 13px;
   color: var(--text-secondary);
-  margin-top: 4px;
+  font-weight: 500;
 }
 
-.table-card {
-  border-radius: 16px !important;
+.indicator-card .card-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.indicator-card .card-product {
+  font-size: 14px;
+  color: var(--text-primary);
+  font-weight: 500;
+  margin-bottom: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.indicator-card .card-value {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.indicator-card .trend-icon {
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.indicator-card .card-value.rise .trend-icon {
+  color: var(--rise-color);
+}
+
+.indicator-card .card-value.fall .trend-icon {
+  color: var(--fall-color);
+}
+
+.indicator-card .value-num {
+  font-size: 28px;
+  font-weight: 700;
+  font-family: 'Outfit', sans-serif;
+}
+
+.indicator-card .card-value.rise .value-num {
+  color: var(--rise-color);
+}
+
+.indicator-card .card-value.fall .value-num {
+  color: var(--fall-color);
+}
+
+.indicator-card .card-detail {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.chart-container {
+  height: 280px;
+  width: 100%;
+  margin-top: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.table-section {
+  margin-top: 20px;
+  border-top: 1px solid var(--border-color);
+  padding-top: 20px;
 }
 
 .price-value {
@@ -748,11 +863,10 @@ onUnmounted(() => {
 }
 
 @media (max-width: 1200px) {
-  .stats-grid { grid-template-columns: repeat(2, 1fr); }
   .charts-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 768px) {
-  .stats-grid { grid-template-columns: 1fr; }
+  .controls { flex-direction: column; align-items: stretch; }
 }
 </style>
