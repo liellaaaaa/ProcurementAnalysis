@@ -1,68 +1,96 @@
 <template>
   <div class="category-manage">
-    <header class="page-header">
-      <div class="header-left">
-        <h1 class="page-title">品类管理</h1>
-        <p class="page-subtitle">管理一级和二级品类目录</p>
-      </div>
-      <el-button type="primary" class="add-btn" @click="showAddDialog(null)">
-        <span class="btn-icon">+</span>
-        新增一级目录
-      </el-button>
-    </header>
+    <div class="page-container">
+      <header class="page-header">
+        <div class="header-content">
+          <h1 class="page-title">品类管理</h1>
+          <p class="page-subtitle">管理一级和二级品类目录</p>
+        </div>
+        <el-button type="primary" class="add-btn" @click="showAddDialog(null)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="12" y1="5" x2="12" y2="19"/>
+            <line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          新增一级目录
+        </el-button>
+      </header>
 
-    <el-card class="table-card animate-in">
-      <el-table :data="categoriesTree" style="width: 100%" v-loading="loading" size="large" row-key="id">
-        <el-table-column prop="name" label="一级目录" min-width="200">
-          <template #default="{ row }">
-            <div class="category-name">
-              <span class="name-text">{{ row.name }}</span>
-              <span class="sub-count" v-if="row.subcategories && row.subcategories.length">({{ row.subcategories.length }})</span>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column label="二级目录" min-width="400">
-          <template #default="{ row }">
-            <div class="subcategories">
-              <el-tag
-                v-for="sub in row.subcategories"
-                :key="sub.id"
-                class="sub-tag"
-                closable
-                @close="handleDeleteSubcategory(sub.id)"
-              >
-                {{ sub.name }}
-              </el-tag>
-              <el-button size="small" text @click="showAddDialog(row)" class="add-sub-btn">
-                <span>+ 添加</span>
-              </el-button>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="150" fixed="right">
-          <template #default="{ row }">
-            <el-button size="small" class="action-btn edit" @click="showEditDialog(row)">编辑</el-button>
-            <el-button size="small" class="action-btn delete" @click="handleDelete(row.id)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
+      <el-card class="table-card animate-in">
+        <el-table :data="categoriesTree" style="width: 100%" v-loading="loading" size="large" row-key="id" class="category-table">
+          <el-table-column prop="name" label="一级目录" min-width="200">
+            <template #default="{ row }">
+              <div class="category-name">
+                <span class="name-icon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                  </svg>
+                </span>
+                <span class="name-text">{{ row.name }}</span>
+                <span class="sub-count" v-if="row.subcategories && row.subcategories.length">({{ row.subcategories.length }})</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="二级目录" min-width="400">
+            <template #default="{ row }">
+              <div class="subcategories">
+                <el-tag
+                  v-for="sub in row.subcategories"
+                  :key="sub.id"
+                  class="sub-tag"
+                  closable
+                  @close="handleDeleteSubcategory(sub.id)"
+                >
+                  {{ sub.name }}
+                </el-tag>
+                <el-button size="small" text @click="showAddDialog(row)" class="add-sub-btn">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"/>
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                  </svg>
+                  添加
+                </el-button>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="140" fixed="right">
+            <template #default="{ row }">
+              <div class="action-buttons">
+                <el-button size="small" class="action-btn edit" @click="showEditDialog(row)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                  编辑
+                </el-button>
+                <el-button size="small" class="action-btn delete" @click="handleDelete(row.id)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="3 6 5 6 21 6"/>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                  </svg>
+                  删除
+                </el-button>
+              </div>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-card>
 
-    <!-- 添加/编辑弹窗 -->
-    <el-dialog v-model="dialogVisible" :title="dialogMode === 'add' ? (parentCategory ? '添加二级目录' : '添加一级目录') : '编辑目录'" width="420px">
-      <el-form :model="form" label-width="100px">
-        <el-form-item label="目录名称">
-          <el-input v-model="form.name" placeholder="请输入目录名称" />
-        </el-form-item>
-        <el-form-item label="排序">
-          <el-input-number v-model="form.sort_order" :min="0" :max="9999" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSave">保存</el-button>
-      </template>
-    </el-dialog>
+      <!-- 添加/编辑弹窗 -->
+      <el-dialog v-model="dialogVisible" :title="dialogMode === 'add' ? (parentCategory ? '添加二级目录' : '添加一级目录') : '编辑目录'" width="420px" class="category-dialog">
+        <el-form :model="form" label-width="90px" class="category-form">
+          <el-form-item label="目录名称">
+            <el-input v-model="form.name" placeholder="请输入目录名称" />
+          </el-form-item>
+          <el-form-item label="排序">
+            <el-input-number v-model="form.sort_order" :min="0" :max="9999" />
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <el-button @click="dialogVisible = false" class="btn-cancel">取消</el-button>
+          <el-button type="primary" @click="handleSave" class="btn-save">保存</el-button>
+        </template>
+      </el-dialog>
+    </div>
   </div>
 </template>
 
@@ -171,52 +199,74 @@ async function handleDeleteSubcategory(id) {
 
 <style scoped>
 .category-manage {
-  padding: 32px;
+  padding: 24px;
+  min-height: 100vh;
+}
+
+.page-container {
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 32px;
+  margin-bottom: 24px;
 }
 
-.header-left {
+.header-content {
   flex: 1;
 }
 
 .page-title {
-  font-family: 'Outfit', sans-serif;
-  font-size: 28px;
+  font-family: 'Fira Sans', sans-serif;
+  font-size: 24px;
   font-weight: 700;
   color: var(--text-primary);
-  margin-bottom: 4px;
+  margin: 0 0 4px 0;
 }
 
 .page-subtitle {
   font-size: 14px;
   color: var(--text-secondary);
+  margin: 0;
 }
 
 .add-btn {
-  padding: 12px 24px !important;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px !important;
   border-radius: 10px !important;
   font-weight: 600 !important;
-}
-
-.btn-icon {
-  margin-right: 6px;
-  font-size: 16px;
 }
 
 .table-card {
   border-radius: 16px !important;
 }
 
+.category-table :deep(.el-table__header-wrapper th) {
+  font-size: 11px !important;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
 .category-name {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+}
+
+.name-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--color-primary-dim);
+  color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .name-text {
@@ -237,39 +287,60 @@ async function handleDeleteSubcategory(id) {
 }
 
 .sub-tag {
-  margin-right: 0;
+  border: none !important;
+  background: var(--color-primary-dim) !important;
+  color: var(--color-primary) !important;
+  border-radius: 6px !important;
+  font-weight: 500 !important;
 }
 
 .add-sub-btn {
-  color: var(--accent-cyan);
-  font-size: 12px;
+  color: var(--color-primary) !important;
+  font-size: 12px !important;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 6px;
 }
 
 .action-btn {
   border: none !important;
   font-size: 12px !important;
   padding: 6px 10px !important;
+  border-radius: 6px !important;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .action-btn.edit {
-  background: var(--accent-cyan-dim) !important;
-  color: var(--accent-cyan) !important;
+  background: var(--color-primary-dim) !important;
+  color: var(--color-primary) !important;
 }
 
 .action-btn.delete {
-  background: rgba(255, 107, 107, 0.15) !important;
+  background: rgba(230, 57, 70, 0.12) !important;
   color: var(--rise-color) !important;
 }
 
+.btn-cancel {
+  background: var(--bg-primary) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-secondary) !important;
+}
+
+.btn-save {
+  background: var(--color-primary) !important;
+  border-color: var(--color-primary) !important;
+}
+
 @keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .animate-in {

@@ -1,176 +1,213 @@
 <template>
   <div class="product-manage">
-    <header class="page-header">
-      <div class="header-left">
-        <h1 class="page-title">产品管理</h1>
-        <p class="page-subtitle">维护产品目录与价格数据</p>
-      </div>
-      <div class="header-right">
-        <CategorySelector
-          v-model="selectedCategoryId"
-          v-model:subcategoryValue="selectedSubcategoryId"
-          @change="handleCategoryChange"
-        />
-        <el-button type="primary" class="add-btn" @click="showProductDialog(null)">
-          <span class="btn-icon">+</span>
-          新增产品
-        </el-button>
-      </div>
-    </header>
-
-    <el-card class="table-card animate-in">
-      <el-table :data="products" style="width: 100%" v-loading="loading" size="large">
-        <el-table-column prop="id" label="ID" width="70" />
-        <el-table-column prop="product_code" label="产品编码" width="130">
-          <template #default="{ row }">
-            <span class="code-text">{{ row.product_code }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="product_name" label="产品名称" min-width="150">
-          <template #default="{ row }">
-            <span class="name-text">{{ row.product_name }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="category" label="分类" width="100">
-          <template #default="{ row }">
-            <span class="category-tag">{{ row.category }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="unit" label="单位" width="80" />
-        <el-table-column prop="source" label="数据源" width="100">
-          <template #default="{ row }">
-            <span class="source-text">{{ row.source || '-' }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="is_active" label="状态" width="90">
-          <template #default="{ row }">
-            <span :class="['status-badge', row.is_active ? 'active' : 'inactive']">
-              {{ row.is_active ? '活跃' : '禁用' }}
-            </span>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="220" fixed="right">
-          <template #default="{ row }">
-            <el-button size="small" class="action-btn edit" @click="showProductDialog(row)">编辑</el-button>
-            <el-button size="small" class="action-btn price" @click="showPriceDialog(row)">价格</el-button>
-            <el-button size="small" class="action-btn delete" @click="deleteProduct(row.id)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
-
-    <!-- 产品编辑弹窗 -->
-    <el-dialog v-model="productDialogVisible" :title="editingProduct ? '编辑产品' : '新增产品'" width="600px"
-               :modal-append-to-body="true">
-      <el-form :model="productForm" label-width="100px" class="product-form">
-        <el-form-item label="产品编码">
-          <el-input v-model="productForm.product_code" :disabled="!!editingProduct" placeholder="唯一编码" />
-        </el-form-item>
-        <el-form-item label="产品名称">
-          <el-input v-model="productForm.product_name" placeholder="产品名称" />
-        </el-form-item>
-        <el-form-item label="品类">
-          <el-select v-model="productForm.category" placeholder="选择分类" style="width: 100%">
-            <el-option label="化工" value="化工" />
-            <el-option label="钢材" value="钢材" />
-            <el-option label="水泥" value="水泥" />
-            <el-option label="铁矿" value="铁矿" />
-            <el-option label="其他" value="其他" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="关联品类">
-          <el-select v-model="productForm.category_ids" multiple placeholder="选择关联品类" style="width: 100%">
-            <el-option-group v-for="cat in categoriesTree" :key="cat.id" :label="cat.name">
-              <el-option :value="cat.id" :label="cat.name + ' (全部)'" />
-              <el-option v-for="sub in cat.subcategories" :key="sub.id" :value="sub.id" :label="'  └ ' + sub.name" />
-            </el-option-group>
-          </el-select>
-        </el-form-item>
-        <el-form-item label="单位">
-          <el-input v-model="productForm.unit" placeholder="元/吨" />
-        </el-form-item>
-        <el-form-item label="数据源">
-          <el-input v-model="productForm.source" placeholder="数据来源" />
-        </el-form-item>
-        <el-form-item label="状态">
-          <el-switch v-model="productForm.is_active" active-text="活跃" inactive-text="禁用" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="productDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveProduct">保存</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- 价格管理弹窗 -->
-    <el-dialog v-model="priceDialogVisible" title="价格记录" width="850px">
-      <div class="price-header">
-        <div class="price-title">
-          <span class="product-icon">◧</span>
-          <span>{{ editingProduct?.product_name }}</span>
+    <div class="page-container">
+      <header class="page-header">
+        <div class="header-content">
+          <h1 class="page-title">产品管理</h1>
+          <p class="page-subtitle">维护产品目录与价格数据</p>
         </div>
-        <el-button type="primary" size="small" @click="showAddPrice">添加价格</el-button>
-      </div>
+        <div class="header-actions">
+          <CategorySelector
+            v-model="selectedCategoryId"
+            v-model:subcategoryValue="selectedSubcategoryId"
+            @change="handleCategoryChange"
+          />
+          <el-button type="primary" class="add-btn" @click="showProductDialog(null)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            新增产品
+          </el-button>
+        </div>
+      </header>
 
-      <el-table :data="priceRecords" size="small" max-height="280" class="price-table">
-        <el-table-column prop="record_date" label="日期" width="120" />
-        <el-table-column prop="price" label="价格" width="110">
-          <template #default="{ row }">
-            <span class="price-value">¥{{ row.price.toLocaleString() }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="price_type" label="类型" width="100" />
-        <el-table-column prop="trend" label="趋势" width="80">
-          <template #default="{ row }">
-            <span :class="['trend-badge', row.trend]">{{ row.trend }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="change_percent" label="涨跌%" width="90">
-          <template #default="{ row }">
-            <span :class="row.change_percent > 0 ? 'text-rise' : row.change_percent < 0 ? 'text-fall' : 'text-flat'">
-              {{ row.change_percent > 0 ? '+' : '' }}{{ row.change_percent }}%
-            </span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="source" label="来源" width="100" />
-        <el-table-column label="操作" width="100">
-          <template #default="{ row }">
-            <el-button size="small" type="danger" @click="deletePrice(row.id)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-dialog>
+      <el-card class="table-card animate-in">
+        <el-table :data="products" style="width: 100%" v-loading="loading" size="large" class="product-table">
+          <el-table-column prop="id" label="ID" width="70" />
+          <el-table-column prop="product_code" label="产品编码" width="130">
+            <template #default="{ row }">
+              <span class="code-text">{{ row.product_code }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="product_name" label="产品名称" min-width="150">
+            <template #default="{ row }">
+              <div class="name-cell">
+                <span class="name-dot"></span>
+                <span class="name-text">{{ row.product_name }}</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column prop="category" label="分类" width="100">
+            <template #default="{ row }">
+              <span class="category-tag">{{ row.category }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="unit" label="单位" width="80" />
+          <el-table-column prop="source" label="数据源" width="100">
+            <template #default="{ row }">
+              <span class="source-text">{{ row.source || '-' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="is_active" label="状态" width="90">
+            <template #default="{ row }">
+              <span :class="['status-badge', row.is_active ? 'active' : 'inactive']">
+                <span class="status-dot"></span>
+                {{ row.is_active ? '活跃' : '禁用' }}
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="200" fixed="right">
+            <template #default="{ row }">
+              <div class="action-buttons">
+                <el-button size="small" class="action-btn edit" @click="showProductDialog(row)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                  编辑
+                </el-button>
+                <el-button size="small" class="action-btn price" @click="showPriceDialog(row)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="1" x2="12" y2="23"/>
+                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                  </svg>
+                  价格
+                </el-button>
+                <el-button size="small" class="action-btn delete" @click="deleteProduct(row.id)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="3 6 5 6 21 6"/>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                  </svg>
+                </el-button>
+              </div>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-card>
 
-    <!-- 添加价格弹窗 -->
-    <el-dialog v-model="addPriceDialogVisible" title="添加价格记录" width="420px">
-      <el-form :model="priceForm" label-width="100px" class="price-form">
-        <el-form-item label="价格">
-          <el-input-number v-model="priceForm.price" :min="0" :precision="2" style="width: 100%" />
-        </el-form-item>
-        <el-form-item label="日期">
-          <el-date-picker v-model="priceForm.record_date" type="date" value-format="YYYY-MM-DD"
-                          style="width: 100%" placeholder="选择日期" />
-        </el-form-item>
-        <el-form-item label="类型">
-          <el-select v-model="priceForm.price_type" style="width: 100%">
-            <el-option label="市场价" value="市场价" />
-            <el-option label="报价" value="报价" />
-            <el-option label="成交价" value="成交价" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="趋势">
-          <el-select v-model="priceForm.trend" style="width: 100%">
-            <el-option label="涨" value="涨" />
-            <el-option label="跌" value="跌" />
-            <el-option label="平" value="平" />
-          </el-select>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="addPriceDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="addPrice">保存</el-button>
-      </template>
-    </el-dialog>
+      <!-- 产品编辑弹窗 -->
+      <el-dialog v-model="productDialogVisible" :title="editingProduct ? '编辑产品' : '新增产品'" width="560px" class="product-dialog">
+        <el-form :model="productForm" label-width="100px" class="product-form">
+          <el-form-item label="产品编码">
+            <el-input v-model="productForm.product_code" :disabled="!!editingProduct" placeholder="唯一编码" />
+          </el-form-item>
+          <el-form-item label="产品名称">
+            <el-input v-model="productForm.product_name" placeholder="产品名称" />
+          </el-form-item>
+          <el-form-item label="品类">
+            <el-select v-model="productForm.category" placeholder="选择分类" style="width: 100%">
+              <el-option label="化工" value="化工" />
+              <el-option label="钢材" value="钢材" />
+              <el-option label="水泥" value="水泥" />
+              <el-option label="铁矿" value="铁矿" />
+              <el-option label="其他" value="其他" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="关联品类">
+            <el-select v-model="productForm.category_ids" multiple placeholder="选择关联品类" style="width: 100%">
+              <el-option-group v-for="cat in categoriesTree" :key="cat.id" :label="cat.name">
+                <el-option :value="cat.id" :label="cat.name + ' (全部)'" />
+                <el-option v-for="sub in cat.subcategories" :key="sub.id" :value="sub.id" :label="'  └ ' + sub.name" />
+              </el-option-group>
+            </el-select>
+          </el-form-item>
+          <el-form-item label="单位">
+            <el-input v-model="productForm.unit" placeholder="元/吨" />
+          </el-form-item>
+          <el-form-item label="数据源">
+            <el-input v-model="productForm.source" placeholder="数据来源" />
+          </el-form-item>
+          <el-form-item label="状态">
+            <el-switch v-model="productForm.is_active" active-text="活跃" inactive-text="禁用" />
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <el-button @click="productDialogVisible = false" class="btn-cancel">取消</el-button>
+          <el-button type="primary" @click="saveProduct" class="btn-save">保存</el-button>
+        </template>
+      </el-dialog>
+
+      <!-- 价格管理弹窗 -->
+      <el-dialog v-model="priceDialogVisible" title="价格记录" width="800px" class="price-dialog">
+        <div class="price-header">
+          <div class="price-title">
+            <div class="title-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="1" x2="12" y2="23"/>
+                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+              </svg>
+            </div>
+            <span>{{ editingProduct?.product_name }}</span>
+          </div>
+          <el-button type="primary" size="small" @click="showAddPrice">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            添加价格
+          </el-button>
+        </div>
+
+        <el-table :data="priceRecords" size="small" max-height="280" class="price-table">
+          <el-table-column prop="record_date" label="日期" width="120" />
+          <el-table-column prop="price" label="价格" width="110">
+            <template #default="{ row }">
+              <span class="price-value">¥{{ row.price.toLocaleString() }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="price_type" label="类型" width="100" />
+          <el-table-column prop="trend" label="趋势" width="80">
+            <template #default="{ row }">
+              <span :class="['trend-badge', row.trend]">{{ row.trend }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="change_percent" label="涨跌%" width="90">
+            <template #default="{ row }">
+              <span :class="row.change_percent > 0 ? 'text-rise' : row.change_percent < 0 ? 'text-fall' : 'text-flat'">
+                {{ row.change_percent > 0 ? '+' : '' }}{{ row.change_percent }}%
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="source" label="来源" width="100" />
+          <el-table-column label="操作" width="80">
+            <template #default="{ row }">
+              <el-button size="small" type="danger" @click="deletePrice(row.id)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-dialog>
+
+      <!-- 添加价格弹窗 -->
+      <el-dialog v-model="addPriceDialogVisible" title="添加价格记录" width="400px" class="add-price-dialog">
+        <el-form :model="priceForm" label-width="90px" class="price-form">
+          <el-form-item label="价格">
+            <el-input-number v-model="priceForm.price" :min="0" :precision="2" style="width: 100%" />
+          </el-form-item>
+          <el-form-item label="日期">
+            <el-date-picker v-model="priceForm.record_date" type="date" value-format="YYYY-MM-DD" style="width: 100%" placeholder="选择日期" />
+          </el-form-item>
+          <el-form-item label="类型">
+            <el-select v-model="priceForm.price_type" style="width: 100%">
+              <el-option label="市场价" value="市场价" />
+              <el-option label="报价" value="报价" />
+              <el-option label="成交价" value="成交价" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="趋势">
+            <el-select v-model="priceForm.trend" style="width: 100%">
+              <el-option label="涨" value="涨" />
+              <el-option label="跌" value="跌" />
+              <el-option label="平" value="平" />
+            </el-select>
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <el-button @click="addPriceDialogVisible = false" class="btn-cancel">取消</el-button>
+          <el-button type="primary" @click="addPrice" class="btn-save">保存</el-button>
+        </template>
+      </el-dialog>
+    </div>
   </div>
 </template>
 
@@ -251,7 +288,6 @@ async function showProductDialog(product) {
   if (product) {
     editingProduct.value = product
     productForm.value = { ...product, category_ids: [] }
-    // Load product's categories
     try {
       const res = await categoryApi.getProductCategories(product.id)
       productForm.value.category_ids = (res.data || []).map(c => c.id)
@@ -277,7 +313,6 @@ async function saveProduct() {
   try {
     if (editingProduct.value) {
       await productApi.updateProduct(editingProduct.value.id, productForm.value)
-      // Update category associations
       if (productForm.value.category_ids && productForm.value.category_ids.length > 0) {
         await categoryApi.setProductCategories(editingProduct.value.id, productForm.value.category_ids)
       }
@@ -352,48 +387,77 @@ async function deletePrice(id) {
 
 <style scoped>
 .product-manage {
-  padding: 32px;
+  padding: 24px;
+  min-height: 100vh;
+}
+
+.page-container {
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 32px;
+  margin-bottom: 24px;
+  gap: 16px;
+}
+
+.header-content {
+  flex: 1;
 }
 
 .page-title {
-  font-family: 'Outfit', sans-serif;
-  font-size: 28px;
+  font-family: 'Fira Sans', sans-serif;
+  font-size: 24px;
   font-weight: 700;
   color: var(--text-primary);
-  margin-bottom: 4px;
+  margin: 0 0 4px 0;
 }
 
 .page-subtitle {
   font-size: 14px;
   color: var(--text-secondary);
+  margin: 0;
+}
+
+.header-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
 }
 
 .add-btn {
-  padding: 12px 24px !important;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px !important;
   border-radius: 10px !important;
   font-weight: 600 !important;
-}
-
-.add-btn .btn-icon {
-  margin-right: 6px;
-  font-size: 16px;
 }
 
 .table-card {
   border-radius: 16px !important;
 }
 
-.code-text {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 12px;
-  color: var(--text-secondary);
+.product-table :deep(.el-table__header-wrapper th) {
+  font-size: 11px !important;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.name-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.name-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-primary-light);
 }
 
 .name-text {
@@ -401,12 +465,19 @@ async function deletePrice(id) {
   color: var(--text-primary);
 }
 
+.code-text {
+  font-family: 'Fira Code', monospace;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
 .category-tag {
   font-size: 12px;
-  padding: 3px 8px;
-  background: var(--bg-hover);
-  color: var(--accent-cyan);
+  padding: 4px 10px;
+  background: var(--color-primary-dim);
+  color: var(--color-primary);
   border-radius: 6px;
+  font-weight: 500;
 }
 
 .source-text {
@@ -415,6 +486,9 @@ async function deletePrice(id) {
 }
 
 .status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
   padding: 4px 10px;
   border-radius: 12px;
@@ -422,33 +496,56 @@ async function deletePrice(id) {
 }
 
 .status-badge.active {
-  background: rgba(0, 196, 140, 0.15);
+  background: rgba(42, 157, 92, 0.12);
   color: var(--fall-color);
 }
 
+.status-badge.active .status-dot {
+  background: var(--fall-color);
+}
+
 .status-badge.inactive {
-  background: rgba(139, 148, 158, 0.15);
+  background: rgba(100, 116, 139, 0.12);
   color: var(--text-secondary);
+}
+
+.status-badge.inactive .status-dot {
+  background: var(--text-muted);
+}
+
+.status-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 6px;
 }
 
 .action-btn {
   border: none !important;
   font-size: 12px !important;
   padding: 6px 10px !important;
+  border-radius: 6px !important;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .action-btn.edit {
-  background: var(--accent-cyan-dim) !important;
-  color: var(--accent-cyan) !important;
+  background: var(--color-primary-dim) !important;
+  color: var(--color-primary) !important;
 }
 
 .action-btn.price {
-  background: rgba(255, 217, 61, 0.15) !important;
-  color: #ffd93d !important;
+  background: rgba(245, 158, 11, 0.12) !important;
+  color: #f59e0b !important;
 }
 
 .action-btn.delete {
-  background: rgba(255, 107, 107, 0.15) !important;
+  background: rgba(230, 57, 70, 0.12) !important;
   color: var(--rise-color) !important;
 }
 
@@ -465,59 +562,63 @@ async function deletePrice(id) {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-family: 'Outfit', sans-serif;
-  font-size: 16px;
+  font-family: 'Fira Sans', sans-serif;
+  font-size: 15px;
   font-weight: 600;
   color: var(--text-primary);
 }
 
-.product-icon {
-  font-size: 20px;
-  color: var(--accent-cyan);
+.title-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--color-primary-dim);
+  color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .price-value {
-  font-family: 'Outfit', sans-serif;
+  font-family: 'Fira Code', monospace;
   font-weight: 600;
-  color: var(--accent-cyan);
+  color: var(--color-primary);
 }
 
 .trend-badge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 6px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
 }
 
-.trend-badge.涨 {
-  background: rgba(255, 107, 107, 0.2);
-  color: var(--rise-color);
-}
-
-.trend-badge.跌 {
-  background: rgba(0, 196, 140, 0.2);
-  color: var(--fall-color);
-}
-
-.trend-badge.平 {
-  background: rgba(139, 148, 158, 0.2);
-  color: var(--text-secondary);
-}
+.trend-badge.涨 { background: rgba(230, 57, 70, 0.12); color: var(--rise-color); }
+.trend-badge.跌 { background: rgba(42, 157, 92, 0.12); color: var(--fall-color); }
+.trend-badge.平 { background: rgba(100, 116, 139, 0.12); color: var(--text-secondary); }
 
 .text-rise { color: var(--rise-color); }
 .text-fall { color: var(--fall-color); }
 .text-flat { color: var(--text-secondary); }
 
+.btn-cancel {
+  background: var(--bg-primary) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-secondary) !important;
+}
+
+.btn-save {
+  background: var(--color-primary) !important;
+  border-color: var(--color-primary) !important;
+}
+
 @keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .animate-in {

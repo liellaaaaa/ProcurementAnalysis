@@ -2,38 +2,51 @@
   <div class="category-selector">
     <el-select
       v-model="levelOne"
-      placeholder="选择一级目录"
+      placeholder="一级目录"
       clearable
+      size="default"
       @change="onLevelOneChange"
-      style="width: 140px; margin-right: 8px"
+      class="selector-primary"
     >
+      <template #prefix>
+        <span class="selector-prefix">{{ selectedLevelOneName || '一级' }}</span>
+      </template>
       <el-option
         v-for="cat in levelOneCategories"
         :key="cat.id"
         :label="cat.name"
         :value="cat.id"
-      />
+      >
+        <span class="option-label">{{ cat.name }}</span>
+      </el-option>
     </el-select>
+
     <el-select
       v-model="levelTwo"
-      placeholder="选择二级目录"
+      placeholder="二级目录"
       clearable
       :disabled="!levelOne"
+      size="default"
       @change="onLevelTwoChange"
-      style="width: 160px"
+      class="selector-secondary"
     >
+      <template #prefix>
+        <span class="selector-prefix">{{ selectedLevelTwoName || '二级' }}</span>
+      </template>
       <el-option
         v-for="cat in levelTwoCategories"
         :key="cat.id"
         :label="cat.name"
         :value="cat.id"
-      />
+      >
+        <span class="option-label">{{ cat.name }}</span>
+      </el-option>
     </el-select>
   </div>
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { categoryApi } from '../api/price'
 
 const props = defineProps({
@@ -53,6 +66,18 @@ const levelOne = ref(props.modelValue)
 const levelTwo = ref(props.subcategoryValue)
 const levelOneCategories = ref([])
 const levelTwoCategories = ref([])
+
+const selectedLevelOneName = computed(() => {
+  if (!levelOne.value) return ''
+  const cat = levelOneCategories.value.find(c => c.id === levelOne.value)
+  return cat ? cat.name : ''
+})
+
+const selectedLevelTwoName = computed(() => {
+  if (!levelTwo.value) return ''
+  const cat = levelTwoCategories.value.find(c => c.id === levelTwo.value)
+  return cat ? cat.name : ''
+})
 
 async function loadLevelOneCategories() {
   try {
@@ -115,5 +140,35 @@ onMounted(() => {
 .category-selector {
   display: inline-flex;
   align-items: center;
+  gap: 4px;
+}
+
+.selector-prefix {
+  font-size: 12px;
+  color: var(--color-primary);
+  font-weight: 500;
+  padding-right: 4px;
+  border-right: 1px solid var(--border-color);
+  margin-right: 6px;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.category-selector :deep(.el-select) {
+  --el-select-border-color-hover: var(--color-primary);
+}
+
+.category-selector :deep(.el-input__wrapper) {
+  padding-left: 8px !important;
+}
+
+.category-selector :deep(.el-select__prefix) {
+  left: 8px !important;
+}
+
+.option-label {
+  font-weight: 500;
 }
 </style>

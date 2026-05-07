@@ -1,69 +1,99 @@
 <template>
   <div class="compare-page">
-    <header class="page-header">
-      <div class="header-left">
-        <h1 class="page-title">产品对比</h1>
-        <p class="page-subtitle">多维度分析市场竞争态势</p>
-      </div>
-    </header>
-
-    <el-card class="selector-card animate-in">
-      <template #header>
-        <div class="card-header">
-          <div class="header-title">
-            <span class="title-icon">⬡</span>
-            <span>选择产品进行对比</span>
-          </div>
-          <div class="selector-row">
-            <CategorySelector
-              v-model="selectedCategoryId"
-              v-model:subcategoryValue="selectedSubcategoryId"
-              @change="handleCategoryChange"
-            />
-            <SourceSelector @update:source="val => { selectedSource = val; loadComparison() }" />
-          </div>
+    <div class="page-container">
+      <header class="page-header">
+        <div class="header-content">
+          <h1 class="page-title">产品对比</h1>
+          <p class="page-subtitle">多维度分析市场竞争态势</p>
         </div>
-      </template>
-      <el-select
-        v-model="selectedProducts"
-        multiple
-        placeholder="选择至少2个产品进行对比"
-        style="width: 100%"
-        @change="loadComparison"
-      >
-        <el-option
-          v-for="p in filteredProducts"
-          :key="p.id"
-          :label="p.product_name"
-          :value="p.id"
-        />
-      </el-select>
-      <div v-if="selectedProducts.length < 2" class="hint-text">
-        请选择至少2个产品以查看对比图表
-      </div>
-    </el-card>
+      </header>
 
-    <el-card class="chart-card animate-in" style="animation-delay: 0.2s">
-      <template #header>
-        <div class="card-header">
-          <div class="header-title">
-            <span class="title-icon">◎</span>
-            <span>价格对比趋势</span>
+      <el-card class="selector-card animate-in">
+        <template #header>
+          <div class="card-header">
+            <div class="header-title">
+              <div class="title-icon-wrapper">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="2" y1="12" x2="22" y2="12"/>
+                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                </svg>
+              </div>
+              <span>选择产品进行对比</span>
+            </div>
           </div>
-          <div class="product-tags">
-            <span v-for="id in selectedProducts.slice(0, 5)" :key="id" class="product-tag">
-              {{ products.find(p => p.id === id)?.product_name }}
+        </template>
+
+        <div class="selector-row">
+          <CategorySelector
+            v-model="selectedCategoryId"
+            v-model:subcategoryValue="selectedSubcategoryId"
+            @change="handleCategoryChange"
+          />
+          <SourceSelector @update:source="val => { selectedSource = val; loadComparison() }" />
+        </div>
+
+        <el-select
+          v-model="selectedProducts"
+          multiple
+          placeholder="选择至少2个产品进行对比"
+          style="width: 100%; margin-top: 16px"
+          @change="loadComparison"
+          class="product-select"
+        >
+          <el-option
+            v-for="p in filteredProducts"
+            :key="p.id"
+            :label="p.product_name"
+            :value="p.id"
+          >
+            <span class="product-option">
+              <span class="product-dot"></span>
+              {{ p.product_name }}
             </span>
+          </el-option>
+        </el-select>
+
+        <div v-if="selectedProducts.length < 2" class="hint-box">
+          <div class="hint-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="16" x2="12" y2="12"/>
+              <line x1="12" y1="8" x2="12.01" y2="8"/>
+            </svg>
           </div>
+          <span>请选择至少2个产品以查看对比图表</span>
         </div>
-      </template>
-      <div ref="chartRef" class="chart-container"></div>
-    </el-card>
+      </el-card>
+
+      <el-card class="chart-card animate-in" style="animation-delay: 0.1s" v-if="selectedProducts.length >= 2">
+        <template #header>
+          <div class="card-header">
+            <div class="header-title">
+              <div class="title-icon-wrapper">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
+                  <polyline points="17 6 23 6 23 12"/>
+                </svg>
+              </div>
+              <span>价格对比趋势</span>
+            </div>
+            <div class="product-tags">
+              <span v-for="id in selectedProducts.slice(0, 5)" :key="id" class="product-tag">
+                <span class="tag-dot" :style="{background: getProductColor(id)}"></span>
+                {{ products.find(p => p.id === id)?.product_name }}
+              </span>
+            </div>
+          </div>
+        </template>
+        <div ref="chartRef" class="chart-container"></div>
+      </el-card>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { priceApi, productApi } from '../api/price'
 import SourceSelector from '../components/SourceSelector.vue'
 import CategorySelector from '../components/CategorySelector.vue'
@@ -77,15 +107,16 @@ const selectedCategoryId = ref(null)
 const selectedSubcategoryId = ref(null)
 let chartInstance = null
 
-const colors = ['#00d4ff', '#ff6b6b', '#00c48c', '#ffd93d', '#9b59b6', '#3498db']
+const colors = ['#0077cc', '#00a8e8', '#4db8e8', '#005fa3', '#003d6b', '#006594']
 
 const filteredProducts = computed(() => {
-  if (!selectedCategoryId.value && !selectedSubcategoryId.value) {
-    return products.value
-  }
-  // For now, return all products - the API filtering will handle it
   return products.value
 })
+
+function getProductColor(id) {
+  const idx = selectedProducts.value.indexOf(id)
+  return colors[idx % colors.length]
+}
 
 async function loadProducts() {
   try {
@@ -146,21 +177,24 @@ function updateChart(seriesData) {
     }),
     connectNulls: true,
     itemStyle: { color: colors[i % colors.length] },
-    lineStyle: { width: 2 }
+    lineStyle: { width: 2.5 }
   }))
 
   const option = {
     backgroundColor: 'transparent',
     tooltip: {
       trigger: 'axis',
-      backgroundColor: '#21262d',
-      borderColor: '#30363d',
-      textStyle: { color: '#e8eaed' }
+      backgroundColor: '#fff',
+      borderColor: '#E8E3F3',
+      borderWidth: 1,
+      borderRadius: 8,
+      textStyle: { color: '#1E293B' },
+      boxShadow: '0 2px 8px rgba(139, 92, 246, 0.08)'
     },
     legend: {
       data: series.map(s => s.name),
       bottom: 0,
-      textStyle: { color: '#8b949e' },
+      textStyle: { color: '#64748B', fontSize: 11 },
       itemWidth: 20,
       itemHeight: 10
     },
@@ -175,16 +209,16 @@ function updateChart(seriesData) {
       type: 'category',
       data: allDates,
       boundaryGap: false,
-      axisLine: { lineStyle: { color: '#30363d' } },
-      axisLabel: { color: '#8b949e', fontSize: 11 }
+      axisLine: { lineStyle: { color: '#E8E3F3' } },
+      axisLabel: { color: '#94A3B4', fontSize: 11 }
     },
     yAxis: {
       type: 'value',
       name: '价格 (元/吨)',
-      nameTextStyle: { color: '#8b949e', fontSize: 11 },
+      nameTextStyle: { color: '#64748B', fontSize: 11 },
       axisLine: { show: false },
-      axisLabel: { color: '#8b949e', fontSize: 11 },
-      splitLine: { lineStyle: { color: '#30363d', type: 'dashed' } }
+      axisLabel: { color: '#94A3B4', fontSize: 11 },
+      splitLine: { lineStyle: { color: '#F0EBF9', type: 'dashed' } }
     },
     series
   }
@@ -204,28 +238,37 @@ onUnmounted(() => {
 
 <style scoped>
 .compare-page {
-  padding: 32px;
+  padding: 24px;
   min-height: 100vh;
 }
 
+.page-container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
 .page-header {
+  margin-bottom: 24px;
+}
+
+.header-content {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 32px;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .page-title {
-  font-family: 'Outfit', sans-serif;
-  font-size: 28px;
+  font-family: 'Fira Sans', sans-serif;
+  font-size: 24px;
   font-weight: 700;
   color: var(--text-primary);
-  margin-bottom: 4px;
+  margin: 0;
 }
 
 .page-subtitle {
   font-size: 14px;
   color: var(--text-secondary);
+  margin: 0;
 }
 
 .selector-card {
@@ -241,7 +284,28 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 4px 0;
+  padding: 8px 0;
+}
+
+.header-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: 'Fira Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.title-icon-wrapper {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--color-primary-dim);
+  color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .selector-row {
@@ -250,19 +314,38 @@ onUnmounted(() => {
   align-items: center;
 }
 
-.header-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-family: 'Outfit', sans-serif;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-primary);
+.product-select :deep(.el-select__tags) {
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
-.title-icon {
-  font-size: 18px;
-  color: var(--accent-cyan);
+.product-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.product-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-primary);
+}
+
+.hint-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: var(--bg-primary);
+  border-radius: 8px;
+  margin-top: 16px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.hint-icon {
+  color: var(--color-primary-light);
 }
 
 .product-tags {
@@ -272,18 +355,21 @@ onUnmounted(() => {
 }
 
 .product-tag {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
-  padding: 4px 10px;
-  background: var(--accent-cyan-dim);
-  color: var(--accent-cyan);
-  border-radius: 12px;
+  padding: 4px 12px;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  border-radius: 16px;
+  font-weight: 500;
 }
 
-.hint-text {
-  text-align: center;
-  color: var(--text-muted);
-  font-size: 13px;
-  margin-top: 16px;
+.tag-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
 }
 
 .chart-container {
@@ -292,14 +378,8 @@ onUnmounted(() => {
 }
 
 @keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .animate-in {

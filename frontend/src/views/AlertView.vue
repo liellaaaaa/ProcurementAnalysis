@@ -1,158 +1,182 @@
 <template>
   <div class="alert-view">
-    <header class="page-header">
-      <div class="header-left">
-        <h1 class="page-title">价格预警</h1>
-        <p class="page-subtitle">实时监控阈值触发情况</p>
-      </div>
-      <div class="header-right">
-        <el-button type="primary" @click="showConfigDialog = true">
-          + 添加预警配置
-        </el-button>
-      </div>
-    </header>
-
-    <!-- 预警统计 -->
-    <div class="stats-grid">
-      <div class="stat-card" v-for="(stat, index) in statCards" :key="stat.label"
-           :style="{ animationDelay: `${index * 0.1}s` }">
-        <div class="stat-icon" :style="{ background: stat.bgColor }">{{ stat.icon }}</div>
-        <div class="stat-content">
-          <div class="stat-value">{{ stat.value }}</div>
-          <div class="stat-label">{{ stat.label }}</div>
+    <div class="page-container">
+      <header class="page-header">
+        <div class="header-content">
+          <h1 class="page-title">价格预警</h1>
+          <p class="page-subtitle">实时监控阈值触发情况</p>
         </div>
-      </div>
-    </div>
+        <div class="header-actions">
+          <el-button type="primary" @click="showConfigDialog = true" class="add-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            添加预警配置
+          </el-button>
+        </div>
+      </header>
 
-    <!-- 预警配置列表 -->
-    <el-card class="config-card animate-in" style="animation-delay: 0.2s">
-      <template #header>
-        <div class="card-header">
-          <div class="header-title">
-            <span class="title-icon">⚙</span>
-            <span>预警配置</span>
+      <!-- 预警统计 -->
+      <div class="stats-grid">
+        <div class="stat-card" v-for="(stat, index) in statCards" :key="stat.label" :style="{ animationDelay: `${index * 0.08}s` }">
+          <div class="stat-icon" :style="{ background: stat.bgColor }">
+            <span v-html="stat.icon"></span>
+          </div>
+          <div class="stat-content">
+            <div class="stat-value">{{ stat.value }}</div>
+            <div class="stat-label">{{ stat.label }}</div>
           </div>
         </div>
-      </template>
-      <el-table :data="alertConfigs" style="width: 100%" size="large" v-loading="configsLoading">
-        <el-table-column prop="product_name" label="产品" width="160" />
-        <el-table-column prop="alert_type" label="预警类型" width="120">
-          <template #default="{ row }">
-            <span :class="['alert-type-badge', row.alert_type]">
-              {{ alertTypeLabel(row.alert_type) }}
-            </span>
-          </template>
-        </el-table-column>
-        <el-table-column label="阈值" width="160">
-          <template #default="{ row }">
-            <span v-if="row.alert_type === 'threshold'">
-              &gt; {{ row.threshold_value }} 元/吨
-            </span>
-            <span v-else-if="row.alert_type === 'change_rate'">
-              变化率 &gt; {{ row.change_percent }}%
-            </span>
-            <span v-else>-</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="is_active" label="状态" width="80">
-          <template #default="{ row }">
-            <el-tag :type="row.is_active ? 'success' : 'info'" size="small">
-              {{ row.is_active ? '启用' : '停用' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="created_at" label="创建时间" width="110" />
-        <el-table-column label="操作" width="140">
-          <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="editConfig(row)">编辑</el-button>
-            <el-button link type="danger" size="small" @click="deleteConfig(row.id)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
+      </div>
 
-    <!-- 预警记录列表 -->
-    <el-card class="records-card animate-in" style="animation-delay: 0.3s">
-      <template #header>
-        <div class="card-header">
-          <div class="header-title">
-            <span class="title-icon">⚠</span>
-            <span>预警记录</span>
+      <!-- 预警配置列表 -->
+      <el-card class="config-card animate-in" style="animation-delay: 0.1s">
+        <template #header>
+          <div class="card-header">
+            <div class="header-title">
+              <div class="title-icon-wrapper">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="3"/>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+              </div>
+              <span>预警配置</span>
+            </div>
           </div>
-          <div class="controls">
-            <el-select v-model="filterUnread" placeholder="筛选" size="default" style="width: 120px" @change="loadAlertRecords">
-              <el-option label="全部" :value="null" />
-              <el-option label="未读" :value="false" />
-              <el-option label="已读" :value="true" />
+        </template>
+        <el-table :data="alertConfigs" style="width: 100%" size="large" v-loading="configsLoading" class="alert-table">
+          <el-table-column prop="product_name" label="产品" width="160" />
+          <el-table-column prop="alert_type" label="预警类型" width="120">
+            <template #default="{ row }">
+              <span :class="['alert-type-badge', row.alert_type]">
+                {{ alertTypeLabel(row.alert_type) }}
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column label="阈值" width="160">
+            <template #default="{ row }">
+              <span v-if="row.alert_type === 'threshold'" class="threshold-value">
+                &gt; {{ row.threshold_value }} 元/吨
+              </span>
+              <span v-else-if="row.alert_type === 'change_rate'" class="threshold-value">
+                变化率 &gt; {{ row.change_percent }}%
+              </span>
+              <span v-else>-</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="is_active" label="状态" width="80">
+            <template #default="{ row }">
+              <el-tag :type="row.is_active ? 'success' : 'info'" size="small" class="status-tag">
+                {{ row.is_active ? '启用' : '停用' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="created_at" label="创建时间" width="110" />
+          <el-table-column label="操作" width="140">
+            <template #default="{ row }">
+              <div class="action-buttons">
+                <el-button link type="primary" size="small" @click="editConfig(row)" class="action-link edit">编辑</el-button>
+                <el-button link type="danger" size="small" @click="deleteConfig(row.id)" class="action-link delete">删除</el-button>
+              </div>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-card>
+
+      <!-- 预警记录列表 -->
+      <el-card class="records-card animate-in" style="animation-delay: 0.15s">
+        <template #header>
+          <div class="card-header">
+            <div class="header-title">
+              <div class="title-icon-wrapper warning">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/>
+                  <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+              </div>
+              <span>预警记录</span>
+            </div>
+            <div class="controls">
+              <el-select v-model="filterUnread" placeholder="筛选" size="default" style="width: 100px" @change="loadAlertRecords">
+                <el-option label="全部" :value="null" />
+                <el-option label="未读" :value="false" />
+                <el-option label="已读" :value="true" />
+              </el-select>
+              <el-button size="small" @click="markAllRead" :disabled="unreadCount === 0" class="mark-read-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="9 11 12 14 22 4"/>
+                  <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                </svg>
+                全部标为已读
+              </el-button>
+            </div>
+          </div>
+        </template>
+        <el-table :data="alertRecords" style="width: 100%" size="large" v-loading="recordsLoading" class="alert-table">
+          <el-table-column prop="product_name" label="产品" width="160" />
+          <el-table-column prop="alert_message" label="预警信息" min-width="280" />
+          <el-table-column prop="triggered_price" label="触发价格" width="120">
+            <template #default="{ row }">
+              <span class="price-value">¥{{ row.triggered_price.toLocaleString() }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="triggered_at" label="触发时间" width="160" />
+          <el-table-column prop="is_read" label="状态" width="80">
+            <template #default="{ row }">
+              <el-tag :type="row.is_read ? 'info' : 'warning'" size="small" class="status-tag">
+                {{ row.is_read ? '已读' : '未读' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="120">
+            <template #default="{ row }">
+              <div class="action-buttons">
+                <el-button link type="primary" size="small" @click="markRead(row.id)" v-if="!row.is_read" class="action-link">标为已读</el-button>
+                <el-button link type="danger" size="small" @click="deleteRecord(row.id)" class="action-link delete">删除</el-button>
+              </div>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-card>
+
+      <!-- 新建/编辑配置弹窗 -->
+      <el-dialog v-model="showConfigDialog" :title="editingConfig ? '编辑预警配置' : '添加预警配置'" width="480px" class="config-dialog">
+        <el-form :model="configForm" label-width="100px" class="config-form">
+          <el-form-item label="产品">
+            <el-select v-model="configForm.product_id" placeholder="选择产品" style="width: 100%">
+              <el-option
+                v-for="p in products"
+                :key="p.id"
+                :label="p.product_name"
+                :value="p.id"
+              />
             </el-select>
-            <el-button size="small" @click="markAllRead" :disabled="unreadCount === 0">
-              全部标为已读
-            </el-button>
-          </div>
-        </div>
-      </template>
-      <el-table :data="alertRecords" style="width: 100%" size="large" v-loading="recordsLoading">
-        <el-table-column prop="product_name" label="产品" width="160" />
-        <el-table-column prop="alert_message" label="预警信息" min-width="280" />
-        <el-table-column prop="triggered_price" label="触发价格" width="120">
-          <template #default="{ row }">
-            <span class="price-value">¥{{ row.triggered_price.toLocaleString() }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="triggered_at" label="触发时间" width="160" />
-        <el-table-column prop="is_read" label="状态" width="80">
-          <template #default="{ row }">
-            <el-tag :type="row.is_read ? 'info' : 'warning'" size="small">
-              {{ row.is_read ? '已读' : '未读' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="120">
-          <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="markRead(row.id)" v-if="!row.is_read">
-              标为已读
-            </el-button>
-            <el-button link type="danger" size="small" @click="deleteRecord(row.id)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
-
-    <!-- 新建/编辑配置弹窗 -->
-    <el-dialog v-model="showConfigDialog" :title="editingConfig ? '编辑预警配置' : '添加预警配置'" width="500px">
-      <el-form :model="configForm" label-width="100px">
-        <el-form-item label="产品">
-          <el-select v-model="configForm.product_id" placeholder="选择产品" style="width: 100%">
-            <el-option
-              v-for="p in products"
-              :key="p.id"
-              :label="p.product_name"
-              :value="p.id"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="预警类型">
-          <el-select v-model="configForm.alert_type" placeholder="选择类型" style="width: 100%">
-            <el-option label="绝对阈值（价格超过设定值）" value="threshold" />
-            <el-option label="变化率（价格波动超过%）" value="change_rate" />
-            <el-option label="趋势预警（价格涨跌时通知）" value="trend" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="阈值" v-if="configForm.alert_type === 'threshold'">
-          <el-input v-model="configForm.threshold_value" type="number" placeholder="价格上限（元/吨）" />
-        </el-form-item>
-        <el-form-item label="变化率" v-if="configForm.alert_type === 'change_rate'">
-          <el-input v-model="configForm.change_percent" type="number" placeholder="变化率上限（%）" />
-        </el-form-item>
-        <el-form-item label="启用">
-          <el-switch v-model="configForm.is_active" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="showConfigDialog = false">取消</el-button>
-        <el-button type="primary" @click="saveConfig">保存</el-button>
-      </template>
-    </el-dialog>
+          </el-form-item>
+          <el-form-item label="预警类型">
+            <el-select v-model="configForm.alert_type" placeholder="选择类型" style="width: 100%">
+              <el-option label="绝对阈值（价格超过设定值）" value="threshold" />
+              <el-option label="变化率（价格波动超过%）" value="change_rate" />
+              <el-option label="趋势预警（价格涨跌时通知）" value="trend" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="阈值" v-if="configForm.alert_type === 'threshold'">
+            <el-input v-model="configForm.threshold_value" type="number" placeholder="价格上限（元/吨）" />
+          </el-form-item>
+          <el-form-item label="变化率" v-if="configForm.alert_type === 'change_rate'">
+            <el-input v-model="configForm.change_percent" type="number" placeholder="变化率上限（%）" />
+          </el-form-item>
+          <el-form-item label="启用">
+            <el-switch v-model="configForm.is_active" />
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <el-button @click="showConfigDialog = false" class="btn-cancel">取消</el-button>
+          <el-button type="primary" @click="saveConfig" class="btn-save">保存</el-button>
+        </template>
+      </el-dialog>
+    </div>
   </div>
 </template>
 
@@ -310,58 +334,88 @@ onMounted(() => {
 
 <style scoped>
 .alert-view {
-  padding: 32px;
+  padding: 24px;
   min-height: 100vh;
+}
+
+.page-container {
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 32px;
+  margin-bottom: 24px;
+}
+
+.header-content {
+  flex: 1;
 }
 
 .page-title {
-  font-family: 'Outfit', sans-serif;
-  font-size: 28px;
+  font-family: 'Fira Sans', sans-serif;
+  font-size: 24px;
   font-weight: 700;
   color: var(--text-primary);
-  margin-bottom: 4px;
+  margin: 0 0 4px 0;
 }
 
 .page-subtitle {
   font-size: 14px;
   color: var(--text-secondary);
+  margin: 0;
+}
+
+.header-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.add-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px !important;
+  border-radius: 10px !important;
+  font-weight: 600 !important;
 }
 
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
+  gap: 16px;
   margin-bottom: 24px;
 }
 
 .stat-card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: 16px;
-  padding: 24px;
+  border-radius: 14px;
+  padding: 20px;
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 16px;
   opacity: 0;
   animation: fadeInUp 0.5s ease-out forwards;
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.stat-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
 }
 
 .stat-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 14px;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
-  color: var(--accent-cyan);
+  font-size: 20px;
+  color: var(--color-primary);
 }
 
 .stat-content {
@@ -369,17 +423,17 @@ onMounted(() => {
 }
 
 .stat-value {
-  font-family: 'Outfit', sans-serif;
-  font-size: 28px;
+  font-family: 'Fira Sans', sans-serif;
+  font-size: 24px;
   font-weight: 700;
   color: var(--text-primary);
   line-height: 1.2;
 }
 
 .stat-label {
-  font-size: 13px;
-  color: var(--text-secondary);
-  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
 }
 
 .config-card, .records-card {
@@ -387,26 +441,43 @@ onMounted(() => {
   border-radius: 16px !important;
 }
 
+.alert-table :deep(.el-table__header-wrapper th) {
+  font-size: 11px !important;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 4px 0;
+  padding: 8px 0;
 }
 
 .header-title {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-family: 'Outfit', sans-serif;
-  font-size: 16px;
+  font-family: 'Fira Sans', sans-serif;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
 }
 
-.title-icon {
-  font-size: 18px;
-  color: var(--accent-cyan);
+.title-icon-wrapper {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--color-primary-dim);
+  color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.title-icon-wrapper.warning {
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--warning-color);
 }
 
 .controls {
@@ -415,10 +486,16 @@ onMounted(() => {
   align-items: center;
 }
 
+.mark-read-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .price-value {
-  font-family: 'Outfit', sans-serif;
+  font-family: 'Fira Code', monospace;
   font-weight: 600;
-  color: var(--accent-cyan);
+  color: var(--color-primary);
 }
 
 .alert-type-badge {
@@ -427,34 +504,67 @@ onMounted(() => {
   justify-content: center;
   padding: 4px 12px;
   border-radius: 6px;
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .alert-type-badge.threshold {
-  background: rgba(255, 107, 107, 0.2);
+  background: rgba(230, 57, 70, 0.12);
   color: var(--rise-color);
 }
 
 .alert-type-badge.change_rate {
-  background: rgba(255, 159, 10, 0.2);
-  color: #ff9f0a;
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--warning-color);
 }
 
 .alert-type-badge.trend {
-  background: rgba(0, 212, 255, 0.2);
-  color: var(--accent-cyan);
+  background: var(--color-primary-dim);
+  color: var(--color-primary);
+}
+
+.threshold-value {
+  font-family: 'Fira Code', monospace;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.status-tag {
+  border: none !important;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.action-link {
+  font-size: 12px !important;
+  padding: 2px 4px !important;
+}
+
+.action-link.edit {
+  color: var(--color-primary) !important;
+}
+
+.action-link.delete {
+  color: var(--rise-color) !important;
+}
+
+.btn-cancel {
+  background: var(--bg-primary) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-secondary) !important;
+}
+
+.btn-save {
+  background: var(--color-primary) !important;
+  border-color: var(--color-primary) !important;
 }
 
 @keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .animate-in {

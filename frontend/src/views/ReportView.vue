@@ -1,146 +1,184 @@
 <template>
   <div class="report-view">
-    <header class="page-header">
-      <div class="header-left">
-        <h1 class="page-title">报表中心</h1>
-        <p class="page-subtitle">数据分析与报告导出</p>
-      </div>
-    </header>
-
-    <el-card class="filter-card animate-in">
-      <el-form :inline="true" class="filter-form">
-        <el-form-item label="报表类型">
-          <el-select v-model="reportType" style="width: 130px">
-            <el-option label="周报" value="weekly">
-              <span class="option-text">◫ 周报</span>
-            </el-option>
-            <el-option label="月报" value="monthly">
-              <span class="option-text">◧ 月报</span>
-            </el-option>
-          </el-select>
-        </el-form-item>
-        <el-form-item label="月份" v-if="reportType === 'monthly'">
-          <el-date-picker v-model="month" type="month" value-format="YYYY-MM" placeholder="选择月份" />
-        </el-form-item>
-        <el-form-item label="开始日期" v-if="reportType === 'weekly'">
-          <el-date-picker v-model="startDate" type="date" value-format="YYYY-MM-DD" placeholder="选择开始日期" />
-        </el-form-item>
-        <el-form-item label="结束日期" v-if="reportType === 'weekly'">
-          <el-date-picker v-model="endDate" type="date" value-format="YYYY-MM-DD" placeholder="选择结束日期" />
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="loadStats" class="query-btn">
-            <span class="btn-icon">◎</span> 查询数据
-          </el-button>
-        </el-form-item>
-      </el-form>
-    </el-card>
-
-    <div class="stats-grid">
-      <div class="stat-card" v-for="(stat, index) in statCards" :key="stat.label"
-           :style="{ animationDelay: `${index * 0.1}s` }">
-        <div class="stat-icon" :style="{ background: stat.bgColor }">{{ stat.icon }}</div>
-        <div class="stat-content">
-          <div class="stat-value">{{ stat.value }}</div>
-          <div class="stat-label">{{ stat.label }}</div>
+    <div class="page-container">
+      <header class="page-header">
+        <div class="header-content">
+          <h1 class="page-title">报表中心</h1>
+          <p class="page-subtitle">数据分析与报告导出</p>
         </div>
-      </div>
-    </div>
+      </header>
 
-    <el-card class="download-card animate-in" style="animation-delay: 0.3s">
-      <template #header>
-        <div class="card-header">
-          <div class="header-title">
-            <span class="title-icon">◫</span>
-            <span>报告导出</span>
+      <el-card class="filter-card animate-in">
+        <el-form :inline="true" class="filter-form">
+          <el-form-item label="报表类型">
+            <el-select v-model="reportType" style="width: 120px">
+              <el-option label="周报" value="weekly">
+                <span class="option-label">◫ 周报</span>
+              </el-option>
+              <el-option label="月报" value="monthly">
+                <span class="option-label">◧ 月报</span>
+              </el-option>
+            </el-select>
+          </el-form-item>
+          <el-form-item label="月份" v-if="reportType === 'monthly'">
+            <el-date-picker v-model="month" type="month" value-format="YYYY-MM" placeholder="选择月份" />
+          </el-form-item>
+          <el-form-item label="开始日期" v-if="reportType === 'weekly'">
+            <el-date-picker v-model="startDate" type="date" value-format="YYYY-MM-DD" placeholder="选择开始日期" />
+          </el-form-item>
+          <el-form-item label="结束日期" v-if="reportType === 'weekly'">
+            <el-date-picker v-model="endDate" type="date" value-format="YYYY-MM-DD" placeholder="选择结束日期" />
+          </el-form-item>
+          <el-form-item>
+            <el-button type="primary" @click="loadStats" class="query-btn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"/>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+              查询数据
+            </el-button>
+          </el-form-item>
+        </el-form>
+      </el-card>
+
+      <div class="stats-grid">
+        <div class="stat-card" v-for="(stat, index) in statCards" :key="stat.label" :style="{ animationDelay: `${index * 0.08}s` }">
+          <div class="stat-icon" :style="{ background: stat.bgColor }">
+            <span v-html="stat.icon"></span>
+          </div>
+          <div class="stat-content">
+            <div class="stat-value">{{ stat.value }}</div>
+            <div class="stat-label">{{ stat.label }}</div>
           </div>
         </div>
-      </template>
-      <div class="download-buttons">
-        <button class="download-btn pdf" @click="downloadPdf">
-          <span class="btn-icon">📄</span>
-          <span class="btn-text">下载 PDF 报告</span>
-          <span class="btn-desc">适合打印与存档</span>
-        </button>
-        <button class="download-btn excel" @click="downloadExcel">
-          <span class="btn-icon">📊</span>
-          <span class="btn-text">下载 Excel 报表</span>
-          <span class="btn-desc">便于数据分析处理</span>
-        </button>
       </div>
-    </el-card>
 
-    <div class="bottom-grid" v-if="forecastData || rankingData.rising.length">
-      <el-card class="forecast-card animate-in" style="animation-delay: 0.4s" v-if="forecastData">
+      <el-card class="download-card animate-in" style="animation-delay: 0.2s">
         <template #header>
           <div class="card-header">
             <div class="header-title">
-              <span class="title-icon">◎</span>
-              <span>价格预测 - {{ forecastData.product_name }}</span>
+              <div class="title-icon-wrapper">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                </svg>
+              </div>
+              <span>报告导出</span>
             </div>
           </div>
         </template>
-        <div class="forecast-grid">
-          <div class="forecast-item">
-            <span class="forecast-label">当前价格</span>
-            <span class="forecast-value current">¥{{ forecastData.current_price?.toLocaleString() }}</span>
+        <div class="download-buttons">
+          <button class="download-btn pdf" @click="downloadPdf">
+            <div class="btn-icon-wrapper pdf">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+              </svg>
+            </div>
+            <span class="btn-text">下载 PDF 报告</span>
+            <span class="btn-desc">适合打印与存档</span>
+          </button>
+          <button class="download-btn excel" @click="downloadExcel">
+            <div class="btn-icon-wrapper excel">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                <line x1="3" y1="9" x2="21" y2="9"/>
+                <line x1="3" y1="15" x2="21" y2="15"/>
+                <line x1="9" y1="3" x2="9" y2="21"/>
+                <line x1="15" y1="3" x2="15" y2="21"/>
+              </svg>
+            </div>
+            <span class="btn-text">下载 Excel 报表</span>
+            <span class="btn-desc">便于数据分析处理</span>
+          </button>
+        </div>
+      </el-card>
+
+      <div class="bottom-grid" v-if="forecastData || rankingData.rising.length">
+        <el-card class="forecast-card animate-in" style="animation-delay: 0.25s" v-if="forecastData">
+          <template #header>
+            <div class="card-header">
+              <div class="header-title">
+                <div class="title-icon-wrapper">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
+                    <polyline points="17 6 23 6 23 12"/>
+                  </svg>
+                </div>
+                <span>价格预测 - {{ forecastData.product_name }}</span>
+              </div>
+            </div>
+          </template>
+          <div class="forecast-grid">
+            <div class="forecast-item">
+              <span class="forecast-label">当前价格</span>
+              <span class="forecast-value current">¥{{ forecastData.current_price?.toLocaleString() }}</span>
+            </div>
+            <div class="forecast-item">
+              <span class="forecast-label">预测下期</span>
+              <span class="forecast-value" :class="forecastData.forecast_next > forecastData.current_price ? 'rise' : 'fall'">
+                ¥{{ forecastData.forecast_next?.toLocaleString() }}
+              </span>
+            </div>
+            <div class="forecast-item">
+              <span class="forecast-label">7日均价</span>
+              <span class="forecast-value">¥{{ forecastData.ma7?.toLocaleString() }}</span>
+            </div>
+            <div class="forecast-item">
+              <span class="forecast-label">30日均价</span>
+              <span class="forecast-value">¥{{ forecastData.ma30?.toLocaleString() }}</span>
+            </div>
           </div>
-          <div class="forecast-item">
-            <span class="forecast-label">预测下期</span>
-            <span class="forecast-value" :class="forecastData.forecast_next > forecastData.current_price ? 'rise' : 'fall'">
-              ¥{{ forecastData.forecast_next?.toLocaleString() }}
+          <div class="trend-indicator">
+            <span class="trend-label">趋势判断</span>
+            <span class="trend-badge" :class="forecastData.trend_direction">
+              {{ forecastData.trend_direction }}
             </span>
+            <span class="data-points">{{ forecastData.record_count }} 个数据点</span>
           </div>
-          <div class="forecast-item">
-            <span class="forecast-label">7日均价</span>
-            <span class="forecast-value">¥{{ forecastData.ma7?.toLocaleString() }}</span>
-          </div>
-          <div class="forecast-item">
-            <span class="forecast-label">30日均价</span>
-            <span class="forecast-value">¥{{ forecastData.ma30?.toLocaleString() }}</span>
-          </div>
-        </div>
-        <div class="trend-indicator">
-          <span class="trend-label">趋势判断</span>
-          <span class="trend-badge" :class="forecastData.trend_direction">
-            {{ forecastData.trend_direction }}
-          </span>
-          <span class="data-points">{{ forecastData.record_count }} 个数据点</span>
-        </div>
-      </el-card>
+        </el-card>
 
-      <el-card class="ranking-card animate-in" style="animation-delay: 0.5s" v-if="rankingData.rising.length">
-        <template #header>
-          <div class="card-header">
-            <div class="header-title">
-              <span class="title-icon">⬡</span>
-              <span>涨跌排行 (近7天)</span>
-            </div>
-          </div>
-        </template>
-        <el-tabs>
-          <el-tab-pane label="涨幅榜">
-            <div class="ranking-list">
-              <div v-for="(item, index) in rankingData.rising" :key="index" class="ranking-item rising">
-                <span class="rank-num">{{ index + 1 }}</span>
-                <span class="rank-name">{{ item.product_name }}</span>
-                <span class="rank-price">¥{{ item.latest_price?.toLocaleString() }}</span>
-                <span class="rank-change rise">+{{ item.change_percent }}%</span>
+        <el-card class="ranking-card animate-in" style="animation-delay: 0.3s" v-if="rankingData.rising.length">
+          <template #header>
+            <div class="card-header">
+              <div class="header-title">
+                <div class="title-icon-wrapper">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="20" x2="18" y2="10"/>
+                    <line x1="12" y1="20" x2="12" y2="4"/>
+                    <line x1="6" y1="20" x2="6" y2="14"/>
+                  </svg>
+                </div>
+                <span>涨跌排行 (近7天)</span>
               </div>
             </div>
-          </el-tab-pane>
-          <el-tab-pane label="跌幅榜">
-            <div class="ranking-list">
-              <div v-for="(item, index) in rankingData.falling" :key="index" class="ranking-item falling">
-                <span class="rank-num">{{ index + 1 }}</span>
-                <span class="rank-name">{{ item.product_name }}</span>
-                <span class="rank-price">¥{{ item.latest_price?.toLocaleString() }}</span>
-                <span class="rank-change fall">{{ item.change_percent }}%</span>
+          </template>
+          <el-tabs>
+            <el-tab-pane label="涨幅榜">
+              <div class="ranking-list">
+                <div v-for="(item, index) in rankingData.rising" :key="index" class="ranking-item rising">
+                  <span class="rank-num">{{ index + 1 }}</span>
+                  <span class="rank-name">{{ item.product_name }}</span>
+                  <span class="rank-price">¥{{ item.latest_price?.toLocaleString() }}</span>
+                  <span class="rank-change rise">+{{ item.change_percent }}%</span>
+                </div>
               </div>
-            </div>
-          </el-tab-pane>
-        </el-tabs>
-      </el-card>
+            </el-tab-pane>
+            <el-tab-pane label="跌幅榜">
+              <div class="ranking-list">
+                <div v-for="(item, index) in rankingData.falling" :key="index" class="ranking-item falling">
+                  <span class="rank-num">{{ index + 1 }}</span>
+                  <span class="rank-name">{{ item.product_name }}</span>
+                  <span class="rank-price">¥{{ item.latest_price?.toLocaleString() }}</span>
+                  <span class="rank-change fall">{{ item.change_percent }}%</span>
+                </div>
+              </div>
+            </el-tab-pane>
+          </el-tabs>
+        </el-card>
+      </div>
     </div>
   </div>
 </template>
@@ -255,27 +293,37 @@ async function downloadExcel() {
 
 <style scoped>
 .report-view {
-  padding: 32px;
+  padding: 24px;
+  min-height: 100vh;
+}
+
+.page-container {
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
 .page-header {
+  margin-bottom: 24px;
+}
+
+.header-content {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 32px;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .page-title {
-  font-family: 'Outfit', sans-serif;
-  font-size: 28px;
+  font-family: 'Fira Sans', sans-serif;
+  font-size: 24px;
   font-weight: 700;
   color: var(--text-primary);
-  margin-bottom: 4px;
+  margin: 0;
 }
 
 .page-subtitle {
   font-size: 14px;
   color: var(--text-secondary);
+  margin: 0;
 }
 
 .filter-card {
@@ -283,17 +331,27 @@ async function downloadExcel() {
   border-radius: 16px !important;
 }
 
-.option-text {
-  font-size: 14px;
+.filter-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.filter-form :deep(.el-form-item) {
+  margin-bottom: 0;
+}
+
+.option-label {
+  font-size: 13px;
 }
 
 .query-btn {
-  padding: 10px 20px !important;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px !important;
   border-radius: 8px !important;
-}
-
-.query-btn .btn-icon {
-  margin-right: 6px;
 }
 
 .stats-grid {
@@ -313,6 +371,12 @@ async function downloadExcel() {
   gap: 16px;
   opacity: 0;
   animation: fadeInUp 0.5s ease-out forwards;
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.stat-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
 }
 
 .stat-icon {
@@ -323,7 +387,7 @@ async function downloadExcel() {
   align-items: center;
   justify-content: center;
   font-size: 20px;
-  color: var(--accent-cyan);
+  color: var(--color-primary);
 }
 
 .stat-content {
@@ -331,15 +395,16 @@ async function downloadExcel() {
 }
 
 .stat-value {
-  font-family: 'Outfit', sans-serif;
+  font-family: 'Fira Sans', sans-serif;
   font-size: 22px;
   font-weight: 700;
   color: var(--text-primary);
+  line-height: 1.2;
 }
 
 .stat-label {
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   margin-top: 2px;
 }
 
@@ -352,38 +417,44 @@ async function downloadExcel() {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 4px 0;
+  padding: 8px 0;
 }
 
 .header-title {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-family: 'Outfit', sans-serif;
-  font-size: 16px;
+  font-family: 'Fira Sans', sans-serif;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
 }
 
-.title-icon {
-  font-size: 18px;
-  color: var(--accent-cyan);
+.title-icon-wrapper {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--color-primary-dim);
+  color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .download-buttons {
   display: flex;
   gap: 20px;
   justify-content: center;
-  padding: 20px 0;
+  padding: 24px 0;
 }
 
 .download-btn {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 28px 48px;
-  border: 2px solid var(--border-color);
+  gap: 10px;
+  padding: 32px 56px;
+  border: 1px solid var(--border-color);
   border-radius: 16px;
   background: var(--bg-secondary);
   cursor: pointer;
@@ -391,29 +462,45 @@ async function downloadExcel() {
 }
 
 .download-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow);
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md);
 }
 
 .download-btn.pdf:hover {
   border-color: var(--rise-color);
 }
 
+.download-btn.pdf .btn-icon-wrapper {
+  background: rgba(230, 57, 70, 0.12);
+  color: var(--rise-color);
+}
+
 .download-btn.excel:hover {
   border-color: var(--fall-color);
 }
 
-.download-btn .btn-icon {
-  font-size: 32px;
+.download-btn.excel .btn-icon-wrapper {
+  background: rgba(42, 157, 92, 0.12);
+  color: var(--fall-color);
 }
 
-.download-btn .btn-text {
-  font-size: 16px;
+.btn-icon-wrapper {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.btn-text {
+  font-size: 15px;
   font-weight: 600;
   color: var(--text-primary);
 }
 
-.download-btn .btn-desc {
+.btn-desc {
   font-size: 12px;
   color: var(--text-muted);
 }
@@ -444,30 +531,25 @@ async function downloadExcel() {
 
 .forecast-label {
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--text-muted);
 }
 
 .forecast-value {
-  font-family: 'Outfit', sans-serif;
-  font-size: 20px;
+  font-family: 'Fira Sans', sans-serif;
+  font-size: 18px;
   font-weight: 600;
   color: var(--text-primary);
 }
 
-.forecast-value.rise {
-  color: var(--rise-color);
-}
-
-.forecast-value.fall {
-  color: var(--fall-color);
-}
+.forecast-value.rise { color: var(--rise-color); }
+.forecast-value.fall { color: var(--fall-color); }
 
 .trend-indicator {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  background: var(--bg-secondary);
+  background: var(--bg-primary);
   border-radius: 10px;
 }
 
@@ -483,20 +565,9 @@ async function downloadExcel() {
   font-weight: 600;
 }
 
-.trend-badge.上涨 {
-  background: rgba(255, 107, 107, 0.2);
-  color: var(--rise-color);
-}
-
-.trend-badge.下跌 {
-  background: rgba(0, 196, 140, 0.2);
-  color: var(--fall-color);
-}
-
-.trend-badge.平稳 {
-  background: rgba(139, 148, 158, 0.2);
-  color: var(--text-secondary);
-}
+.trend-badge.上涨 { background: rgba(230, 57, 70, 0.12); color: var(--rise-color); }
+.trend-badge.下跌 { background: rgba(42, 157, 92, 0.12); color: var(--fall-color); }
+.trend-badge.平稳 { background: rgba(100, 116, 139, 0.12); color: var(--text-secondary); }
 
 .data-points {
   margin-left: auto;
@@ -515,8 +586,13 @@ async function downloadExcel() {
   align-items: center;
   gap: 12px;
   padding: 10px 12px;
-  background: var(--bg-secondary);
+  background: var(--bg-primary);
   border-radius: 8px;
+  transition: transform 0.2s ease;
+}
+
+.ranking-item:hover {
+  transform: translateX(4px);
 }
 
 .rank-num {
@@ -533,12 +609,12 @@ async function downloadExcel() {
 }
 
 .ranking-item.rising .rank-num {
-  background: rgba(255, 107, 107, 0.15);
+  background: rgba(230, 57, 70, 0.12);
   color: var(--rise-color);
 }
 
 .ranking-item.falling .rank-num {
-  background: rgba(0, 196, 140, 0.15);
+  background: rgba(42, 157, 92, 0.12);
   color: var(--fall-color);
 }
 
@@ -546,39 +622,41 @@ async function downloadExcel() {
   flex: 1;
   font-size: 13px;
   color: var(--text-primary);
+  font-weight: 500;
 }
 
 .rank-price {
   font-size: 13px;
   color: var(--text-secondary);
+  font-family: 'Fira Code', monospace;
 }
 
 .rank-change {
   font-size: 13px;
   font-weight: 600;
+  font-family: 'Fira Code', monospace;
 }
 
-.rank-change.rise {
-  color: var(--rise-color);
-}
-
-.rank-change.fall {
-  color: var(--fall-color);
-}
+.rank-change.rise { color: var(--rise-color); }
+.rank-change.fall { color: var(--fall-color); }
 
 @keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .animate-in {
   opacity: 0;
   animation: fadeInUp 0.5s ease-out forwards;
+}
+
+@media (max-width: 1024px) {
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .bottom-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 768px) {
+  .stats-grid { grid-template-columns: 1fr; }
+  .download-buttons { flex-direction: column; }
 }
 </style>
