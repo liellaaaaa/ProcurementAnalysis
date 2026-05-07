@@ -75,11 +75,21 @@ const showFreshnessDialog = ref(false)
 const freshnessData = ref({ any_needs_update: false, sources: [] })
 const updating = ref(false)
 
+const FRESHNESS_CACHE_KEY = 'procurement_freshness_check_ts'
+const FRESHNESS_CACHE_DURATION = 60 * 60 * 1000 // 1小时
+
 async function checkFreshness() {
+  // 检查缓存：1小时内不重复检测
+  const cached = localStorage.getItem(FRESHNESS_CACHE_KEY)
+  if (cached && Date.now() - parseInt(cached) < FRESHNESS_CACHE_DURATION) {
+    return
+  }
+
   try {
     const res = await scraperApi.checkFreshness()
     freshnessData.value = res.data
     if (res.data.any_needs_update) {
+      localStorage.setItem(FRESHNESS_CACHE_KEY, Date.now().toString())
       showFreshnessDialog.value = true
     }
   } catch (e) {
@@ -94,8 +104,16 @@ function handleLater() {
 async function triggerUpdate() {
   updating.value = true
   try {
-    await scraperApi.runScraper('shengyishe')
+    const res = await scraperApi.runScraper('shengyishe')
+    if (res.data?.status === 'skipped') {
+      ElMessage.info(res.data.message || '请稍后再试')
+      updating.value = false
+      showFreshnessDialog.value = false
+      return
+    }
     ElMessage.success('数据更新成功')
+    // 清除缓存以触发下次新鲜度检测
+    localStorage.removeItem(FRESHNESS_CACHE_KEY)
     // 刷新页面以显示新数据
     window.location.reload()
   } catch (e) {

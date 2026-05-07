@@ -3,10 +3,11 @@ from typing import List
 import subprocess
 import sys
 import os
-from datetime import date
+from datetime import date, datetime
 
 from backend.scrapers import ScraperRegistry
 from backend.models.database import get_session, PriceRecord, ScraperLog
+from config import SOURCE_FRESHNESS_CONFIG, SCRAPER_MIN_INTERVAL
 
 router = APIRouter(prefix="/api/v1", tags=["scrapers"])
 
@@ -40,12 +41,14 @@ async def check_data_freshness():
             continue
         if latest_date:
             days_diff = (today - latest_date).days
-            needs_update = days_diff > 0
+            max_delay = SOURCE_FRESHNESS_CONFIG.get(source, {}).get("max_delay_days", 0)
+            needs_update = days_diff > max_delay
             source_status.append({
                 "source": source,
                 "latest_date": latest_date.isoformat(),
                 "days_ago": days_diff,
                 "needs_update": needs_update,
+                "max_delay_days": max_delay,
                 "message": f"最新数据来自 {days_diff} 天前" if needs_update else f"数据已是最新（{latest_date}）"
             })
         else:
@@ -54,6 +57,7 @@ async def check_data_freshness():
                 "latest_date": None,
                 "days_ago": None,
                 "needs_update": True,
+                "max_delay_days": SOURCE_FRESHNESS_CONFIG.get(source, {}).get("max_delay_days", 0),
                 "message": "暂无数据，请抓取"
             })
 
@@ -68,6 +72,7 @@ async def check_data_freshness():
                 "latest_date": None,
                 "days_ago": None,
                 "needs_update": True,
+                "max_delay_days": SOURCE_FRESHNESS_CONFIG.get(src, {}).get("max_delay_days", 0),
                 "message": "暂无数据，请抓取"
             })
 
@@ -84,6 +89,22 @@ async def run_scraper(source: str):
     """触发指定数据源的爬取（在独立进程中运行爬虫脚本）"""
     if source not in SCRAPER_SCRIPTS:
         raise HTTPException(status_code=404, detail=f"Unknown source: {source}")
+
+    # 检查距上次成功抓取是否不足30分钟
+    session = get_session()
+    last_success = session.query(ScraperLog).filter(
+        ScraperLog.scraper_name == source,
+        ScraperLog.status == "success"
+    ).order_by(ScraperLog.completed_at.desc()).first()
+    session.close()
+
+    if last_success and last_success.completed_at:
+        elapsed = (datetime.now() - last_success.completed_at).total_seconds()
+        if elapsed < SCRAPER_MIN_INTERVAL:
+            return {
+                "status": "skipped",
+                "message": f"距上次抓取不足 {int(SCRAPER_MIN_INTERVAL / 60)} 分钟，请稍后再试"
+            }
 
     # 项目根目录（往上退3层：routes -> api -> backend -> 项目根目录）
     current_dir = os.path.dirname(os.path.abspath(__file__))
