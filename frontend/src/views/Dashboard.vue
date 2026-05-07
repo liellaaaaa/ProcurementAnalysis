@@ -131,18 +131,11 @@
             <span>详细数据</span>
           </div>
           <div class="controls">
-            <el-input
-              v-model="searchKeyword"
-              placeholder="搜索产品"
-              size="default"
-              style="width: 160px"
-              clearable
-              @input="debouncedSearch"
+            <CategorySelector
+              v-model="filter3CategoryId"
+              v-model:subcategoryValue="filter3SubcategoryId"
+              @change="handleFilter3Change"
             />
-            <el-select v-model="selectedSource" placeholder="数据源" size="default" clearable @change="loadLatestPrices" style="width: 120px">
-              <el-option label="全部" value="" />
-              <el-option label="生意社" value="shengyishe" />
-            </el-select>
             <span class="record-count">{{ filteredAndSortedData.length }} 条记录</span>
           </div>
         </div>
@@ -150,140 +143,71 @@
 
       <!-- 详细数据表格 -->
       <div class="table-section">
-        <el-table :data="paginatedData" style="width: 100%" size="large" row-key="product_id" :expand-row-keys="expandedRows" @expand-change="handleExpandChange" :default-sort="{ prop: 'record_date', order: 'descending' }">
+        <el-table :data="paginatedData" style="width: 100%" size="small" row-key="product_id" :expand-row-keys="expandedRows" @expand-change="handleExpandChange" :default-sort="{ prop: 'latest_date', order: 'descending' }">
           <el-table-column type="expand" width="50">
             <template #default="{ row }">
               <div class="expand-content">
-                <p class="expand-title">各供应商/地区价格明细</p>
-                <el-table :data="row.details" size="small" class="detail-table">
-                  <el-table-column prop="supplier" label="供应商" min-width="140" show-overflow-tooltip />
-                  <el-table-column prop="region" label="地区" width="100" />
-                  <el-table-column prop="brand" label="品牌" width="120" show-overflow-tooltip />
-                  <el-table-column prop="specification" label="规格" min-width="160" show-overflow-tooltip />
-                  <el-table-column prop="price" label="价格" width="100">
+                <p class="expand-title">历史价格记录</p>
+                <el-table :data="row.history" size="small" class="detail-table">
+                  <el-table-column prop="record_date" label="日期" />
+                  <el-table-column prop="price" label="价格">
                     <template #default="{ row: detail }">
                       <span class="price-value">¥{{ detail.price.toLocaleString() }}</span>
                     </template>
                   </el-table-column>
-                  <el-table-column prop="trend" label="趋势" width="70">
+                  <el-table-column prop="trend" label="趋势">
                     <template #default="{ row: detail }">
                       <span :class="['trend-badge', detail.trend]">
                         {{ detail.trend === '涨' ? '↑' : detail.trend === '跌' ? '↓' : '—' }}
                       </span>
                     </template>
                   </el-table-column>
-                  <el-table-column prop="change_percent" label="涨跌幅" width="90">
+                  <el-table-column prop="change_percent" label="涨跌幅">
                     <template #default="{ row: detail }">
                       <span :class="detail.change_percent > 0 ? 'text-rise' : detail.change_percent < 0 ? 'text-fall' : 'text-flat'">
                         {{ detail.change_percent > 0 ? '+' : '' }}{{ detail.change_percent }}%
                       </span>
                     </template>
                   </el-table-column>
+                  <el-table-column prop="region" label="地区" />
+                  <el-table-column prop="supplier" label="供应商" show-overflow-tooltip />
+                  <el-table-column prop="source" label="数据源" />
                 </el-table>
               </div>
             </template>
           </el-table-column>
-          <el-table-column prop="product_name" label="产品名称" min-width="120" sortable="custom" />
-          <!-- 价格区间列：点击表头显示排序选项 -->
-          <el-table-column label="价格区间" min-width="160" prop="min_price" sortable="custom">
-            <template #header>
-              <div class="column-header-with-filter">
-                <span>价格区间</span>
-                <el-dropdown trigger="click" @command="(cmd) => handlePriceSort(cmd)" size="small">
-                  <span class="filter-icon">↕</span>
-                  <template #dropdown>
-                    <el-dropdown-menu>
-                      <el-dropdown-item command="price_asc">从低到高</el-dropdown-item>
-                      <el-dropdown-item command="price_desc">从高到低</el-dropdown-item>
-                    </el-dropdown-menu>
-                  </template>
-                </el-dropdown>
-              </div>
-            </template>
+          <el-table-column prop="product_name" label="产品名称" />
+          <el-table-column prop="price" label="最新价格">
             <template #default="{ row }">
-              <span class="price-range">
-                <span class="price-value">¥{{ row.min_price.toLocaleString() }}</span>
-                <span class="price-separator">~</span>
-                <span class="price-value">¥{{ row.max_price.toLocaleString() }}</span>
-              </span>
+              <span class="price-value">¥{{ row.price?.toLocaleString() }}</span>
             </template>
           </el-table-column>
-          <!-- 涨跌幅列 -->
-          <el-table-column prop="change_percent" label="涨跌幅" width="110" sortable="custom">
-            <template #header>
-              <div class="column-header-with-filter">
-                <span>涨跌幅</span>
-                <el-dropdown trigger="click" @command="(cmd) => handleChangePercentSort(cmd)" size="small">
-                  <span class="filter-icon">↕</span>
-                  <template #dropdown>
-                    <el-dropdown-menu>
-                      <el-dropdown-item command="change_asc">从低到高</el-dropdown-item>
-                      <el-dropdown-item command="change_desc">从高到低</el-dropdown-item>
-                    </el-dropdown-menu>
-                  </template>
-                </el-dropdown>
-              </div>
-            </template>
+          <el-table-column prop="change_percent" label="涨跌幅">
             <template #default="{ row }">
               <span :class="row.change_percent > 0 ? 'text-rise' : row.change_percent < 0 ? 'text-fall' : 'text-flat'">
                 {{ row.change_percent > 0 ? '+' : '' }}{{ row.change_percent }}%
               </span>
             </template>
           </el-table-column>
-          <el-table-column prop="trend" label="趋势" width="70">
+          <el-table-column prop="trend" label="趋势">
             <template #default="{ row }">
               <span :class="['trend-badge', row.trend]">
                 {{ row.trend === '涨' ? '↑' : row.trend === '跌' ? '↓' : '—' }}
               </span>
             </template>
           </el-table-column>
-          <!-- 日期列 -->
-          <el-table-column prop="record_date" label="日期" width="160" sortable="custom">
-            <template #header>
-              <div class="column-header-with-filter">
-                <span>日期</span>
-                <el-date-picker
-                  v-model="tableDateRange"
-                  type="daterange"
-                  range-separator="至"
-                  start-placeholder="开始"
-                  end-placeholder="结束"
-                  size="mini"
-                  style="width: 200px; margin-left: 8px;"
-                  @change="applyTableFilters"
-                  clearable
-                />
-              </div>
-            </template>
-          </el-table-column>
-          <!-- 供应商数列 -->
-          <el-table-column label="供应商数" width="110" prop="supplier_count" sortable="custom">
-            <template #header>
-              <div class="column-header-with-filter">
-                <span>供应商数</span>
-                <el-dropdown trigger="click" @command="(cmd) => handleSupplierCountSort(cmd)" size="small">
-                  <span class="filter-icon">↕</span>
-                  <template #dropdown>
-                    <el-dropdown-menu>
-                      <el-dropdown-item command="supplier_asc">从少到多</el-dropdown-item>
-                      <el-dropdown-item command="supplier_desc">从多到少</el-dropdown-item>
-                    </el-dropdown-menu>
-                  </template>
-                </el-dropdown>
-              </div>
-            </template>
-            <template #default="{ row }">
-              <span class="detail-count">{{ row.details ? row.details.length : 0 }}家</span>
-            </template>
-          </el-table-column>
+          <el-table-column prop="latest_date" label="最新日期" />
+          <el-table-column prop="source" label="数据源" />
         </el-table>
         <el-pagination
           v-if="filteredAndSortedData.length > 0"
           background
-          layout="prev, pager, next"
+          layout="sizes, prev, pager, next"
           :total="filteredAndSortedData.length"
           :page-size="pagination.pageSize"
+          :page-sizes="[20, 50, 100]"
           :current-page="pagination.page"
+          @size-change="handleSizeChange"
           @current-change="handlePageChange"
           style="margin-top: 16px; justify-content: center"
         />
@@ -317,11 +241,11 @@ const filter2CategoryId = ref(null)
 const filter2SubcategoryId = ref(null)
 const filter2DateRange = ref([])
 
-// 表格内部筛选和排序状态
-const tableDateRange = ref([])
-const tableSort = ref({ prop: 'record_date', order: 'descending' })
+// 筛选器3状态（控制详细数据表格）
+const filter3CategoryId = ref(null)
+const filter3SubcategoryId = ref(null)
 
-const pagination = ref({ page: 1, pageSize: 20, total: 0 })
+const pagination = ref({ page: 1, pageSize: 50, total: 0 })
 const compareDays = ref(7)
 
 // 关键指标卡片数据
@@ -337,26 +261,13 @@ let searchTimer = null
 
 async function loadLatestPrices() {
   try {
-    // 如果设置了日期范围，使用日期范围计算起止日期
-    let startDate = null
-    let endDate = null
-    if (filter2DateRange.value && filter2DateRange.value.length === 2) {
-      startDate = filter2DateRange.value[0].toISOString().split('T')[0]
-      endDate = filter2DateRange.value[1].toISOString().split('T')[0]
-    }
-
     const params = {
-      source: selectedSource.value || null,
-      page: pagination.value.page,
-      page_size: pagination.value.pageSize,
-      product_name: searchKeyword.value || null,
-      category_id: filter2CategoryId.value || null,
-      subcategory_id: filter2SubcategoryId.value || null,
-      start_date: startDate,
-      end_date: endDate
+      category_id: filter3CategoryId.value || null,
+      subcategory_id: filter3SubcategoryId.value || null
     }
     const res = await priceApi.getLatestPrices(params)
-    latestPrices.value = res.data.data || []
+    // 为每个产品添加空的history数组，用于展开时加载
+    latestPrices.value = (res.data.data || []).map(p => ({ ...p, history: [] }))
     pagination.value.total = res.data.total || 0
   } catch (e) {
     console.error('Failed to load prices', e)
@@ -375,84 +286,14 @@ function handlePageChange(page) {
   pagination.value.page = page
 }
 
-// 表格排序处理函数
-function handlePriceSort(command) {
-  if (command === 'price_asc') {
-    tableSort.value = { prop: 'min_price', order: 'ascending' }
-  } else {
-    tableSort.value = { prop: 'max_price', order: 'descending' }
-  }
-  applyTableFilters()
-}
-
-function handleChangePercentSort(command) {
-  if (command === 'change_asc') {
-    tableSort.value = { prop: 'change_percent', order: 'ascending' }
-  } else {
-    tableSort.value = { prop: 'change_percent', order: 'descending' }
-  }
-  applyTableFilters()
-}
-
-function handleSupplierCountSort(command) {
-  if (command === 'supplier_asc') {
-    tableSort.value = { prop: 'supplier_count', order: 'ascending' }
-  } else {
-    tableSort.value = { prop: 'supplier_count', order: 'descending' }
-  }
-  applyTableFilters()
-}
-
-function applyTableFilters() {
+function handleSizeChange(size) {
+  pagination.value.pageSize = size
   pagination.value.page = 1
 }
 
-// 表格数据过滤和排序
+// 表格数据（已按最新日期排序）
 const filteredAndSortedData = computed(() => {
-  let data = [...latestPrices.value]
-
-  // 应用表格日期筛选
-  if (tableDateRange.value && tableDateRange.value.length === 2) {
-    const start = new Date(tableDateRange.value[0]).toISOString().split('T')[0]
-    const end = new Date(tableDateRange.value[1]).toISOString().split('T')[0]
-    data = data.filter(row => {
-      const date = row.record_date
-      return date >= start && date <= end
-    })
-  }
-
-  // 应用排序
-  const { prop, order } = tableSort.value
-  if (prop && order) {
-    data.sort((a, b) => {
-      let valA, valB
-      if (prop === 'supplier_count') {
-        valA = a.details ? a.details.length : 0
-        valB = b.details ? b.details.length : 0
-      } else if (prop === 'min_price') {
-        valA = a.min_price
-        valB = b.min_price
-      } else if (prop === 'max_price') {
-        valA = a.max_price
-        valB = b.max_price
-      } else if (prop === 'change_percent') {
-        valA = a.change_percent
-        valB = b.change_percent
-      } else if (prop === 'record_date') {
-        valA = a.record_date
-        valB = b.record_date
-      } else {
-        valA = a[prop]
-        valB = b[prop]
-      }
-
-      if (valA < valB) return order === 'ascending' ? -1 : 1
-      if (valA > valB) return order === 'ascending' ? 1 : -1
-      return 0
-    })
-  }
-
-  return data
+  return [...latestPrices.value]
 })
 
 // 分页数据
@@ -462,12 +303,26 @@ const paginatedData = computed(() => {
   return filteredAndSortedData.value.slice(start, end)
 })
 
-function handleExpandChange(row) {
+async function handleExpandChange(row) {
   const id = row.product_id
   if (expandedRows.value.includes(id)) {
     expandedRows.value = []
   } else {
     expandedRows.value = [id]
+    // 如果还没有history数据，加载它
+    if (!row.history || row.history.length === 0) {
+      try {
+        const res = await priceApi.getPriceHistory(id, 365)
+        const historyData = res.data || []
+        // 更新对应产品的history
+        const product = latestPrices.value.find(p => p.product_id === id)
+        if (product) {
+          product.history = historyData
+        }
+      } catch (e) {
+        console.error('Failed to load history', e)
+      }
+    }
   }
 }
 
@@ -479,6 +334,11 @@ function handleFilter1Change() {
 function handleFilter2Change() {
   // 直接使用当前的 filter2CategoryId/SubcategoryId/DateRange ref 值重新加载
   loadFilter2Charts()
+}
+
+function handleFilter3Change() {
+  // 第三个筛选器只影响详细数据表格
+  pagination.value.page = 1
   loadLatestPrices()
 }
 
@@ -983,9 +843,17 @@ onUnmounted(() => {
 }
 
 .table-section {
-  margin-top: 20px;
+  margin-top: 16px;
   border-top: 1px solid var(--border-color);
-  padding-top: 20px;
+  padding-top: 16px;
+}
+
+.table-section :deep(.el-table__header-wrapper th) {
+  padding: 8px 4px;
+}
+
+.table-section :deep(.el-table__body-wrapper td) {
+  padding: 10px 4px;
 }
 
 .price-value {
@@ -1053,18 +921,31 @@ onUnmounted(() => {
   gap: 4px;
 }
 
-.filter-icon {
+.column-header-with-filter .filter-icon {
   cursor: pointer;
   color: var(--text-muted);
   font-size: 12px;
   padding: 2px 4px;
   border-radius: 4px;
   transition: all 0.2s;
+  display: inline-block;
 }
 
-.filter-icon:hover {
+.column-header-with-filter .filter-icon:hover {
   color: var(--accent-cyan);
   background: var(--bg-hover);
+}
+
+.column-header-with-filter.date-header {
+  gap: 8px;
+}
+
+.column-header-with-filter :deep(.el-date-editor) {
+  width: 160px !important;
+}
+
+.column-header-with-filter :deep(.el-input__wrapper) {
+  width: 100%;
 }
 
 .text-rise { color: var(--rise-color); font-weight: 500; }

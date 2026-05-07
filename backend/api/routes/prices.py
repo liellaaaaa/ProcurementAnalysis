@@ -104,92 +104,93 @@ async def get_prices(
 @router.get("/latest", response_model=dict)
 async def get_latest_prices(
     source: Optional[str] = None,
-    product_name: Optional[str] = None,
     category_id: Optional[int] = None,
     subcategory_id: Optional[int] = None,
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100)
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None
 ):
-    """获取各产品最新价格（分页+筛选，同一产品聚合显示最低价~最高价）"""
+    """获取产品列表（按产品名称聚合，每个产品名称只显示一行）"""
     session = get_session()
 
-    # 获取每个产品在最新日期的所有记录
-    subquery = session.query(
+    # 先查出所有符合条件的产品名称及其最新日期
+    base_query = session.query(
         PriceRecord.product_id,
-        func.max(PriceRecord.record_date).label('max_date')
-    ).group_by(PriceRecord.product_id).subquery()
-
-    query = session.query(PriceRecord, Product.product_name, Product.product_code).join(
-        Product
-    ).join(
-        subquery,
-        (PriceRecord.product_id == subquery.c.product_id) &
-        (PriceRecord.record_date == subquery.c.max_date)
-    )
+        Product.product_name,
+        Product.product_code,
+        PriceRecord.record_date,
+        PriceRecord.price,
+        PriceRecord.change_percent,
+        PriceRecord.trend,
+        PriceRecord.source
+    ).join(Product)
 
     if source:
-        query = query.filter(PriceRecord.source == source)
-    if product_name:
-        query = query.filter(Product.product_name.contains(product_name))
+        base_query = base_query.filter(PriceRecord.source == source)
 
-    # Filter by category (一级品类)
     if category_id:
         subcat_ids = [c.id for c in session.query(Category).filter(Category.parent_id == category_id).all()]
         pc_query = session.query(ProductCategory.product_id).filter(ProductCategory.category_id.in_(subcat_ids + [category_id]))
-        query = query.filter(PriceRecord.product_id.in_(pc_query))
+        base_query = base_query.filter(PriceRecord.product_id.in_(pc_query))
 
-    # Filter by subcategory (二级品类)
     if subcategory_id:
         pc_query = session.query(ProductCategory.product_id).filter(ProductCategory.category_id == subcategory_id)
-        query = query.filter(PriceRecord.product_id.in_(pc_query))
+        base_query = base_query.filter(PriceRecord.product_id.in_(pc_query))
 
-    results = query.order_by(PriceRecord.record_date.desc()).all()
+    if start_date:
+        base_query = base_query.filter(PriceRecord.record_date >= start_date)
+    if end_date:
+        base_query = base_query.filter(PriceRecord.record_date <= end_date)
 
-    # 按产品聚合：同一产品的多条记录（不同供应商/地区/品牌）合并
-    product_aggregated = {}
-    for pr, pname, pcode in results:
-        pid = pr.product_id
-        if pid not in product_aggregated:
-            product_aggregated[pid] = {
-                "product_id": pid,
-                "product_name": pname,
-                "product_code": pcode,
-                "min_price": pr.price,
-                "max_price": pr.price,
-                "change_percent": pr.change_percent,
-                "record_date": pr.record_date.strftime('%Y/%m/%d') if pr.record_date else '',
-                "trend": pr.trend,
-                "details": []
+    all_records = base_query.order_by(Product.product_name, PriceRecord.record_date.desc()).all()
+
+    # 按产品名称聚合，每个名称只取最新日期的那条
+    product_map = {}
+    for r in all_records:
+        name = r.product_name
+        if name not in product_map:
+            product_map[name] = {
+                "product_id": r.product_id,
+                "product_name": name,
+                "product_code": r.product_code,
+                "latest_date": r.record_date,
+                "price": r.price,
+                "min_price": r.price,
+                "max_price": r.price,
+                "change_percent": r.change_percent,
+                "trend": r.trend,
+                "source": r.source
             }
         else:
-            if pr.price < product_aggregated[pid]["min_price"]:
-                product_aggregated[pid]["min_price"] = pr.price
-            if pr.price > product_aggregated[pid]["max_price"]:
-                product_aggregated[pid]["max_price"] = pr.price
-        # 记录详情
-        product_aggregated[pid]["details"].append({
-            "price": pr.price,
-            "region": pr.region,
-            "supplier": pr.supplier,
-            "brand": pr.brand,
-            "specification": pr.specification,
-            "change_percent": pr.change_percent,
-            "trend": pr.trend
-        })
+            # 更新价格区间
+            if r.price < product_map[name]["min_price"]:
+                product_map[name]["min_price"] = r.price
+            if r.price > product_map[name]["max_price"]:
+                product_map[name]["max_price"] = r.price
 
-    # 排序：按产品ID保持一致性
-    sorted_products = sorted(product_aggregated.values(), key=lambda x: x["product_id"])
-    total = len(sorted_products)
+    # 转为列表并排序
+    products = list(product_map.values())
+    products.sort(key=lambda x: x["latest_date"] or "", reverse=True)
 
-    # 分页
-    paginated = sorted_products[(page - 1) * page_size: page * page_size]
+    # 格式化日期
+    for p in products:
+        if p["latest_date"]:
+            p["latest_date"] = p["latest_date"].strftime('%Y/%m/%d')
+        p["price"] = p["price"] or 0
+        p["min_price"] = p["min_price"] or 0
+        p["max_price"] = p["max_price"] or 0
+
+    total = len(products)
 
     session.close()
     return {
         "total": total,
-        "page": page,
-        "page_size": page_size,
-        "data": paginated
+        "data": products
+    }
+
+    session.close()
+    return {
+        "total": total,
+        "data": products
     }
 
 @router.get("/history/{product_id}", response_model=List[PriceRecordResponse])
