@@ -4,6 +4,7 @@ import ProductCompare from '../views/ProductCompare.vue'
 import ProductManage from '../views/ProductManage.vue'
 import ReportView from '../views/ReportView.vue'
 import AlertView from '../views/AlertView.vue'
+import CategoryManage from '../views/CategoryManage.vue'
 
 const routes = [
   {
@@ -30,6 +31,11 @@ const routes = [
     path: '/alerts',
     name: 'AlertView',
     component: AlertView
+  },
+  {
+    path: '/categories',
+    name: 'CategoryManage',
+    component: CategoryManage
   }
 ]
 

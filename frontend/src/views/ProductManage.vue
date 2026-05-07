@@ -5,10 +5,17 @@
         <h1 class="page-title">产品管理</h1>
         <p class="page-subtitle">维护产品目录与价格数据</p>
       </div>
-      <el-button type="primary" class="add-btn" @click="showProductDialog(null)">
-        <span class="btn-icon">+</span>
-        新增产品
-      </el-button>
+      <div class="header-right">
+        <CategorySelector
+          v-model="selectedCategoryId"
+          v-model:subcategoryValue="selectedSubcategoryId"
+          @change="handleCategoryChange"
+        />
+        <el-button type="primary" class="add-btn" @click="showProductDialog(null)">
+          <span class="btn-icon">+</span>
+          新增产品
+        </el-button>
+      </div>
     </header>
 
     <el-card class="table-card animate-in">
@@ -53,7 +60,7 @@
     </el-card>
 
     <!-- 产品编辑弹窗 -->
-    <el-dialog v-model="productDialogVisible" :title="editingProduct ? '编辑产品' : '新增产品'" width="500px"
+    <el-dialog v-model="productDialogVisible" :title="editingProduct ? '编辑产品' : '新增产品'" width="600px"
                :modal-append-to-body="true">
       <el-form :model="productForm" label-width="100px" class="product-form">
         <el-form-item label="产品编码">
@@ -62,13 +69,21 @@
         <el-form-item label="产品名称">
           <el-input v-model="productForm.product_name" placeholder="产品名称" />
         </el-form-item>
-        <el-form-item label="分类">
+        <el-form-item label="品类">
           <el-select v-model="productForm.category" placeholder="选择分类" style="width: 100%">
             <el-option label="化工" value="化工" />
             <el-option label="钢材" value="钢材" />
             <el-option label="水泥" value="水泥" />
             <el-option label="铁矿" value="铁矿" />
             <el-option label="其他" value="其他" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="关联品类">
+          <el-select v-model="productForm.category_ids" multiple placeholder="选择关联品类" style="width: 100%">
+            <el-option-group v-for="cat in categoriesTree" :key="cat.id" :label="cat.name">
+              <el-option :value="cat.id" :label="cat.name + ' (全部)'" />
+              <el-option v-for="sub in cat.subcategories" :key="sub.id" :value="sub.id" :label="'  └ ' + sub.name" />
+            </el-option-group>
           </el-select>
         </el-form-item>
         <el-form-item label="单位">
@@ -162,10 +177,14 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { productApi, priceApi } from '../api/price'
+import { productApi, priceApi, categoryApi } from '../api/price'
+import CategorySelector from '../components/CategorySelector.vue'
 
 const loading = ref(false)
 const products = ref([])
+const categoriesTree = ref([])
+const selectedCategoryId = ref(null)
+const selectedSubcategoryId = ref(null)
 const productDialogVisible = ref(false)
 const priceDialogVisible = ref(false)
 const addPriceDialogVisible = ref(false)
@@ -178,7 +197,8 @@ const productForm = ref({
   category: '化工',
   unit: '元/吨',
   source: '',
-  is_active: true
+  is_active: true,
+  category_ids: []
 })
 
 const priceForm = ref({
@@ -190,12 +210,29 @@ const priceForm = ref({
 
 onMounted(() => {
   loadProducts()
+  loadCategories()
 })
+
+async function loadCategories() {
+  try {
+    const res = await categoryApi.getCategories()
+    categoriesTree.value = res.data || []
+  } catch (e) {
+    console.error('Failed to load categories', e)
+  }
+}
 
 async function loadProducts() {
   loading.value = true
   try {
-    const res = await productApi.getProducts({ is_active: null })
+    const params = { is_active: null }
+    if (selectedCategoryId.value) {
+      params.category_id = selectedCategoryId.value
+    }
+    if (selectedSubcategoryId.value) {
+      params.subcategory_id = selectedSubcategoryId.value
+    }
+    const res = await productApi.getProducts(params)
     products.value = res.data
   } catch (e) {
     ElMessage.error('加载产品失败')
@@ -204,10 +241,23 @@ async function loadProducts() {
   }
 }
 
-function showProductDialog(product) {
+function handleCategoryChange({ categoryId, subcategoryId }) {
+  selectedCategoryId.value = categoryId
+  selectedSubcategoryId.value = subcategoryId
+  loadProducts()
+}
+
+async function showProductDialog(product) {
   if (product) {
     editingProduct.value = product
-    productForm.value = { ...product }
+    productForm.value = { ...product, category_ids: [] }
+    // Load product's categories
+    try {
+      const res = await categoryApi.getProductCategories(product.id)
+      productForm.value.category_ids = (res.data || []).map(c => c.id)
+    } catch (e) {
+      console.error('Failed to load product categories', e)
+    }
   } else {
     editingProduct.value = null
     productForm.value = {
@@ -216,7 +266,8 @@ function showProductDialog(product) {
       category: '化工',
       unit: '元/吨',
       source: '',
-      is_active: true
+      is_active: true,
+      category_ids: []
     }
   }
   productDialogVisible.value = true
@@ -226,6 +277,10 @@ async function saveProduct() {
   try {
     if (editingProduct.value) {
       await productApi.updateProduct(editingProduct.value.id, productForm.value)
+      // Update category associations
+      if (productForm.value.category_ids && productForm.value.category_ids.length > 0) {
+        await categoryApi.setProductCategories(editingProduct.value.id, productForm.value.category_ids)
+      }
       ElMessage.success('更新成功')
     } else {
       await productApi.createProduct(productForm.value)

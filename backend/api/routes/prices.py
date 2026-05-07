@@ -8,6 +8,7 @@ import asyncio
 import numpy
 from backend.models.database import get_session, Product, PriceRecord, Category, ProductCategory
 from backend.services.alert_service import check_and_trigger_alerts
+from backend.services.operation_logger import OperationLogger
 
 router = APIRouter(prefix="/api/v1/prices", tags=["价格数据"])
 
@@ -91,6 +92,13 @@ async def get_prices(
         response.append(PriceRecordResponse.from_record(pr, product_name, product_code))
 
     session.close()
+
+    # 记录查询日志
+    OperationLogger.log_price_query(
+        product_ids=[product_id] if product_id else [],
+        date_range={"start": start_date, "end": end_date},
+        count=len(response)
+    )
     return response
 
 @router.get("/latest", response_model=dict)
@@ -212,6 +220,13 @@ async def get_price_history(
         response.append(PriceRecordResponse.from_record(pr, product_name, product_code))
 
     session.close()
+
+    # 记录查询日志
+    OperationLogger.log_price_query(
+        product_ids=[product_id],
+        date_range={"start": start_date, "days": days},
+        count=len(response)
+    )
     return response
 
 @router.get("/stats/summary")

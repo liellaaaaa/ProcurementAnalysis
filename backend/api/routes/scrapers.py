@@ -7,6 +7,7 @@ from datetime import date, datetime
 
 from backend.scrapers import ScraperRegistry
 from backend.models.database import get_session, PriceRecord, ScraperLog
+from backend.services.operation_logger import OperationLogger
 from config import SOURCE_FRESHNESS_CONFIG, SCRAPER_MIN_INTERVAL
 
 router = APIRouter(prefix="/api/v1", tags=["scrapers"])
@@ -110,6 +111,7 @@ async def run_scraper(source: str):
     current_dir = os.path.dirname(os.path.abspath(__file__))
     base_dir = os.path.dirname(os.path.dirname(os.path.dirname(current_dir)))  # backend/api/routes -> backend/api -> backend -> 项目根
 
+    start_time = datetime.now()
     try:
         env = os.environ.copy()
         # 设置 PYTHONPATH 让子进程能找到 backend 模块
@@ -130,11 +132,17 @@ async def run_scraper(source: str):
             print(f"Scraper stdout: {result.stdout}")
             raise HTTPException(status_code=500, detail=f"Scraper failed: {result.stderr[:200] if result.stderr else result.stdout[:200]}")
 
+        # 记录成功日志
+        duration = (datetime.now() - start_time).total_seconds()
+        OperationLogger.log_scraper_run(source, items_scraped=0, status="success", duration=duration)
+
         return {"status": "success", "message": "爬取完成，数据已更新"}
 
     except subprocess.TimeoutExpired:
+        OperationLogger.log_failure(OperationLogger.MODULE_SCRAPER, OperationLogger.OP_SCRAPE, {"source": source}, "timeout")
         raise HTTPException(status_code=500, detail="爬取超时（超过5分钟）")
     except HTTPException:
         raise
     except Exception as e:
+        OperationLogger.log_failure(OperationLogger.MODULE_SCRAPER, OperationLogger.OP_SCRAPE, {"source": source}, str(e))
         raise HTTPException(status_code=500, detail=f"Scraper error: {str(e)}")

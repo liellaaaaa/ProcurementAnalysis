@@ -10,6 +10,24 @@ from config import DATABASE_URL
 
 Base = declarative_base()
 
+class Category(Base):
+    __tablename__ = "categories"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(50), nullable=False)
+    parent_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
+    sort_order = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.now)
+
+
+class ProductCategory(Base):
+    __tablename__ = "product_categories"
+
+    product_id = Column(Integer, ForeignKey("products.id"), primary_key=True)
+    category_id = Column(Integer, ForeignKey("categories.id"), primary_key=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+
 class Product(Base):
     __tablename__ = "products"
 
@@ -78,6 +96,19 @@ class ScraperLog(Base):
     error_message = Column(String(500))
     started_at = Column(DateTime)
     completed_at = Column(DateTime)
+
+class OperationLog(Base):
+    """操作日志（文件日志为主，此表用于方便查询）"""
+    __tablename__ = "operation_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    timestamp = Column(DateTime, default=datetime.now)
+    level = Column(String(10))  # INFO/WARNING/ERROR
+    module = Column(String(20))  # PRODUCT/PRICE/ALERT/REPORT/SCRAPER/CATEGORY/SYSTEM
+    action = Column(String(20))  # CREATE/UPDATE/DELETE/QUERY/EXPORT/SCRAPE
+    details = Column(String(1000))  # JSON格式的详情
+    result = Column(String(20))  # SUCCESS/FAILURE/WARNING
+    operator = Column(String(50), default="system")  # 操作人标识
 
 def init_db():
     engine = create_engine(DATABASE_URL, echo=True)

@@ -14,7 +14,14 @@
             <span class="title-icon">⬡</span>
             <span>选择产品进行对比</span>
           </div>
-          <SourceSelector @update:source="val => { selectedSource = val; loadComparison() }" />
+          <div class="selector-row">
+            <CategorySelector
+              v-model="selectedCategoryId"
+              v-model:subcategoryValue="selectedSubcategoryId"
+              @change="handleCategoryChange"
+            />
+            <SourceSelector @update:source="val => { selectedSource = val; loadComparison() }" />
+          </div>
         </div>
       </template>
       <el-select
@@ -25,7 +32,7 @@
         @change="loadComparison"
       >
         <el-option
-          v-for="p in products"
+          v-for="p in filteredProducts"
           :key="p.id"
           :label="p.product_name"
           :value="p.id"
@@ -56,26 +63,51 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import { priceApi, productApi } from '../api/price'
 import SourceSelector from '../components/SourceSelector.vue'
+import CategorySelector from '../components/CategorySelector.vue'
 import * as echarts from 'echarts'
 
 const chartRef = ref(null)
 const products = ref([])
 const selectedProducts = ref([])
 const selectedSource = ref(null)
+const selectedCategoryId = ref(null)
+const selectedSubcategoryId = ref(null)
 let chartInstance = null
 
 const colors = ['#00d4ff', '#ff6b6b', '#00c48c', '#ffd93d', '#9b59b6', '#3498db']
 
+const filteredProducts = computed(() => {
+  if (!selectedCategoryId.value && !selectedSubcategoryId.value) {
+    return products.value
+  }
+  // For now, return all products - the API filtering will handle it
+  return products.value
+})
+
 async function loadProducts() {
   try {
-    const res = await productApi.getProducts({ limit: 100 })
+    const params = { limit: 500 }
+    if (selectedCategoryId.value) {
+      params.category_id = selectedCategoryId.value
+    }
+    if (selectedSubcategoryId.value) {
+      params.subcategory_id = selectedSubcategoryId.value
+    }
+    const res = await productApi.getProducts(params)
     products.value = res.data
   } catch (e) {
     console.error('Failed to load products', e)
   }
+}
+
+function handleCategoryChange({ categoryId, subcategoryId }) {
+  selectedCategoryId.value = categoryId
+  selectedSubcategoryId.value = subcategoryId
+  selectedProducts.value = []
+  loadProducts()
 }
 
 async function loadComparison() {
@@ -210,6 +242,12 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 4px 0;
+}
+
+.selector-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
 }
 
 .header-title {

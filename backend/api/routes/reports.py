@@ -5,6 +5,7 @@ from io import BytesIO
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from backend.models.database import get_session, Product, PriceRecord, AlertRecord, AlertConfig
+from backend.services.operation_logger import OperationLogger
 
 router = APIRouter(prefix="/api/v1/reports", tags=["报表生成"])
 
@@ -448,6 +449,13 @@ async def generate_pdf_report(
 
     session.close()
 
+    # 记录操作日志
+    OperationLogger.log_report_generate(
+        report_type=report_type,
+        date_range={"start": str(start_date), "end": str(end_date)},
+        format="pdf"
+    )
+
     return StreamingResponse(
         buffer,
         media_type="application/pdf",
@@ -873,6 +881,13 @@ async def generate_excel_report(
 
     filename = f"price_{report_type}_{end_date.isoformat()}.xlsx"
     session.close()
+
+    # 记录操作日志
+    OperationLogger.log_report_generate(
+        report_type=report_type,
+        date_range={"start": str(start_date), "end": str(end_date)},
+        format="excel"
+    )
 
     return StreamingResponse(
         buffer,

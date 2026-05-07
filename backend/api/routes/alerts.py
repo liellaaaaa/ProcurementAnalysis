@@ -3,6 +3,7 @@ from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime
 from backend.models.database import get_session, AlertConfig, AlertRecord, Product
+from backend.services.operation_logger import OperationLogger
 
 router = APIRouter(prefix="/api/v1/alerts", tags=["预警管理"])
 
@@ -108,6 +109,13 @@ async def create_alert_config(config: AlertConfigCreate):
     session.refresh(new_config)
     session.close()
 
+    # 记录操作日志
+    OperationLogger.log_alert_create(
+        alert_config_id=new_config.id,
+        product_name=product.product_name,
+        alert_type=config.alert_type
+    )
+
     return AlertConfigResponse(
         id=new_config.id,
         product_id=new_config.product_id,
@@ -140,6 +148,9 @@ async def update_alert_config(config_id: int, config: AlertConfigUpdate):
     product = session.query(Product).filter(Product.id == db_config.product_id).first()
     session.close()
 
+    # 记录操作日志
+    OperationLogger.log_alert_update(config_id, update_data)
+
     return AlertConfigResponse(
         id=db_config.id,
         product_id=db_config.product_id,
@@ -165,6 +176,9 @@ async def delete_alert_config(config_id: int):
     session.delete(config)
     session.commit()
     session.close()
+
+    # 记录操作日志
+    OperationLogger.log_alert_delete(config_id)
     return {"message": "预警配置已删除"}
 
 
