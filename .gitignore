@@ -46,3 +46,5 @@ data/database/*.db
 .env
 .env.local
 .env.*.local
+# PDF files
+*.pdf
