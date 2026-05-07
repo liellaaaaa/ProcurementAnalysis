@@ -26,26 +26,34 @@ backend/
 │   ├── scrapers.py      # 爬虫管理 API
 │   ├── analytics.py     # 分析 API (预测、排行)
 │   ├── reports.py       # 报表生成 API (PDF/Excel)
-│   └── alerts.py        # 预警 API
+│   ├── alerts.py        # 预警 API
+│   ├── categories.py     # 分类管理 API
+│   └── operation_logs.py # 操作日志 API
 ├── services/            # 业务服务
-│   ├── alert_service.py # 预警服务
-│   └── chart_generator.py # matplotlib 图表生成服务
+│   ├── alert_service.py     # 预警服务
+│   ├── chart_generator.py   # matplotlib 图表生成服务
+│   └── operation_logger.py  # 操作日志服务
 └── models/              # 数据模型
     └── database.py      # 数据库模型
 
 frontend/
 ├── src/
 │   ├── views/           # 页面
-│   │   ├── Dashboard.vue     # 数据看板
-│   │   ├── ProductCompare.vue # 产品对比
-│   │   ├── ProductManage.vue  # 产品管理
-│   │   ├── ReportView.vue     # 报表中心
-│   │   └── AlertView.vue      # 预警管理
+│   │   ├── Dashboard.vue       # 数据看板
+│   │   ├── ProductCompare.vue  # 产品对比
+│   │   ├── ProductManage.vue   # 产品管理
+│   │   ├── CategoryManage.vue  # 分类管理
+│   │   ├── ReportView.vue      # 报表中心
+│   │   └── AlertView.vue       # 预警管理
 │   ├── components/      # 组件
-│   │   └── SourceSelector.vue # 数据源选择器
+│   │   ├── SourceSelector.vue   # 数据源选择器
+│   │   └── CategorySelector.vue # 分类选择器
 │   ├── api/             # API 调用
 │   └── router/          # 路由配置
 └── package.json
+
+log/                     # 操作日志目录
+└── operations.log       # 操作日志文件
 ```
 
 ## 启动方式
@@ -84,11 +92,11 @@ npm run dev
 ## API 端点
 
 ### 产品管理
-- `GET /api/v1/products` - 产品列表
+- `GET /api/v1/products` - 产品列表（支持品类筛选）
 - `GET /api/v1/products/{product_id}` - 产品详情
 - `POST /api/v1/products` - 创建产品
 - `PUT /api/v1/products/{product_id}` - 更新产品
-- `DELETE /api/v1/products/{product_id}` - 删除产品
+- `DELETE /api/v1/products/{product_id}` - 删除产品（软删除）
 
 ### 价格数据
 - `GET /api/v1/prices` - 价格列表（支持 source, product_id, date 过滤）
@@ -116,6 +124,19 @@ npm run dev
 - `PUT /api/v1/alerts/read-all` - 全部已读
 - `DELETE /api/v1/alerts/{id}` - 删除预警记录
 
+### 分类管理
+- `GET /api/v1/categories` - 所有分类（树形结构）
+- `GET /api/v1/categories/level-one` - 一级分类
+- `GET /api/v1/categories/level-two/{parent_id}` - 二级分类
+- `POST /api/v1/categories` - 创建分类
+- `PUT /api/v1/categories/{id}` - 更新分类
+- `DELETE /api/v1/categories/{id}` - 删除分类
+
+### 操作日志
+- `GET /api/v1/operation-logs` - 查询操作日志（支持 keyword/module/level/date 过滤）
+- `GET /api/v1/operation-logs/modules` - 获取模块列表
+- `GET /api/v1/operation-logs/summary` - 日志统计摘要
+
 ### 数据新鲜度检测
 - `GET /api/v1/check-freshness` - 检查数据是否过期
 
@@ -130,6 +151,21 @@ npm run dev
 - `alert_configs` - 预警配置（支持 threshold/change_rate/trend 三种类型）
 - `alert_records` - 预警记录
 - `scraper_logs` - 爬虫运行日志
+- `categories` - 产品分类（支持二级分类）
+- `product_categories` - 产品-分类关联表
+- `operation_logs` - 操作日志
+
+## 操作日志
+
+所有关键操作都会记录到 `log/operations.log`，包括：
+- 产品增删改查
+- 价格查询
+- 预警配置操作
+- 报表生成
+- 爬虫运行
+- 分类管理
+
+日志格式为 JSON，便于后续分析。
 
 ## 数据源扩展
 
