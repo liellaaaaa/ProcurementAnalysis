@@ -62,7 +62,7 @@ async def get_alert_configs(
 ):
     """获取预警配置列表"""
     session = get_session()
-    query = session.query(AlertConfig, Category.name).join(Category, AlertConfig.product_id == Category.id)
+    query = session.query(AlertConfig)
 
     if product_id:
         query = query.filter(AlertConfig.product_id == product_id)
@@ -70,12 +70,14 @@ async def get_alert_configs(
         query = query.filter(AlertConfig.is_active == is_active)
 
     results = query.order_by(AlertConfig.created_at.desc()).all()
+    product_ids = [r.product_id for r in results]
+    product_names = {p.id: p.product_name for p in session.query(Product).filter(Product.id.in_(product_ids)).all()}
     response = []
-    for config, category_name in results:
+    for config in results:
         response.append(AlertConfigResponse(
             id=config.id,
             product_id=config.product_id,
-            product_name=category_name,
+            product_name=product_names.get(config.product_id),
             alert_type=config.alert_type,
             threshold_value=config.threshold_value,
             change_percent=config.change_percent,
@@ -91,13 +93,13 @@ async def create_alert_config(config: AlertConfigCreate):
     """创建预警配置"""
     session = get_session()
 
-    # 验证品类存在
-    category = session.query(Category).filter(Category.id == config.product_id).first()
-    if not category:
+    # 验证产品存在
+    product = session.query(Product).filter(Product.id == config.product_id).first()
+    if not product:
         session.close()
-        raise HTTPException(status_code=404, detail="品类不存在")
+        raise HTTPException(status_code=404, detail="产品不存在")
 
-    category_name = category.name
+    product_name = product.product_name
 
     new_config = AlertConfig(
         product_id=config.product_id,
@@ -114,14 +116,14 @@ async def create_alert_config(config: AlertConfigCreate):
     # 记录操作日志
     OperationLogger.log_alert_create(
         alert_config_id=new_config.id,
-        product_name=category_name,
+        product_name=product_name,
         alert_type=config.alert_type
     )
 
     return AlertConfigResponse(
         id=new_config.id,
         product_id=new_config.product_id,
-        product_name=category_name,
+        product_name=product_name,
         alert_type=new_config.alert_type,
         threshold_value=new_config.threshold_value,
         change_percent=new_config.change_percent,
@@ -147,8 +149,8 @@ async def update_alert_config(config_id: int, config: AlertConfigUpdate):
     session.commit()
     session.refresh(db_config)
 
-    category = session.query(Category).filter(Category.id == db_config.product_id).first()
-    category_name = category.name if category else None
+    product = session.query(Product).filter(Product.id == db_config.product_id).first()
+    product_name = product.product_name if product else None
     session.close()
 
     # 记录操作日志
@@ -157,7 +159,7 @@ async def update_alert_config(config_id: int, config: AlertConfigUpdate):
     return AlertConfigResponse(
         id=db_config.id,
         product_id=db_config.product_id,
-        product_name=category_name,
+        product_name=product_name,
         alert_type=db_config.alert_type,
         threshold_value=db_config.threshold_value,
         change_percent=db_config.change_percent,

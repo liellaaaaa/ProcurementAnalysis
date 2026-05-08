@@ -106,7 +106,14 @@ let chartInstance = null
 const colors = ['#0077cc', '#00a8e8', '#4db8e8', '#005fa3', '#003d6b', '#006594']
 
 const filteredProducts = computed(() => {
-  return products.value
+  let result = products.value
+  if (selectedCategoryId.value) {
+    result = result.filter(p => p.category_id === selectedCategoryId.value || p.main_category_id === selectedCategoryId.value)
+  }
+  if (selectedSubcategoryId.value) {
+    result = result.filter(p => p.category_id === selectedSubcategoryId.value)
+  }
+  return result
 })
 
 function getProductColor(id) {

@@ -29,12 +29,6 @@ export const priceApi = {
   },
   getDashboardVolatility(days = 7) {
     return api.get('/prices/dashboard/volatility', { params: { days } })
-  },
-  getDashboardHeatmap(params) {
-    return api.get('/prices/dashboard/heatmap', { params })
-  },
-  getDashboardCalendar(params) {
-    return api.get('/prices/dashboard/calendar', { params })
   }
 }
 

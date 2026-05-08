@@ -432,11 +432,17 @@ async def get_dashboard_ranking(
 
     ranking = []
     for lp in latest_prices:
+        # 计算该产品历史平均价格
+        hist = session.query(func.avg(PriceRecord.price)).filter(
+            PriceRecord.product_id == lp.product_id,
+            PriceRecord.record_date >= start_date
+        ).scalar() or 0
         ranking.append({
             "product_id": lp.product_id,
             "product_name": products.get(lp.product_id, "未知"),
             "latest_price": lp.price,
-            "change_percent": lp.change_percent or 0
+            "change_percent": lp.change_percent or 0,
+            "avg_price": round(hist, 2)
         })
 
     # 按涨跌排序
