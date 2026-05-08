@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Query
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime
-from backend.models.database import get_session, AlertConfig, AlertRecord, Product
+from backend.models.database import get_session, AlertConfig, AlertRecord, Product, Category
 from backend.services.operation_logger import OperationLogger
 
 router = APIRouter(prefix="/api/v1/alerts", tags=["预警管理"])
@@ -62,7 +62,7 @@ async def get_alert_configs(
 ):
     """获取预警配置列表"""
     session = get_session()
-    query = session.query(AlertConfig, Product.product_name).join(Product)
+    query = session.query(AlertConfig, Category.name).join(Category, AlertConfig.product_id == Category.id)
 
     if product_id:
         query = query.filter(AlertConfig.product_id == product_id)
@@ -71,11 +71,11 @@ async def get_alert_configs(
 
     results = query.order_by(AlertConfig.created_at.desc()).all()
     response = []
-    for config, product_name in results:
+    for config, category_name in results:
         response.append(AlertConfigResponse(
             id=config.id,
             product_id=config.product_id,
-            product_name=product_name,
+            product_name=category_name,
             alert_type=config.alert_type,
             threshold_value=config.threshold_value,
             change_percent=config.change_percent,
@@ -91,11 +91,13 @@ async def create_alert_config(config: AlertConfigCreate):
     """创建预警配置"""
     session = get_session()
 
-    # 验证产品存在
-    product = session.query(Product).filter(Product.id == config.product_id).first()
-    if not product:
+    # 验证品类存在
+    category = session.query(Category).filter(Category.id == config.product_id).first()
+    if not category:
         session.close()
-        raise HTTPException(status_code=404, detail="产品不存在")
+        raise HTTPException(status_code=404, detail="品类不存在")
+
+    category_name = category.name
 
     new_config = AlertConfig(
         product_id=config.product_id,
@@ -112,14 +114,14 @@ async def create_alert_config(config: AlertConfigCreate):
     # 记录操作日志
     OperationLogger.log_alert_create(
         alert_config_id=new_config.id,
-        product_name=product.product_name,
+        product_name=category_name,
         alert_type=config.alert_type
     )
 
     return AlertConfigResponse(
         id=new_config.id,
         product_id=new_config.product_id,
-        product_name=product.product_name,
+        product_name=category_name,
         alert_type=new_config.alert_type,
         threshold_value=new_config.threshold_value,
         change_percent=new_config.change_percent,
@@ -145,7 +147,8 @@ async def update_alert_config(config_id: int, config: AlertConfigUpdate):
     session.commit()
     session.refresh(db_config)
 
-    product = session.query(Product).filter(Product.id == db_config.product_id).first()
+    category = session.query(Category).filter(Category.id == db_config.product_id).first()
+    category_name = category.name if category else None
     session.close()
 
     # 记录操作日志
@@ -154,7 +157,7 @@ async def update_alert_config(config_id: int, config: AlertConfigUpdate):
     return AlertConfigResponse(
         id=db_config.id,
         product_id=db_config.product_id,
-        product_name=product.product_name if product else None,
+        product_name=category_name,
         alert_type=db_config.alert_type,
         threshold_value=db_config.threshold_value,
         change_percent=db_config.change_percent,

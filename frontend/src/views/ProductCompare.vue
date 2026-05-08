@@ -2,10 +2,6 @@
   <div class="compare-page">
     <div class="page-container">
       <header class="page-header">
-        <div class="header-content">
-          <h1 class="page-title">产品对比</h1>
-          <p class="page-subtitle">多维度分析市场竞争态势</p>
-        </div>
       </header>
 
       <el-card class="selector-card animate-in">

@@ -2,10 +2,6 @@
   <div class="report-view">
     <div class="page-container">
       <header class="page-header">
-        <div class="header-content">
-          <h1 class="page-title">报表中心</h1>
-          <p class="page-subtitle">数据分析与报告导出</p>
-        </div>
       </header>
 
       <el-card class="filter-card animate-in">
@@ -96,50 +92,7 @@
         </div>
       </el-card>
 
-      <div class="bottom-grid" v-if="forecastData || rankingData.rising.length">
-        <el-card class="forecast-card animate-in" style="animation-delay: 0.25s" v-if="forecastData">
-          <template #header>
-            <div class="card-header">
-              <div class="header-title">
-                <div class="title-icon-wrapper">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
-                    <polyline points="17 6 23 6 23 12"/>
-                  </svg>
-                </div>
-                <span>价格预测 - {{ forecastData.product_name }}</span>
-              </div>
-            </div>
-          </template>
-          <div class="forecast-grid">
-            <div class="forecast-item">
-              <span class="forecast-label">当前价格</span>
-              <span class="forecast-value current">¥{{ forecastData.current_price?.toLocaleString() }}</span>
-            </div>
-            <div class="forecast-item">
-              <span class="forecast-label">预测下期</span>
-              <span class="forecast-value" :class="forecastData.forecast_next > forecastData.current_price ? 'rise' : 'fall'">
-                ¥{{ forecastData.forecast_next?.toLocaleString() }}
-              </span>
-            </div>
-            <div class="forecast-item">
-              <span class="forecast-label">7日均价</span>
-              <span class="forecast-value">¥{{ forecastData.ma7?.toLocaleString() }}</span>
-            </div>
-            <div class="forecast-item">
-              <span class="forecast-label">30日均价</span>
-              <span class="forecast-value">¥{{ forecastData.ma30?.toLocaleString() }}</span>
-            </div>
-          </div>
-          <div class="trend-indicator">
-            <span class="trend-label">趋势判断</span>
-            <span class="trend-badge" :class="forecastData.trend_direction">
-              {{ forecastData.trend_direction }}
-            </span>
-            <span class="data-points">{{ forecastData.record_count }} 个数据点</span>
-          </div>
-        </el-card>
-
+      <div class="bottom-grid" v-if="rankingData.rising.length">
         <el-card class="ranking-card animate-in" style="animation-delay: 0.3s" v-if="rankingData.rising.length">
           <template #header>
             <div class="card-header">
@@ -193,7 +146,6 @@ const month = ref('')
 const startDate = ref('')
 const endDate = ref('')
 const stats = ref({})
-const forecastData = ref(null)
 const rankingData = ref({ rising: [], falling: [] })
 
 const statCards = ref([
@@ -246,11 +198,6 @@ async function loadStats() {
 
     const rankingRes = await reportApi.getRanking(7)
     rankingData.value = rankingRes.data
-
-    if (products.length > 0) {
-      const forecastRes = await reportApi.getForecast(products[0].product_id, 30)
-      forecastData.value = forecastRes.data
-    }
   } catch (e) {
     ElMessage.error('加载统计数据失败')
   }
@@ -511,68 +458,8 @@ async function downloadExcel() {
   gap: 20px;
 }
 
-.forecast-card,
 .ranking-card {
   border-radius: 16px !important;
-}
-
-.forecast-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-bottom: 20px;
-}
-
-.forecast-item {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.forecast-label {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.forecast-value {
-  font-family: 'Fira Sans', sans-serif;
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.forecast-value.rise { color: var(--rise-color); }
-.forecast-value.fall { color: var(--fall-color); }
-
-.trend-indicator {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  background: var(--bg-primary);
-  border-radius: 10px;
-}
-
-.trend-label {
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-.trend-badge {
-  padding: 4px 12px;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.trend-badge.上涨 { background: rgba(230, 57, 70, 0.12); color: var(--rise-color); }
-.trend-badge.下跌 { background: rgba(42, 157, 92, 0.12); color: var(--fall-color); }
-.trend-badge.平稳 { background: rgba(100, 116, 139, 0.12); color: var(--text-secondary); }
-
-.data-points {
-  margin-left: auto;
-  font-size: 12px;
-  color: var(--text-muted);
 }
 
 .ranking-list {

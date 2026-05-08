@@ -46,7 +46,23 @@
               </svg>
               <span>价格走势</span>
             </div>
-            <div ref="lineChartRef" class="chart-container" style="height: 260px; width: 100%;"></div>
+            <div class="chart-wrapper">
+              <div ref="lineChartRef" class="chart-container" style="height: 260px; width: 100%;"></div>
+              <div class="chart-actions" @mouseenter="hoverChart = 'line'" @mouseleave="hoverChart = null">
+                <button class="chart-action-btn" title="详情" @click="showChartDetail('line')">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                  </svg>
+                </button>
+                <button class="chart-action-btn" title="下载" @click="downloadChart('line')">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
           </div>
           <div class="chart-half">
             <div class="chart-title">
@@ -57,7 +73,23 @@
               </svg>
               <span>涨跌排行 TOP10</span>
             </div>
-            <div ref="barChartRef" class="chart-container" style="height: 260px; width: 100%;"></div>
+            <div class="chart-wrapper">
+              <div ref="barChartRef" class="chart-container" style="height: 260px; width: 100%;"></div>
+              <div class="chart-actions" @mouseenter="hoverChart = 'bar'" @mouseleave="hoverChart = null">
+                <button class="chart-action-btn" title="详情" @click="showChartDetail('bar')">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                  </svg>
+                </button>
+                <button class="chart-action-btn" title="下载" @click="downloadChart('bar')">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </el-card>
@@ -96,7 +128,23 @@
         </template>
         <div class="charts-grid-46">
           <div class="chart-4">
-            <div ref="pieChartRef" class="pie-chart"></div>
+            <div class="chart-wrapper" style="width:100%;height:100%;min-height:240px;position:relative;">
+              <div ref="pieChartRef" class="pie-chart" style="width:100%;height:100%;min-height:240px;"></div>
+              <div class="chart-actions" @mouseenter="hoverChart = 'pie'" @mouseleave="hoverChart = null">
+                <button class="chart-action-btn" title="详情" @click="showChartDetail('pie')">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                  </svg>
+                </button>
+                <button class="chart-action-btn" title="下载" @click="downloadChart('pie')">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
           </div>
           <div class="chart-6">
             <div class="indicator-cards">
@@ -232,6 +280,17 @@
         </div>
       </el-card>
     </div>
+
+    <!-- 图表详情弹窗 -->
+    <el-dialog v-model="chartDetailVisible" :title="chartDetailTitle" width="680px" :close-on-click-modal="true">
+      <el-table v-if="chartDetailData.length > 0" :data="chartDetailData" border size="small" max-height="400">
+        <el-table-column v-for="col in chartDetailColumns" :key="col.prop" :prop="col.prop" :label="col.label" :width="col.width" />
+      </el-table>
+      <div v-else style="text-align:center;color:#999;padding:40px;">暂无数据</div>
+      <template #footer>
+        <el-button @click="chartDetailVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -244,6 +303,16 @@ import CategorySelector from '../components/CategorySelector.vue'
 const lineChartRef = ref(null)
 const pieChartRef = ref(null)
 const barChartRef = ref(null)
+
+const hoverChart = ref(null)
+const chartDetailVisible = ref(false)
+const chartDetailTitle = ref('')
+const chartDetailData = ref([])
+const chartDetailColumns = ref([])
+
+const lineChartRawData = ref({ dates: [], series: [] })
+const barChartRawData = ref({ categories: [], values: [] })
+const pieChartRawData = ref({ labels: [], sizes: [] })
 
 const latestPrices = ref([])
 const expandedRows = ref([])
@@ -427,10 +496,12 @@ async function loadLineChartData() {
 
     if (!res.data || !res.data.dates || res.data.dates.length === 0) {
       lineChart.setOption({ series: [] })
+      lineChartRawData.value = { dates: [], series: [] }
       return
     }
 
     const { dates, series } = res.data
+    lineChartRawData.value = { dates, series }
     const lineColors = ['#E63946', '#2A9D5C', '#E9C46A', '#264653', '#F4A261', '#8E44AD', '#1ABC9C', '#E74C3C', '#3498DB', '#9B59B6']
 
     lineChart.setOption({
@@ -513,6 +584,11 @@ async function loadRankingData() {
     }
     const res = await priceApi.getDashboardRanking(params)
     const rising = res.data.rising || []
+    barChartRawData.value = {
+      categories: rising.map(r => r.product_name),
+      values: rising.map(r => r.change_percent),
+      fullData: rising
+    }
     if (rising.length > 0) {
       const categories = rising.map(r => r.product_name.substring(0, 8))
       const values = rising.map(r => r.change_percent)
@@ -536,6 +612,10 @@ async function loadDistributionData() {
     }
     const res = await priceApi.getDashboardDistribution(params)
     if (res.data.labels && res.data.labels.length > 0) {
+      pieChartRawData.value = {
+        labels: res.data.labels,
+        sizes: res.data.sizes
+      }
       const pieColors = ['#0077cc', '#00a8e8', '#4db8e8', '#005fa3', '#003d6b', '#006594', '#0077cc', '#00a8e8', '#e91e63', '#6739b6']
       pieChart.setOption({
         tooltip: {
@@ -559,6 +639,88 @@ async function loadDistributionData() {
   } catch (e) {
     console.error('Failed to load distribution data', e)
   }
+}
+
+function showChartDetail(type) {
+  if (type === 'line') {
+    chartDetailTitle.value = '价格走势 - 详细数据'
+    const { dates, series } = lineChartRawData.value
+    if (!dates || dates.length === 0) {
+      chartDetailData.value = []
+      chartDetailColumns.value = []
+    } else {
+      const cols = [{ prop: 'date', label: '日期', width: 120 }]
+      series.forEach((s, i) => cols.push({ prop: `series${i}`, label: s.name || `产品${i + 1}`, width: 140 }))
+      const rows = dates.map((d, di) => {
+        const row = { date: d }
+        series.forEach((s, si) => { row[`series${si}`] = s.data[di] != null ? `¥${s.data[di].toLocaleString()}` : '-' })
+        return row
+      })
+      chartDetailData.value = rows
+      chartDetailColumns.value = cols
+    }
+  } else if (type === 'bar') {
+    chartDetailTitle.value = '涨跌排行 TOP10 - 详细数据'
+    const { fullData } = barChartRawData.value
+    if (!fullData || fullData.length === 0) {
+      chartDetailData.value = []
+      chartDetailColumns.value = []
+    } else {
+      chartDetailColumns.value = [
+        { prop: 'product_name', label: '产品名称', width: 180 },
+        { prop: 'change_percent', label: '涨跌幅', width: 120 },
+        { prop: 'latest_price', label: '最新价格', width: 120 },
+        { prop: 'avg_price', label: '平均价格', width: 120 }
+      ]
+      chartDetailData.value = fullData.map(r => ({
+        product_name: r.product_name,
+        change_percent: `${r.change_percent > 0 ? '+' : ''}${r.change_percent}%`,
+        latest_price: r.latest_price != null ? `¥${r.latest_price.toLocaleString()}` : '-',
+        avg_price: r.avg_price != null ? `¥${r.avg_price.toLocaleString()}` : '-'
+      }))
+    }
+  } else if (type === 'pie') {
+    chartDetailTitle.value = '价格分布 - 详细数据'
+    const { labels, sizes } = pieChartRawData.value
+    if (!labels || labels.length === 0) {
+      chartDetailData.value = []
+      chartDetailColumns.value = []
+    } else {
+      const total = (sizes || []).reduce((s, v) => s + v, 0)
+      chartDetailColumns.value = [
+        { prop: 'product_name', label: '产品名称', width: 200 },
+        { prop: 'price', label: '价格', width: 140 },
+        { prop: 'percent', label: '占比', width: 120 }
+      ]
+      chartDetailData.value = labels.map((l, i) => ({
+        product_name: l,
+        price: sizes[i] != null ? `¥${sizes[i].toLocaleString()}` : '-',
+        percent: total > 0 ? `${((sizes[i] / total) * 100).toFixed(2)}%` : '-'
+      }))
+    }
+  }
+  chartDetailVisible.value = true
+}
+
+function downloadChart(type) {
+  let chartInstance = null
+  let filename = ''
+  if (type === 'line') {
+    chartInstance = lineChart
+    filename = '价格走势'
+  } else if (type === 'bar') {
+    chartInstance = barChart
+    filename = '涨跌排行'
+  } else if (type === 'pie') {
+    chartInstance = pieChart
+    filename = '价格分布'
+  }
+  if (!chartInstance) return
+  const url = chartInstance.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#fff' })
+  const link = document.createElement('a')
+  link.download = `${filename}_${new Date().toISOString().slice(0, 10)}.png`
+  link.href = url
+  link.click()
 }
 
 function initLineChart() {
@@ -872,6 +1034,49 @@ onUnmounted(() => {
   margin-top: 8px;
   flex: 1;
   min-width: 0;
+}
+
+.chart-wrapper {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.chart-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  z-index: 10;
+}
+
+.chart-wrapper:hover .chart-actions {
+  opacity: 1;
+}
+
+.chart-action-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(4px);
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  padding: 0;
+}
+
+.chart-action-btn:hover {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
 }
 
 .table-section {

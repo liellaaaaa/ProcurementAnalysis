@@ -1,22 +1,6 @@
 <template>
   <div class="alert-view">
     <div class="page-container">
-      <header class="page-header">
-        <div class="header-content">
-          <h1 class="page-title">价格预警</h1>
-          <p class="page-subtitle">实时监控阈值触发情况</p>
-        </div>
-        <div class="header-actions">
-          <el-button type="primary" @click="showConfigDialog = true" class="add-btn">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="12" y1="5" x2="12" y2="19"/>
-              <line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            添加预警配置
-          </el-button>
-        </div>
-      </header>
-
       <!-- 预警统计 -->
       <div class="stats-grid">
         <div class="stat-card" v-for="(stat, index) in statCards" :key="stat.label" :style="{ animationDelay: `${index * 0.08}s` }">
@@ -43,18 +27,25 @@
               </div>
               <span>预警配置</span>
             </div>
+            <el-button type="primary" size="small" @click="openNewConfigDialog" class="add-btn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="5" x2="12" y2="19"/>
+                <line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              添加
+            </el-button>
           </div>
         </template>
         <el-table :data="alertConfigs" style="width: 100%" size="large" v-loading="configsLoading" class="alert-table">
-          <el-table-column prop="product_name" label="产品" width="160" />
-          <el-table-column prop="alert_type" label="预警类型" width="120">
+          <el-table-column prop="product_name" label="产品" min-width="140" show-overflow-tooltip />
+          <el-table-column prop="alert_type" label="预警类型" width="120" align="center">
             <template #default="{ row }">
               <span :class="['alert-type-badge', row.alert_type]">
                 {{ alertTypeLabel(row.alert_type) }}
               </span>
             </template>
           </el-table-column>
-          <el-table-column label="阈值" width="160">
+          <el-table-column label="阈值" min-width="160">
             <template #default="{ row }">
               <span v-if="row.alert_type === 'threshold'" class="threshold-value">
                 &gt; {{ row.threshold_value }} 元/吨
@@ -65,15 +56,15 @@
               <span v-else>-</span>
             </template>
           </el-table-column>
-          <el-table-column prop="is_active" label="状态" width="80">
+          <el-table-column prop="is_active" label="状态" width="80" align="center">
             <template #default="{ row }">
               <el-tag :type="row.is_active ? 'success' : 'info'" size="small" class="status-tag">
                 {{ row.is_active ? '启用' : '停用' }}
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="created_at" label="创建时间" width="110" />
-          <el-table-column label="操作" width="140">
+          <el-table-column prop="created_at" label="创建时间" min-width="160" />
+          <el-table-column label="操作" width="140" align="center">
             <template #default="{ row }">
               <div class="action-buttons">
                 <el-button link type="primary" size="small" @click="editConfig(row)" class="action-link edit">编辑</el-button>
@@ -115,22 +106,22 @@
           </div>
         </template>
         <el-table :data="alertRecords" style="width: 100%" size="large" v-loading="recordsLoading" class="alert-table">
-          <el-table-column prop="product_name" label="产品" width="160" />
-          <el-table-column prop="alert_message" label="预警信息" min-width="280" />
-          <el-table-column prop="triggered_price" label="触发价格" width="120">
+          <el-table-column prop="product_name" label="产品" min-width="140" show-overflow-tooltip />
+          <el-table-column prop="alert_message" label="预警信息" min-width="200" show-overflow-tooltip />
+          <el-table-column prop="triggered_price" label="触发价格" width="120" align="center">
             <template #default="{ row }">
               <span class="price-value">¥{{ row.triggered_price.toLocaleString() }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="triggered_at" label="触发时间" width="160" />
-          <el-table-column prop="is_read" label="状态" width="80">
+          <el-table-column prop="triggered_at" label="触发时间" min-width="160" />
+          <el-table-column prop="is_read" label="状态" width="80" align="center">
             <template #default="{ row }">
               <el-tag :type="row.is_read ? 'info' : 'warning'" size="small" class="status-tag">
                 {{ row.is_read ? '已读' : '未读' }}
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="120">
+          <el-table-column label="操作" width="120" align="center">
             <template #default="{ row }">
               <div class="action-buttons">
                 <el-button link type="primary" size="small" @click="markRead(row.id)" v-if="!row.is_read" class="action-link">标为已读</el-button>
@@ -142,17 +133,13 @@
       </el-card>
 
       <!-- 新建/编辑配置弹窗 -->
-      <el-dialog v-model="showConfigDialog" :title="editingConfig ? '编辑预警配置' : '添加预警配置'" width="480px" class="config-dialog">
+      <el-dialog v-model="showConfigDialog" :title="editingConfig ? '编辑预警配置' : '添加预警配置'" width="520px" class="config-dialog">
         <el-form :model="configForm" label-width="100px" class="config-form">
-          <el-form-item label="产品">
-            <el-select v-model="configForm.product_id" placeholder="选择产品" style="width: 100%">
-              <el-option
-                v-for="p in products"
-                :key="p.id"
-                :label="p.product_name"
-                :value="p.id"
-              />
-            </el-select>
+          <el-form-item label="产品" required>
+            <CategorySelector
+              v-model="dialogCategoryId"
+              v-model:subcategoryValue="dialogSubcategoryId"
+            />
           </el-form-item>
           <el-form-item label="预警类型">
             <el-select v-model="configForm.alert_type" placeholder="选择类型" style="width: 100%">
@@ -182,17 +169,19 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { alertApi, productApi } from '../api/price'
+import { alertApi } from '../api/price'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import CategorySelector from '../components/CategorySelector.vue'
 
 const alertConfigs = ref([])
 const alertRecords = ref([])
-const products = ref([])
 const configsLoading = ref(false)
 const recordsLoading = ref(false)
 const showConfigDialog = ref(false)
 const editingConfig = ref(null)
 const filterUnread = ref(null)
+const dialogCategoryId = ref(null)
+const dialogSubcategoryId = ref(null)
 
 const configForm = ref({
   product_id: null,
@@ -244,16 +233,12 @@ async function loadAlertRecords() {
   }
 }
 
-async function loadProducts() {
-  try {
-    const res = await productApi.getProducts({ limit: 100 })
-    products.value = res.data
-  } catch (e) {
-    console.error('Failed to load products', e)
-  }
-}
-
 async function saveConfig() {
+  if (!dialogSubcategoryId.value) {
+    ElMessage.warning('请选择二级分类（产品）')
+    return
+  }
+  configForm.value.product_id = dialogSubcategoryId.value
   try {
     if (editingConfig.value) {
       await alertApi.updateAlertConfig(editingConfig.value.id, configForm.value)
@@ -264,7 +249,6 @@ async function saveConfig() {
     }
     showConfigDialog.value = false
     editingConfig.value = null
-    resetForm()
     loadAlertConfigs()
   } catch (e) {
     ElMessage.error(e.response?.data?.detail || '保存失败')
@@ -273,12 +257,28 @@ async function saveConfig() {
 
 function editConfig(row) {
   editingConfig.value = row
+  dialogCategoryId.value = null
+  dialogSubcategoryId.value = row.product_id
   configForm.value = {
     product_id: row.product_id,
     alert_type: row.alert_type,
     threshold_value: row.threshold_value,
     change_percent: row.change_percent,
     is_active: row.is_active
+  }
+  showConfigDialog.value = true
+}
+
+function openNewConfigDialog() {
+  editingConfig.value = null
+  dialogCategoryId.value = null
+  dialogSubcategoryId.value = null
+  configForm.value = {
+    product_id: null,
+    alert_type: 'threshold',
+    threshold_value: null,
+    change_percent: null,
+    is_active: true
   }
   showConfigDialog.value = true
 }
@@ -328,7 +328,6 @@ function resetForm() {
 onMounted(() => {
   loadAlertConfigs()
   loadAlertRecords()
-  loadProducts()
 })
 </script>
 
@@ -343,42 +342,13 @@ onMounted(() => {
   margin: 0 auto;
 }
 
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 24px;
-}
-
-.header-content {
-  flex: 1;
-}
-
-.page-title {
-  font-family: 'Fira Sans', sans-serif;
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin: 0 0 4px 0;
-}
-
-.page-subtitle {
-  font-size: 14px;
-  color: var(--text-secondary);
-  margin: 0;
-}
-
-.header-actions {
-  display: flex;
-  gap: 12px;
-}
 
 .add-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 10px 20px !important;
-  border-radius: 10px !important;
+  gap: 4px;
+  padding: 6px 14px !important;
+  border-radius: 8px !important;
   font-weight: 600 !important;
 }
 

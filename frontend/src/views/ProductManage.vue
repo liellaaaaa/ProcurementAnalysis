@@ -1,28 +1,23 @@
 <template>
   <div class="product-manage">
     <div class="page-container">
-      <header class="page-header">
-        <div class="header-content">
-          <h1 class="page-title">产品管理</h1>
-          <p class="page-subtitle">维护产品目录与价格数据</p>
-        </div>
-        <div class="header-actions">
-          <CategorySelector
-            v-model="selectedCategoryId"
-            v-model:subcategoryValue="selectedSubcategoryId"
-            @change="handleCategoryChange"
-          />
-          <el-button type="primary" class="add-btn" @click="showProductDialog(null)">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="12" y1="5" x2="12" y2="19"/>
-              <line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            新增产品
-          </el-button>
-        </div>
-      </header>
-
       <el-card class="table-card animate-in">
+        <template #header>
+          <div class="card-toolbar">
+            <CategorySelector
+              v-model="selectedCategoryId"
+              v-model:subcategoryValue="selectedSubcategoryId"
+              @change="handleCategoryChange"
+            />
+            <el-button type="primary" class="add-btn" @click="showProductDialog(null)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="5" x2="12" y2="19"/>
+                <line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              新增产品
+            </el-button>
+          </div>
+        </template>
         <el-table :data="products" style="width: 100%" v-loading="loading" size="large" class="product-table">
           <el-table-column prop="id" label="ID" width="70" />
           <el-table-column prop="product_code" label="产品编码" width="130">
@@ -396,36 +391,9 @@ async function deletePrice(id) {
   margin: 0 auto;
 }
 
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 24px;
-  gap: 16px;
-}
-
-.header-content {
-  flex: 1;
-}
-
-.page-title {
-  font-family: 'Fira Sans', sans-serif;
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin: 0 0 4px 0;
-}
-
-.page-subtitle {
-  font-size: 14px;
-  color: var(--text-secondary);
-  margin: 0;
-}
-
-.header-actions {
-  display: flex;
-  gap: 12px;
-  align-items: center;
+.page-container {
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
 .add-btn {
@@ -439,6 +407,13 @@ async function deletePrice(id) {
 
 .table-card {
   border-radius: 16px !important;
+}
+
+.card-toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 4px 0;
 }
 
 .product-table :deep(.el-table__header-wrapper th) {
