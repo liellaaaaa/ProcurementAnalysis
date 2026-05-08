@@ -415,7 +415,7 @@ async function loadLineChartData() {
     if (filter1DateRange.value && filter1DateRange.value.length === 2) {
       const start = new Date(filter1DateRange.value[0])
       const end = new Date(filter1DateRange.value[1])
-      days = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1
+      days = Math.max(7, Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1)
     }
 
     const res = await priceApi.getDashboardHistoryCompare(
@@ -431,7 +431,7 @@ async function loadLineChartData() {
     }
 
     const { dates, series } = res.data
-    const lineColors = ['#0077cc', '#00a8e8', '#4db8e8', '#005fa3', '#003d6b', '#006594', '#0077cc', '#00a8e8']
+    const lineColors = ['#E63946', '#2A9D5C', '#E9C46A', '#264653', '#F4A261', '#8E44AD', '#1ABC9C', '#E74C3C', '#3498DB', '#9B59B6']
 
     lineChart.setOption({
       backgroundColor: 'transparent',
