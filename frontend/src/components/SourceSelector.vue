@@ -4,12 +4,19 @@
     placeholder="数据来源"
     size="default"
     clearable
-    @change="$emit('update:source', selectedSource)"
+    @change="onChange"
     class="source-selector"
   >
     <template #prefix>
       <span class="selector-prefix">来源</span>
     </template>
+    <el-option
+      key="__all__"
+      label="全部"
+      value="__all__"
+    >
+      <span class="source-label">全部</span>
+    </el-option>
     <el-option
       v-for="s in sources"
       :key="s"
@@ -22,29 +29,36 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import api from '../api/index'
 
 const props = defineProps({
   modelValue: {
     type: String,
-    default: null
+    default: '__all__'
   }
 })
 
-const emit = defineEmits(['update:source'])
+const emit = defineEmits(['update:modelValue'])
 
 const sources = ref([])
 const selectedSource = ref(props.modelValue)
 
 const sourceLabelMap = {
-  'shengyishe': '生意社'
+  'shengyishe': '生意社',
+  'akshare': 'AKshare'
+}
+
+function onChange(val) {
+  // '__all__' 表示全部数据源，不传 source 过滤
+  const resolved = (val === '__all__' || val === null || val === undefined) ? null : val
+  emit('update:modelValue', resolved)
 }
 
 async function loadSources() {
   try {
     const res = await api.get('/sources')
-    sources.value = res.data
+    sources.value = res.data || []
   } catch (e) {
     console.error('Failed to load sources', e)
   }
@@ -52,12 +66,27 @@ async function loadSources() {
 
 onMounted(() => {
   loadSources()
+  // 初始化时同步一次
+  onChange(selectedSource.value)
+})
+
+watch(() => props.modelValue, (val) => {
+  selectedSource.value = val
 })
 </script>
 
 <style scoped>
 .source-selector {
-  min-width: 130px;
+  width: 90px;
+  flex-shrink: 0;
+}
+
+.source-selector :deep(.el-input__wrapper) {
+  padding: 0 8px !important;
+}
+
+.source-selector :deep(.el-select__prefix) {
+  left: 6px !important;
 }
 
 .selector-prefix {

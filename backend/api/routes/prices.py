@@ -78,7 +78,7 @@ async def get_prices(
 
     if product_id:
         query = query.filter(PriceRecord.product_id == product_id)
-    if source:
+    if source and source != '__all__':
         query = query.filter(PriceRecord.source == source)
     if start_date:
         query = query.filter(PriceRecord.record_date >= start_date)
@@ -124,7 +124,7 @@ async def get_latest_prices(
         PriceRecord.source
     ).join(Product)
 
-    if source:
+    if source and source != '__all__':
         base_query = base_query.filter(PriceRecord.source == source)
 
     if category_id:
@@ -187,11 +187,6 @@ async def get_latest_prices(
         "data": products
     }
 
-    session.close()
-    return {
-        "total": total,
-        "data": products
-    }
 
 @router.get("/history/{product_id}", response_model=List[PriceRecordResponse])
 async def get_price_history(
@@ -211,7 +206,7 @@ async def get_price_history(
         PriceRecord.record_date >= start_date
     )
 
-    if source:
+    if source and source != '__all__':
         query = query.filter(PriceRecord.source == source)
 
     results = query.order_by(PriceRecord.record_date.asc()).all()
@@ -354,7 +349,8 @@ async def delete_price_record(record_id: int):
 async def get_dashboard_distribution(
     days: int = Query(30, ge=7, le=365),
     category_id: Optional[int] = None,
-    subcategory_id: Optional[int] = None
+    subcategory_id: Optional[int] = None,
+    source: Optional[str] = None
 ):
     """获取各产品/分类价格占比（饼图数据）"""
     session = get_session()
@@ -366,6 +362,9 @@ async def get_dashboard_distribution(
     ).join(PriceRecord).filter(
         PriceRecord.record_date >= start_date
     )
+
+    if source and source != '__all__':
+        query = query.filter(PriceRecord.source == source)
 
     # Filter by category
     if category_id:
@@ -392,7 +391,8 @@ async def get_dashboard_ranking(
     limit: int = Query(10, ge=5, le=30),
     days: int = Query(7, ge=1, le=90),
     category_id: Optional[int] = None,
-    subcategory_id: Optional[int] = None
+    subcategory_id: Optional[int] = None,
+    source: Optional[str] = None
 ):
     """获取涨跌排行（柱状图数据）"""
     session = get_session()
@@ -415,6 +415,9 @@ async def get_dashboard_ranking(
         (PriceRecord.record_date == subquery.c.max_date)
     )
 
+    if source and source != '__all__':
+        query = query.filter(PriceRecord.source == source)
+
     # Filter by category
     if category_id:
         subcat_ids = [c.id for c in session.query(Category).filter(Category.parent_id == category_id).all()]
@@ -433,10 +436,13 @@ async def get_dashboard_ranking(
     ranking = []
     for lp in latest_prices:
         # 计算该产品历史平均价格
-        hist = session.query(func.avg(PriceRecord.price)).filter(
+        hist_query = session.query(func.avg(PriceRecord.price)).filter(
             PriceRecord.product_id == lp.product_id,
             PriceRecord.record_date >= start_date
-        ).scalar() or 0
+        )
+        if source and source != '__all__':
+            hist_query = hist_query.filter(PriceRecord.source == source)
+        hist = hist_query.scalar() or 0
         ranking.append({
             "product_id": lp.product_id,
             "product_name": products.get(lp.product_id, "未知"),
@@ -459,20 +465,30 @@ async def get_dashboard_history_compare(
     product_ids: Optional[str] = Query(None, description="逗号分隔的产品ID，留空则返回分类下所有产品"),
     days: int = Query(30, ge=7, le=365),
     category_id: Optional[int] = Query(None),
-    subcategory_id: Optional[int] = Query(None)
+    subcategory_id: Optional[int] = Query(None),
+    source: Optional[str] = None
 ):
     """获取多产品历史价格对比（折线图数据）"""
     session = get_session()
     start_date = (date.today() - timedelta(days=days)).isoformat()
 
+    def base_filter(q):
+        q = q.filter(PriceRecord.record_date >= start_date)
+        if source and source != '__all__':
+            q = q.filter(PriceRecord.source == source)
+        return q
+
     results = []
     if product_ids and product_ids.strip():
         # 指定了产品ID
         id_list = [int(pid.strip()) for pid in product_ids.split(",") if pid.strip().isdigit()]
-        results = session.query(PriceRecord, Product.product_name).join(Product).filter(
+        q = session.query(PriceRecord, Product.product_name).join(Product).filter(
             PriceRecord.product_id.in_(id_list),
             PriceRecord.record_date >= start_date
-        ).order_by(PriceRecord.record_date.asc()).all()
+        )
+        if source and source != '__all__':
+            q = q.filter(PriceRecord.source == source)
+        results = q.order_by(PriceRecord.record_date.asc()).all()
     else:
         # 未指定产品ID，按分类获取
         query = session.query(Product).distinct()
@@ -487,10 +503,27 @@ async def get_dashboard_history_compare(
         products = query.limit(10).all()
         if products:
             product_ids_list = [p.id for p in products]
-            results = session.query(PriceRecord, Product.product_name).join(Product).filter(
+            q = session.query(PriceRecord, Product.product_name).join(Product).filter(
                 PriceRecord.product_id.in_(product_ids_list),
                 PriceRecord.record_date >= start_date
-            ).order_by(PriceRecord.record_date.asc()).all()
+            )
+            if source and source != '__all__':
+                q = q.filter(PriceRecord.source == source)
+            results = q.order_by(PriceRecord.record_date.asc()).all()
+            # 如果有 source 过滤但结果为空，说明随意取的产品没有该 source 数据
+            # 改为只取有该 source 数据的产品
+            if not results and source and source != '__all__':
+                source_product_ids = session.query(PriceRecord.product_id).filter(
+                    PriceRecord.source == source,
+                    PriceRecord.record_date >= start_date
+                ).distinct().limit(10).all()
+                if source_product_ids:
+                    q = session.query(PriceRecord, Product.product_name).join(Product).filter(
+                        PriceRecord.product_id.in_([p[0] for p in source_product_ids]),
+                        PriceRecord.record_date >= start_date,
+                        PriceRecord.source == source
+                    )
+                    results = q.order_by(PriceRecord.record_date.asc()).all()
 
     # 按产品分组
     product_data = {}
@@ -507,23 +540,50 @@ async def get_dashboard_history_compare(
 
 
 @router.get("/dashboard/volatility")
-async def get_dashboard_volatility(days: int = Query(7, ge=1, le=30)):
+async def get_dashboard_volatility(
+    days: int = Query(7, ge=1, le=30),
+    category_id: Optional[int] = None,
+    subcategory_id: Optional[int] = None
+):
     """获取价格波动幅度统计（仪表盘数据）"""
     session = get_session()
     start_date = (date.today() - timedelta(days=days)).isoformat()
 
-    stats = session.query(
+    base_query = session.query(
         func.avg(func.abs(PriceRecord.change_percent)).label('avg_volatility'),
         func.max(func.abs(PriceRecord.change_percent)).label('max_volatility'),
         func.count(func.distinct(PriceRecord.product_id)).label('active_products')
     ).filter(
         PriceRecord.record_date >= start_date
-    ).first()
+    )
+
+    # Filter by category
+    if category_id:
+        subcat_ids = [c.id for c in session.query(Category).filter(Category.parent_id == category_id).all()]
+        pc_query = session.query(ProductCategory.product_id).filter(ProductCategory.category_id.in_(subcat_ids + [category_id]))
+        base_query = base_query.filter(PriceRecord.product_id.in_(pc_query))
+
+    if subcategory_id:
+        pc_query = session.query(ProductCategory.product_id).filter(ProductCategory.category_id == subcategory_id)
+        base_query = base_query.filter(PriceRecord.product_id.in_(pc_query))
+
+    stats = base_query.first()
 
     # 获取今日最新价格产品数
-    today_count = session.query(func.count(func.distinct(PriceRecord.product_id))).filter(
+    today_count_query = session.query(func.count(func.distinct(PriceRecord.product_id))).filter(
         PriceRecord.record_date >= date.today().isoformat()
-    ).scalar() or 0
+    )
+
+    if category_id:
+        subcat_ids = [c.id for c in session.query(Category).filter(Category.parent_id == category_id).all()]
+        pc_query = session.query(ProductCategory.product_id).filter(ProductCategory.category_id.in_(subcat_ids + [category_id]))
+        today_count_query = today_count_query.filter(PriceRecord.product_id.in_(pc_query))
+
+    if subcategory_id:
+        pc_query = session.query(ProductCategory.product_id).filter(ProductCategory.category_id == subcategory_id)
+        today_count_query = today_count_query.filter(PriceRecord.product_id.in_(pc_query))
+
+    today_count = today_count_query.scalar() or 0
 
     session.close()
 
