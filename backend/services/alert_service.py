@@ -71,9 +71,11 @@ def check_and_trigger_alerts(session: Session, product_id: int, triggered_price:
 
         elif config.alert_type == "trend":
             # 趋势预警：价格涨跌时触发（需要至少两条记录）
+            if not latest_record:
+                continue
             prev_record = session.query(PriceRecord).filter(
                 PriceRecord.product_id == product_id,
-                PriceRecord.id != (latest_record.id if latest_record else 0)
+                PriceRecord.id != latest_record.id
             ).order_by(PriceRecord.record_date.desc()).first()
 
             if prev_record:

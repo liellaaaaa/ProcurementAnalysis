@@ -148,6 +148,9 @@ async def get_price_ranking(limit: int = Query(10, le=50), days: int = Query(7, 
         (PriceRecord.record_date == subquery.c.latest_date)
     ).all()
 
+    product_ids = [r.product_id for r in latest_records]
+    products_map = {p.id: p.product_name for p in session.query(Product).filter(Product.id.in_(product_ids)).all()}
+
     change_data = []
     for record in latest_records:
         old_date = record.record_date - timedelta(days=days)
@@ -161,7 +164,7 @@ async def get_price_ranking(limit: int = Query(10, le=50), days: int = Query(7, 
             change_pct = ((record.price - old_record.price) / old_record.price) * 100
             change_data.append({
                 "product_id": record.product_id,
-                "product_name": session.query(Product).filter(Product.id == record.product_id).first().product_name if session.query(Product).filter(Product.id == record.product_id).first() else "",
+                "product_name": products_map.get(record.product_id, ""),
                 "latest_price": record.price,
                 "old_price": old_record.price,
                 "change_percent": round(change_pct, 2),

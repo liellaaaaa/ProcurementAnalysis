@@ -13,7 +13,8 @@ from config import SOURCE_FRESHNESS_CONFIG, SCRAPER_MIN_INTERVAL
 router = APIRouter(prefix="/api/v1", tags=["scrapers"])
 
 SCRAPER_SCRIPTS = {
-    "shengyishe": "backend/scrapers/shengyishe.py"
+    "shengyishe": "backend/scrapers/shengyishe.py",
+    "akshare": "backend/scrapers/akshare.py"
 }
 
 
@@ -117,9 +118,10 @@ async def run_scraper(source: str):
         # 设置 PYTHONPATH 让子进程能找到 backend 模块
         env['PYTHONPATH'] = base_dir
 
-        # 直接用 python -m 运行模块
+        # 直接用 python -m 运行模块（文件路径转模块路径：backend/scrapers/xxx.py → backend.scrapers.xxx）
+        module_path = SCRAPER_SCRIPTS[source].replace('/', '.').replace('.py', '')
         result = subprocess.run(
-            [sys.executable, '-m', 'backend.scrapers.shengyishe'],
+            [sys.executable, '-m', module_path],
             capture_output=True,
             text=True,
             cwd=base_dir,
