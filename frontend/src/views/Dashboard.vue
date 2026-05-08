@@ -14,6 +14,7 @@
               <span>价格分析</span>
             </div>
             <div class="controls">
+              <SourceSelector v-model="filter1Source" />
               <CategorySelector
                 v-model="filter1CategoryId"
                 v-model:subcategoryValue="filter1SubcategoryId"
@@ -23,13 +24,13 @@
                 v-model="filter1DateRange"
                 type="daterange"
                 range-separator="至"
-                start-placeholder="开始日期"
-                end-placeholder="结束日期"
-                size="default"
-                style="width: 220px"
+                start-placeholder="开始"
+                end-placeholder="结束"
+                size="small"
+                style="width: 180px"
                 @change="handleFilter1Change"
               />
-              <el-select v-model="compareDays" placeholder="时间范围" size="default" style="width: 90px" @change="loadFilter1Charts">
+              <el-select v-model="compareDays" placeholder="时间范围" size="small" style="width: 72px" @change="loadFilter1Charts">
                 <el-option label="7天" :value="7" />
                 <el-option label="30天" :value="30" />
                 <el-option label="90天" :value="90" />
@@ -108,6 +109,7 @@
               <span>价格分布与关键指标</span>
             </div>
             <div class="controls">
+              <SourceSelector v-model="filter2Source" />
               <CategorySelector
                 v-model="filter2CategoryId"
                 v-model:subcategoryValue="filter2SubcategoryId"
@@ -117,10 +119,10 @@
                 v-model="filter2DateRange"
                 type="daterange"
                 range-separator="至"
-                start-placeholder="开始日期"
-                end-placeholder="结束日期"
-                size="default"
-                style="width: 220px"
+                start-placeholder="开始"
+                end-placeholder="结束"
+                size="small"
+                style="width: 180px"
                 @change="handleFilter2Change"
               />
             </div>
@@ -189,6 +191,7 @@
               <span>详细数据</span>
             </div>
             <div class="controls">
+              <SourceSelector v-model="filter3Source" />
               <CategorySelector
                 v-model="filter3CategoryId"
                 v-model:subcategoryValue="filter3SubcategoryId"
@@ -295,10 +298,11 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { priceApi } from '../api/price'
 import * as echarts from 'echarts'
 import CategorySelector from '../components/CategorySelector.vue'
+import SourceSelector from '../components/SourceSelector.vue'
 
 const lineChartRef = ref(null)
 const pieChartRef = ref(null)
@@ -320,13 +324,22 @@ const expandedRows = ref([])
 const filter1CategoryId = ref(null)
 const filter1SubcategoryId = ref(null)
 const filter1DateRange = ref([])
+const filter1Source = ref(null)
+
+watch(filter1Source, () => { loadFilter1Charts() })
 
 const filter2CategoryId = ref(null)
 const filter2SubcategoryId = ref(null)
 const filter2DateRange = ref([])
+const filter2Source = ref(null)
+
+watch(filter2Source, () => { loadFilter2Charts() })
 
 const filter3CategoryId = ref(null)
 const filter3SubcategoryId = ref(null)
+const filter3Source = ref(null)
+
+watch(filter3Source, () => { handleFilter3Change() })
 
 const pagination = ref({ page: 1, pageSize: 50, total: 0 })
 const compareDays = ref(7)
@@ -345,7 +358,8 @@ async function loadLatestPrices() {
   try {
     const params = {
       category_id: filter3CategoryId.value || null,
-      subcategory_id: filter3SubcategoryId.value || null
+      subcategory_id: filter3SubcategoryId.value || null,
+      source: filter3Source.value || null
     }
     const res = await priceApi.getLatestPrices(params)
     latestPrices.value = (res.data.data || []).map(p => ({ ...p, history: [] }))
@@ -382,7 +396,7 @@ async function handleExpandChange(row) {
     expandedRows.value = [id]
     if (!row.history || row.history.length === 0) {
       try {
-        const res = await priceApi.getPriceHistory(id, 365)
+        const res = await priceApi.getPriceHistory(id, 365, filter3Source.value)
         const historyData = res.data || []
         const product = latestPrices.value.find(p => p.product_id === id)
         if (product) {
@@ -434,7 +448,8 @@ async function loadIndicatorCards() {
     const params = {
       days: days,
       category_id: filter2CategoryId.value || null,
-      subcategory_id: filter2SubcategoryId.value || null
+      subcategory_id: filter2SubcategoryId.value || null,
+      source: filter2Source.value || null
     }
     const res = await priceApi.getDashboardRanking(params)
     const rising = res.data.rising || []
@@ -491,7 +506,8 @@ async function loadLineChartData() {
       null,
       days,
       filter1CategoryId.value || null,
-      filter1SubcategoryId.value || null
+      filter1SubcategoryId.value || null,
+      filter1Source.value || null
     )
 
     if (!res.data || !res.data.dates || res.data.dates.length === 0) {
@@ -580,7 +596,8 @@ async function loadRankingData() {
       limit: 10,
       days: days,
       category_id: filter1CategoryId.value || null,
-      subcategory_id: filter1SubcategoryId.value || null
+      subcategory_id: filter1SubcategoryId.value || null,
+      source: filter1Source.value || null
     }
     const res = await priceApi.getDashboardRanking(params)
     const rising = res.data.rising || []
@@ -608,7 +625,8 @@ async function loadDistributionData() {
     const params = {
       days: 30,
       category_id: filter2CategoryId.value || null,
-      subcategory_id: filter2SubcategoryId.value || null
+      subcategory_id: filter2SubcategoryId.value || null,
+      source: filter2Source.value || null
     }
     const res = await priceApi.getDashboardDistribution(params)
     if (res.data.labels && res.data.labels.length > 0) {

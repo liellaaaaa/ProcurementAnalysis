@@ -20,11 +20,12 @@ export const priceApi = {
   getDashboardRanking(params) {
     return api.get('/prices/dashboard/ranking', { params })
   },
-  getDashboardHistoryCompare(productIds, days = 30, categoryId, subcategoryId) {
+  getDashboardHistoryCompare(productIds, days = 30, categoryId, subcategoryId, source) {
     const params = { days }
     if (productIds) params.product_ids = productIds
     if (categoryId) params.category_id = categoryId
     if (subcategoryId) params.subcategory_id = subcategoryId
+    if (source) params.source = source
     return api.get('/prices/dashboard/history/compare', { params })
   },
   getDashboardVolatility(days = 7) {
