@@ -548,7 +548,7 @@ async def generate_excel_report(
     ).order_by(PriceRecord.record_date.desc()).all()
 
     # 表头
-    summary_headers = ["日期", "产品名称", "规格", "品牌", "地区", "供应商", "价格", "趋势", "涨跌幅(%)", "数据来源"]
+    summary_headers = ["日期", "产品名称", "规格", "品牌", "地区", "供应商", "价格", "趋势", "较上期涨跌幅(%)", "数据来源"]
     summary_ws.append(summary_headers)
 
     # 设置表头样式
@@ -656,7 +656,7 @@ async def generate_excel_report(
     # ========== 工作表4: 涨跌排行图表 ==========
     if stats_list:
         chart_ws = wb.create_sheet("涨跌排行")
-        chart_ws.append(["产品名称", "涨跌幅(%)"])
+        chart_ws.append(["产品名称", "较昨日涨跌幅(%)"])
 
         # 获取最新价格变化率
         subquery = session.query(
@@ -689,7 +689,7 @@ async def generate_excel_report(
         bar_chart.title = "产品价格涨跌排行"
         bar_chart.style = 10
         bar_chart.y_axis.title = "产品"
-        bar_chart.x_axis.title = "涨跌幅(%)"
+        bar_chart.x_axis.title = "较昨日涨跌幅(%)"
 
         data = Reference(chart_ws, min_col=2, min_row=1, max_row=len(ranking) + 1)
         cats = Reference(chart_ws, min_col=1, min_row=2, max_row=len(ranking) + 1)

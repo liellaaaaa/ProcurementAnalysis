@@ -231,7 +231,7 @@
                         </span>
                       </template>
                     </el-table-column>
-                    <el-table-column prop="change_percent" label="涨跌幅" width="100">
+                    <el-table-column prop="change_percent" label="较昨日涨跌幅" width="100">
                       <template #default="{ row: detail }">
                         <span :class="detail.change_percent > 0 ? 'text-rise' : detail.change_percent < 0 ? 'text-fall' : 'text-flat'">
                           {{ detail.change_percent > 0 ? '+' : '' }}{{ detail.change_percent }}%
@@ -251,7 +251,7 @@
                 <span class="price-value">¥{{ row.price?.toLocaleString() }}</span>
               </template>
             </el-table-column>
-            <el-table-column prop="change_percent" label="涨跌幅" width="100">
+            <el-table-column prop="change_percent" label="较昨日涨跌幅" width="100">
               <template #default="{ row }">
                 <span :class="row.change_percent > 0 ? 'text-rise' : row.change_percent < 0 ? 'text-fall' : 'text-flat'">
                   {{ row.change_percent > 0 ? '+' : '' }}{{ row.change_percent }}%
@@ -345,8 +345,8 @@ const pagination = ref({ page: 1, pageSize: 50, total: 0 })
 const compareDays = ref(7)
 
 const indicatorCards = ref([
-  { type: '同比最高', selected: 'yoy', productName: '-', changePercent: 0, trend: 'rise', price: 0 },
-  { type: '环比最高', selected: 'qoq', productName: '-', changePercent: 0, trend: 'rise', price: 0 }
+  { type: '较昨日同比最高', selected: 'yoy', productName: '-', changePercent: 0, trend: 'rise', price: 0 },
+  { type: '较昨日环比最高', selected: 'qoq', productName: '-', changePercent: 0, trend: 'rise', price: 0 }
 ])
 
 let lineChart = null
@@ -457,7 +457,7 @@ async function loadIndicatorCards() {
     if (rising.length > 0) {
       const top1 = rising[0]
       indicatorCards.value[0] = {
-        type: '同比最高',
+        type: '较昨日同比最高',
         selected: 'yoy',
         productName: top1.product_name,
         changePercent: Math.abs(top1.change_percent),
@@ -469,7 +469,7 @@ async function loadIndicatorCards() {
     if (rising.length > 1) {
       const top2 = rising[1]
       indicatorCards.value[1] = {
-        type: '环比最高',
+        type: '较昨日环比最高',
         selected: 'qoq',
         productName: top2.product_name,
         changePercent: Math.abs(top2.change_percent),
@@ -479,7 +479,7 @@ async function loadIndicatorCards() {
     } else if (rising.length === 1) {
       const top1 = rising[0]
       indicatorCards.value[1] = {
-        type: '环比最高',
+        type: '较昨日环比最高',
         selected: 'qoq',
         productName: top1.product_name + '(次)',
         changePercent: Math.max(0, Math.abs(top1.change_percent) - 5),

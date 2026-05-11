@@ -137,7 +137,7 @@ def bar_chart_to_bytes(
 
         ax.set_yticks(y_pos)
         ax.set_yticklabels(categories, fontsize=9)
-        ax.set_xlabel('涨跌幅 (%)', fontsize=10)
+        ax.set_xlabel('较昨日涨跌幅 (%)', fontsize=10)
         ax.set_title(title, fontsize=14, pad=15, fontweight='bold')
         ax.grid(True, alpha=0.3, axis='x')
 

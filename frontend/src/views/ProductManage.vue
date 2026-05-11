@@ -157,7 +157,7 @@
               <span :class="['trend-badge', row.trend]">{{ row.trend }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="change_percent" label="涨跌%" width="90">
+          <el-table-column prop="change_percent" label="较昨日涨跌%" width="90">
             <template #default="{ row }">
               <span :class="row.change_percent > 0 ? 'text-rise' : row.change_percent < 0 ? 'text-fall' : 'text-flat'">
                 {{ row.change_percent > 0 ? '+' : '' }}{{ row.change_percent }}%

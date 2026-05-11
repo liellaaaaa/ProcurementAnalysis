@@ -104,7 +104,7 @@
                     <line x1="6" y1="20" x2="6" y2="14"/>
                   </svg>
                 </div>
-                <span>涨跌排行 (近7天)</span>
+                <span>较昨日涨跌排行</span>
               </div>
             </div>
           </template>
