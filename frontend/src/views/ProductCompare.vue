@@ -117,7 +117,16 @@ function getProductColor(id) {
 
 async function loadProducts() {
   try {
-    const res = await productApi.getProducts({ limit: 500 })
+    const params = { limit: 500 }
+    if (selectedCategoryId.value) {
+      params.category_id = selectedCategoryId.value
+    }
+    if (selectedSubcategoryId.value) {
+      params.subcategory_id = selectedSubcategoryId.value
+    }
+    console.log('Loading products with params:', params)
+    const res = await productApi.getProducts(params)
+    console.log('Products loaded:', res.data.length)
     products.value = res.data
   } catch (e) {
     console.error('Failed to load products', e)
@@ -125,6 +134,7 @@ async function loadProducts() {
 }
 
 function handleCategoryChange({ categoryId, subcategoryId }) {
+  console.log('Category changed:', categoryId, subcategoryId)
   selectedCategoryId.value = categoryId
   selectedSubcategoryId.value = subcategoryId
   selectedProducts.value = []

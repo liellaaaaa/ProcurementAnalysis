@@ -102,6 +102,7 @@ async function loadLevelTwoCategories(parentId) {
 }
 
 function onLevelOneChange(val) {
+  console.log('Level one changed:', val)
   levelTwo.value = null
   levelTwoCategories.value = []
   emit('update:modelValue', val)
