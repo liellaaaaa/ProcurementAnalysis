@@ -106,14 +106,8 @@ let chartInstance = null
 const colors = ['#0077cc', '#00a8e8', '#4db8e8', '#005fa3', '#003d6b', '#006594']
 
 const filteredProducts = computed(() => {
-  let result = products.value
-  if (selectedCategoryId.value) {
-    result = result.filter(p => p.category_id === selectedCategoryId.value || p.main_category_id === selectedCategoryId.value)
-  }
-  if (selectedSubcategoryId.value) {
-    result = result.filter(p => p.category_id === selectedSubcategoryId.value)
-  }
-  return result
+  // 产品列表已在 loadProducts 时按分类筛选，这里直接返回
+  return products.value
 })
 
 function getProductColor(id) {
@@ -123,14 +117,7 @@ function getProductColor(id) {
 
 async function loadProducts() {
   try {
-    const params = { limit: 500 }
-    if (selectedCategoryId.value) {
-      params.category_id = selectedCategoryId.value
-    }
-    if (selectedSubcategoryId.value) {
-      params.subcategory_id = selectedSubcategoryId.value
-    }
-    const res = await productApi.getProducts(params)
+    const res = await productApi.getProducts({ limit: 500 })
     products.value = res.data
   } catch (e) {
     console.error('Failed to load products', e)
