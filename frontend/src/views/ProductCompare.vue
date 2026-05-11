@@ -107,6 +107,7 @@ const colors = ['#0077cc', '#00a8e8', '#4db8e8', '#005fa3', '#003d6b', '#006594'
 
 const filteredProducts = computed(() => {
   // 产品列表已在 loadProducts 时按分类筛选，这里直接返回
+  console.log('filteredProducts computed:', products.value.length, 'products')
   return products.value
 })
 
