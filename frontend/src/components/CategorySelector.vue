@@ -9,7 +9,7 @@
       class="selector-primary"
     >
       <template #prefix>
-        <span class="selector-prefix">{{ selectedLevelOneName || '一级' }}</span>
+        <span class="selector-prefix">一级</span>
       </template>
       <el-option
         v-for="cat in levelOneCategories"
@@ -31,7 +31,7 @@
       class="selector-secondary"
     >
       <template #prefix>
-        <span class="selector-prefix">{{ selectedLevelTwoName || '二级' }}</span>
+        <span class="selector-prefix">二级</span>
       </template>
       <el-option
         v-for="cat in levelTwoCategories"
@@ -46,7 +46,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { categoryApi } from '../api/price'
 
 const props = defineProps({
@@ -66,18 +66,6 @@ const levelOne = ref(props.modelValue)
 const levelTwo = ref(props.subcategoryValue)
 const levelOneCategories = ref([])
 const levelTwoCategories = ref([])
-
-const selectedLevelOneName = computed(() => {
-  if (!levelOne.value) return ''
-  const cat = levelOneCategories.value.find(c => c.id === levelOne.value)
-  return cat ? cat.name : ''
-})
-
-const selectedLevelTwoName = computed(() => {
-  if (!levelTwo.value) return ''
-  const cat = levelTwoCategories.value.find(c => c.id === levelTwo.value)
-  return cat ? cat.name : ''
-})
 
 async function loadLevelOneCategories() {
   try {
