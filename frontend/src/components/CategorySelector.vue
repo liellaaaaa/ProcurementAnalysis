@@ -144,6 +144,14 @@ onMounted(() => {
   gap: 4px;
 }
 
+.category-selector :deep(.selector-primary) {
+  width: 130px;
+}
+
+.category-selector :deep(.selector-secondary) {
+  width: 130px;
+}
+
 .selector-prefix {
   font-size: 12px;
   color: var(--color-primary);
@@ -151,7 +159,7 @@ onMounted(() => {
   padding-right: 4px;
   border-right: 1px solid var(--border-color);
   margin-right: 6px;
-  max-width: 80px;
+  max-width: 100px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

@@ -77,7 +77,7 @@ watch(() => props.modelValue, (val) => {
 
 <style scoped>
 .source-selector {
-  width: 90px;
+  width: 160px;
   flex-shrink: 0;
 }
 
