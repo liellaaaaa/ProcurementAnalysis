@@ -6,6 +6,7 @@ from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime
 import json
+import re
 from pathlib import Path
 
 router = APIRouter(prefix="/api/v1/operation-logs", tags=["操作日志"])
@@ -13,6 +14,20 @@ router = APIRouter(prefix="/api/v1/operation-logs", tags=["操作日志"])
 # 日志文件路径
 LOG_DIR = Path(__file__).parent.parent.parent.parent / "log"
 LOG_FILE = LOG_DIR / "operations.log"
+
+# 允许的 operator 字符：字母、数字、下划线、汉字
+OPERATOR_PATTERN = re.compile(r'^[\w\u4e00-\u9fff]{1,50}$')
+
+
+def sanitize_operator(value: str) -> str:
+    """清理 operator 字段，防止注入和信息泄露"""
+    if not value or not isinstance(value, str):
+        return "system"
+    # 移除潜在的危险字符，只保留字母数字下划线汉字
+    cleaned = value.strip()[:50]  # 限制长度
+    if OPERATOR_PATTERN.match(cleaned):
+        return cleaned
+    return "system"
 
 
 class OperationLogResponse(BaseModel):
@@ -94,7 +109,9 @@ async def get_operation_logs(
         action=log.get("action", ""),
         details=log.get("details", {}),
         result=log.get("result", "SUCCESS"),
-        operator=log.get("details", {}).get("operator", "system") if isinstance(log.get("details"), dict) else "system"
+        operator=sanitize_operator(
+            log.get("details", {}).get("operator", "system") if isinstance(log.get("details"), dict) else "system"
+        )
     ) for log in logs]
 
 
