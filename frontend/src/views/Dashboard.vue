@@ -197,6 +197,13 @@
                 v-model:subcategoryValue="filter3SubcategoryId"
                 @change="handleFilter3Change"
               />
+              <el-input
+                v-model="searchKeyword"
+                placeholder="搜索产品/数据源"
+                size="small"
+                clearable
+                style="width: 160px"
+              />
               <span class="record-count">{{ filteredAndSortedData.length }} 条记录</span>
             </div>
           </div>
@@ -338,6 +345,7 @@ watch(filter2Source, () => { loadFilter2Charts() })
 const filter3CategoryId = ref(null)
 const filter3SubcategoryId = ref(null)
 const filter3Source = ref(null)
+const searchKeyword = ref('')
 
 watch(filter3Source, () => { handleFilter3Change() })
 
@@ -379,7 +387,12 @@ function handleSizeChange(size) {
 }
 
 const filteredAndSortedData = computed(() => {
-  return [...latestPrices.value]
+  const keyword = searchKeyword.value.trim().toLowerCase()
+  if (!keyword) return [...latestPrices.value]
+  return [...latestPrices.value].filter(p =>
+    (p.product_name || '').toLowerCase().includes(keyword) ||
+    (p.source || '').toLowerCase().includes(keyword)
+  )
 })
 
 const paginatedData = computed(() => {
