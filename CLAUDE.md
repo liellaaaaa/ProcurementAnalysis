@@ -60,6 +60,7 @@ log/                     # 操作日志目录
 
 ### 后端
 ```bash
+venv\Scripts\activate
 cd C:\Users\windows\Desktop\ProcurementAnalysis
 pip install -r requirements.txt
 playwright install chromium  # 安装浏览器

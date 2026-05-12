@@ -79,7 +79,7 @@
 
         <div class="nav-actions">
           <div class="nav-divider"></div>
-          <el-button type="primary" size="small" class="nav-refresh-btn" @click="triggerUpdate">
+          <el-button type="primary" size="small" class="nav-refresh-btn" @click="triggerUpdate('shengyishe')">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="23 4 23 10 17 10"/>
               <polyline points="1 20 1 14 7 14"/>
@@ -120,10 +120,32 @@
         <p class="warning-title">以下数据源需要更新</p>
         <ul class="warning-list">
           <li v-for="s in freshnessData.sources" :key="s.source" :class="{ 'needs-update': s.needs_update }">
-            <span class="source-name">{{ s.source }}</span>
-            <span class="source-status">{{ s.message }}</span>
+            <div class="source-info">
+              <span class="source-name">{{ sourceLabelMap[s.source] || s.source }}</span>
+              <span class="source-status">{{ s.message }}</span>
+            </div>
+            <el-button
+              v-if="s.needs_update"
+              size="small"
+              type="primary"
+              :loading="refreshingSource === s.source"
+              @click="triggerUpdate(s.source)"
+            >
+              刷新
+            </el-button>
+            <el-tag v-else size="small" type="success">已是最新</el-tag>
           </li>
         </ul>
+        <div class="refresh-all-wrapper">
+          <el-button
+            type="primary"
+            :loading="refreshingSource === 'all'"
+            @click="triggerUpdate('all')"
+            class="btn-refresh-all"
+          >
+            全部刷新
+          </el-button>
+        </div>
       </div>
       <div v-else class="freshness-ok">
         <div class="ok-icon">
@@ -135,10 +157,7 @@
         <p class="ok-text">所有数据已是最新</p>
       </div>
       <template #footer>
-        <el-button v-if="!updating" @click="handleLater" class="btn-later">稍后</el-button>
-        <el-button v-if="!updating && freshnessData.any_needs_update" type="primary" @click="triggerUpdate" class="btn-update">
-          立即更新
-        </el-button>
+        <el-button v-if="!updating" @click="handleLater" class="btn-later">关闭</el-button>
       </template>
     </el-dialog>
 
@@ -154,6 +173,12 @@ import { ElMessage } from 'element-plus'
 const showFreshnessDialog = ref(false)
 const freshnessData = ref({ any_needs_update: false, sources: [] })
 const updating = ref(false)
+const refreshingSource = ref(null)
+
+const sourceLabelMap = {
+  'shengyishe': '生意社',
+  'akshare': 'AKShare'
+}
 
 const FRESHNESS_CACHE_KEY = 'procurement_freshness_check_ts'
 const FRESHNESS_CACHE_DURATION = 60 * 60 * 1000 // 1小时
@@ -180,24 +205,33 @@ function handleLater() {
   showFreshnessDialog.value = false
 }
 
-async function triggerUpdate() {
-  updating.value = true
+async function triggerUpdate(source = 'shengyishe') {
+  refreshingSource.value = source
   try {
-    const res = await scraperApi.runScraper('shengyishe')
-    if (res.data?.status === 'skipped') {
-      ElMessage.info(res.data.message || '请稍后再试')
-      updating.value = false
-      showFreshnessDialog.value = false
-      return
+    if (source === 'all') {
+      // 依次刷新所有需要更新的数据源
+      const sourcesToUpdate = freshnessData.value.sources
+        .filter(s => s.needs_update)
+        .map(s => s.source)
+      for (const src of sourcesToUpdate) {
+        await scraperApi.runScraper(src)
+      }
+      ElMessage.success('全部数据源更新成功')
+    } else {
+      const res = await scraperApi.runScraper(source)
+      if (res.data?.status === 'skipped') {
+        ElMessage.info(res.data.message || '请稍后再试')
+        refreshingSource.value = null
+        return
+      }
+      ElMessage.success(sourceLabelMap[source] + ' 数据更新成功')
     }
-    ElMessage.success('数据更新成功')
     localStorage.removeItem(FRESHNESS_CACHE_KEY)
     window.location.reload()
   } catch (e) {
     console.error('Update failed', e)
     ElMessage.error('数据更新失败：' + (e?.response?.data?.detail || e.message || '请稍后重试'))
-    updating.value = false
-    showFreshnessDialog.value = false
+    refreshingSource.value = null
   }
 }
 
@@ -687,6 +721,39 @@ body ::selection {
   align-items: center;
   padding: 10px 0;
   border-bottom: 1px solid var(--border-light);
+}
+
+.warning-list li:last-child {
+  border-bottom: none;
+}
+
+.source-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.source-info .source-name {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.source-info .source-status {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.refresh-all-wrapper {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-light);
+  text-align: center;
+}
+
+.btn-refresh-all {
+  background: var(--color-primary) !important;
+  border-color: var(--color-primary) !important;
+  font-weight: 600 !important;
 }
 
 .warning-list li:last-child {
