@@ -856,17 +856,18 @@ async def generate_excel_report(
         cell.alignment = Alignment(horizontal='center', vertical='center')
 
     alert_records = session.query(
-        AlertRecord, Product.product_name
-    ).join(Product, AlertRecord.product_id == Product.id).filter(
+        AlertRecord, Product.product_name, AlertConfig.alert_type
+    ).join(Product, AlertRecord.product_id == Product.id
+    ).join(AlertConfig, AlertRecord.alert_config_id == AlertConfig.id).filter(
         AlertRecord.triggered_at >= start_date,
         AlertRecord.triggered_at <= end_date
     ).order_by(AlertRecord.triggered_at.desc()).limit(100).all()
 
-    for record, pname in alert_records:
+    for record, pname, alert_type in alert_records:
         alert_ws.append([
             record.id,
             pname,
-            record.alert_type or "-",
+            alert_type or "-",
             record.alert_message or "-",
             format_date(record.triggered_at) if record.triggered_at else "-"
         ])
