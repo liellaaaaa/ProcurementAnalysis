@@ -9,6 +9,7 @@
               v-model:subcategoryValue="selectedSubcategoryId"
               @change="handleCategoryChange"
             />
+            <IndustrySelector v-model="selectedIndustry" @change="handleIndustryChange" />
             <el-button type="primary" class="add-btn" @click="showProductDialog(null)">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="12" y1="5" x2="12" y2="19"/>
@@ -31,6 +32,11 @@
                 <span class="name-dot"></span>
                 <span class="name-text">{{ row.product_name }}</span>
               </div>
+            </template>
+          </el-table-column>
+          <el-table-column prop="industry" label="行业" width="80">
+            <template #default="{ row }">
+              <span class="industry-tag">{{ row.industry || '-' }}</span>
             </template>
           </el-table-column>
           <el-table-column prop="category" label="分类" width="100">
@@ -89,6 +95,9 @@
           </el-form-item>
           <el-form-item label="产品名称">
             <el-input v-model="productForm.product_name" placeholder="产品名称" />
+          </el-form-item>
+          <el-form-item label="行业">
+            <IndustrySelector v-model="productForm.industry" />
           </el-form-item>
           <el-form-item label="品类">
             <el-select v-model="productForm.category" placeholder="选择分类" style="width: 100%">
@@ -211,12 +220,14 @@ import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { productApi, priceApi, categoryApi } from '../api/price'
 import CategorySelector from '../components/CategorySelector.vue'
+import IndustrySelector from '../components/IndustrySelector.vue'
 
 const loading = ref(false)
 const products = ref([])
 const categoriesTree = ref([])
 const selectedCategoryId = ref(null)
 const selectedSubcategoryId = ref(null)
+const selectedIndustry = ref(null)
 const productDialogVisible = ref(false)
 const priceDialogVisible = ref(false)
 const addPriceDialogVisible = ref(false)
@@ -226,6 +237,7 @@ const priceRecords = ref([])
 const productForm = ref({
   product_code: '',
   product_name: '',
+  industry: '化工',
   category: '化工',
   unit: '元/吨',
   source: '',
@@ -264,6 +276,9 @@ async function loadProducts() {
     if (selectedSubcategoryId.value) {
       params.subcategory_id = selectedSubcategoryId.value
     }
+    if (selectedIndustry.value) {
+      params.industry = selectedIndustry.value
+    }
     const res = await productApi.getProducts(params)
     products.value = res.data
   } catch (e) {
@@ -276,6 +291,11 @@ async function loadProducts() {
 function handleCategoryChange({ categoryId, subcategoryId }) {
   selectedCategoryId.value = categoryId
   selectedSubcategoryId.value = subcategoryId
+  loadProducts()
+}
+
+function handleIndustryChange({ industry }) {
+  selectedIndustry.value = industry
   loadProducts()
 }
 
@@ -294,6 +314,7 @@ async function showProductDialog(product) {
     productForm.value = {
       product_code: '',
       product_name: '',
+      industry: '化工',
       category: '化工',
       unit: '元/吨',
       source: '',
@@ -453,6 +474,15 @@ async function deletePrice(id) {
   color: var(--color-primary);
   border-radius: 6px;
   font-weight: 500;
+}
+
+.industry-tag {
+  font-size: 11px;
+  padding: 3px 8px;
+  background: rgba(139, 92, 246, 0.1);
+  color: #8B5CF6;
+  border-radius: 6px;
+  font-weight: 600;
 }
 
 .source-text {

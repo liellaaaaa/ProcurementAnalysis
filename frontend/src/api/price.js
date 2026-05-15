@@ -20,12 +20,16 @@ export const priceApi = {
   getDashboardRanking(params) {
     return api.get('/prices/dashboard/ranking', { params })
   },
-  getDashboardHistoryCompare(productIds, days = 30, categoryId, subcategoryId, source) {
+  getDashboardVolatility(params) {
+    return api.get('/prices/dashboard/volatility', { params })
+  },
+  getDashboardHistoryCompare(productIds, days = 30, categoryId, subcategoryId, source, industry) {
     const params = { days }
     if (productIds) params.product_ids = productIds
     if (categoryId) params.category_id = categoryId
     if (subcategoryId) params.subcategory_id = subcategoryId
     if (source) params.source = source
+    if (industry) params.industry = industry
     return api.get('/prices/dashboard/history/compare', { params })
   },
   getDashboardVolatility(days = 7) {
@@ -48,6 +52,9 @@ export const productApi = {
   },
   deleteProduct(id) {
     return api.delete(`/products/${id}`)
+  },
+  batchImportProducts(data) {
+    return api.post('/products/batch', data)
   }
 }
 
@@ -90,6 +97,12 @@ export const reportApi = {
     if (startDate) params.start_date = startDate
     if (endDate) params.end_date = endDate
     return api.get('/reports/excel', { params, responseType: 'blob' })
+  },
+  downloadHtml(type = 'weekly', startDate = null, endDate = null) {
+    const params = { report_type: type }
+    if (startDate) params.start_date = startDate
+    if (endDate) params.end_date = endDate
+    return api.get('/reports/html', { params, responseType: 'blob' })
   }
 }
 

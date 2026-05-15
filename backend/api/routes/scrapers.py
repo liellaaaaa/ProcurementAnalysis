@@ -6,7 +6,7 @@ import os
 from datetime import date, datetime
 
 from backend.scrapers import ScraperRegistry
-from backend.models.database import get_session, PriceRecord, ScraperLog
+from backend.models.database import get_session, PriceRecord, ScraperLog, Product
 from backend.services.operation_logger import OperationLogger
 from config import SOURCE_FRESHNESS_CONFIG, SCRAPER_MIN_INTERVAL
 
@@ -148,3 +148,58 @@ async def run_scraper(source: str):
     except Exception as e:
         OperationLogger.log_failure(OperationLogger.MODULE_SCRAPER, OperationLogger.OP_SCRAPE, {"source": source}, str(e))
         raise HTTPException(status_code=500, detail=f"Scraper error: {str(e)}")
+
+
+@router.post("/scrapers/{source}/scrape-history")
+async def scrape_historical(source: str, days: int = Query(default=365, description="爬取天数")):
+    """爬取指定数据源所有产品的历史价格数据"""
+    if source not in SCRAPER_SCRIPTS:
+        raise HTTPException(status_code=404, detail=f"Unknown source: {source}")
+
+    from backend.scrapers.shengyishe import ShengyisheScraper
+
+    session = get_session()
+    try:
+        # 获取该数据源的所有产品
+        products = session.query(Product).filter(
+            Product.source == source,
+            Product.is_active == True
+        ).all()
+
+        if not products:
+            raise HTTPException(status_code=404, detail=f"No active products found for source: {source}")
+
+        scraper = ShengyisheScraper()
+        total_saved = 0
+        failed_products = []
+
+        for product in products:
+            try:
+                print(f"\n=== 开始爬取产品: {product.product_name} (ID: {product.id}) ===")
+                records = scraper.scrape_historical_prices(product.id, days)
+                if records:
+                    saved = scraper.save_historical_to_db(product.id, records)
+                    total_saved += saved
+                    print(f"  -> 新增 {saved} 条记录")
+                else:
+                    print(f"  -> 无新数据")
+
+                import time
+                time.sleep(2)  # 速率控制
+
+            except Exception as e:
+                print(f"  产品 {product.product_name} 爬取失败: {e}")
+                failed_products.append(product.product_name)
+                continue
+
+    finally:
+        session.close()
+
+    return {
+        "status": "completed",
+        "source": source,
+        "total_products": len(products),
+        "total_records_saved": total_saved,
+        "failed_products": failed_products if failed_products else None,
+        "message": f"成功保存 {total_saved} 条历史记录"
+    }

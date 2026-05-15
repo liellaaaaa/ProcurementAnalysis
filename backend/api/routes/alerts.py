@@ -44,6 +44,7 @@ class AlertRecordResponse(BaseModel):
     alert_config_id: Optional[int]
     product_id: int
     product_name: Optional[str] = None
+    alert_type: Optional[str] = None
     alert_message: str
     triggered_price: float
     triggered_at: datetime
@@ -197,7 +198,9 @@ async def get_alert_records(
 ):
     """获取预警记录列表"""
     session = get_session()
-    query = session.query(AlertRecord, Product.product_name).join(Product)
+    query = session.query(AlertRecord, Product.product_name, AlertConfig.alert_type).join(
+        Product, AlertRecord.product_id == Product.id
+    ).join(AlertConfig, AlertRecord.alert_config_id == AlertConfig.id)
 
     if product_id:
         query = query.filter(AlertRecord.product_id == product_id)
@@ -206,12 +209,13 @@ async def get_alert_records(
 
     results = query.order_by(AlertRecord.triggered_at.desc()).limit(limit).all()
     response = []
-    for record, product_name in results:
+    for record, product_name, alert_type in results:
         response.append(AlertRecordResponse(
             id=record.id,
             alert_config_id=record.alert_config_id,
             product_id=record.product_id,
             product_name=product_name,
+            alert_type=alert_type,
             alert_message=record.alert_message,
             triggered_price=record.triggered_price,
             triggered_at=record.triggered_at,

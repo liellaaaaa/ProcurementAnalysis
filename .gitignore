@@ -48,3 +48,15 @@ data/database/*.db
 .env.*.local
 # PDF files
 *.pdf
+
+# Temp files
+temp/
+temp_*.py
+*.tmp
+
+# Documentation (can be useful but not essential)
+# HISTORICAL_DATA_CRAWLING_REPORT.md
+# REQUIREMENTS_FROZEN.md
+
+# Scripts - keep useful ones, ignore destructive ones
+scripts/clear_all_data.py

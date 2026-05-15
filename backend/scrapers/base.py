@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Dict, Optional
 import requests
@@ -17,6 +17,10 @@ class ScrapedItem:
     change_percent: float
     record_date: str
     raw_data: Dict
+    unit: str = "元/吨"
+    price_original: str = ""
+    price_category: str = "现货"
+    extra_data: Dict = field(default_factory=dict)
 
 class BaseScraper(ABC):
     def __init__(self, name: str):

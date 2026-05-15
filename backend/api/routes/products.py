@@ -11,6 +11,7 @@ router = APIRouter(prefix="/api/v1/products", tags=["产品管理"])
 class ProductCreate(BaseModel):
     product_code: str
     product_name: str
+    industry: Optional[str] = "化工"
     category: Optional[str] = "化工"
     unit: Optional[str] = "元/吨"
     source: Optional[str] = None
@@ -21,9 +22,10 @@ class ProductResponse(BaseModel):
     id: int
     product_code: str
     product_name: str
-    category: Optional[str]
-    unit: str
-    source: Optional[str]
+    industry: Optional[str] = None
+    category: Optional[str] = None
+    unit: Optional[str] = None
+    source: Optional[str] = None
     is_active: bool
 
     class Config:
@@ -31,16 +33,19 @@ class ProductResponse(BaseModel):
 
 @router.get("", response_model=List[ProductResponse])
 async def get_products(
+    industry: Optional[str] = None,
     category: Optional[str] = None,
     category_id: Optional[int] = None,
     subcategory_id: Optional[int] = None,
     is_active: Optional[bool] = True,
     limit: int = Query(100, le=500)
 ):
-    """获取产品列表（支持品类筛选）"""
+    """获取产品列表（支持行业、品类筛选）"""
     session = get_session()
     query = session.query(Product)
 
+    if industry:
+        query = query.filter(Product.industry == industry)
     if category:
         query = query.filter(Product.category == category)
     if is_active is not None:
@@ -116,6 +121,7 @@ async def create_product(product: ProductCreate):
 
 class ProductUpdate(BaseModel):
     product_name: Optional[str] = None
+    industry: Optional[str] = None
     category: Optional[str] = None
     unit: Optional[str] = None
     source: Optional[str] = None
@@ -183,3 +189,80 @@ async def delete_product(product_id: int):
         product_name=product.product_name
     )
     return {"message": "产品已删除"}
+
+
+class BatchProductItem(BaseModel):
+    product_name: str
+    industry: str
+    category: Optional[str] = "化工"
+    unit: Optional[str] = "元/吨"
+    source: Optional[str] = "shengyishe"
+    source_url: Optional[str] = None
+
+
+class BatchProductRequest(BaseModel):
+    products: List[BatchProductItem]
+
+
+class BatchProductResponse(BaseModel):
+    total: int
+    created: int
+    skipped: int
+    results: List[dict]
+
+
+@router.post("/batch", response_model=BatchProductResponse)
+async def batch_import_products(batch: BatchProductRequest):
+    """批量导入产品（支持按 product_name + source_url 查重，已存在则跳过）"""
+    import hashlib
+    session = get_session()
+    created_count = 0
+    skipped_count = 0
+    results = []
+
+    for item in batch.products:
+        # 按 product_name + source_url 查重
+        existing = session.query(Product).filter(
+            Product.product_name == item.product_name,
+            Product.source_url == item.source_url
+        ).first()
+
+        if existing:
+            skipped_count += 1
+            results.append({
+                "product_name": item.product_name,
+                "status": "skipped",
+                "reason": "已存在"
+            })
+            continue
+
+        # 生成产品编码
+        raw = f"{item.product_name}|{item.source_url or ''}"
+        product_code = hashlib.md5(raw.encode()).hexdigest()[:12].upper()
+
+        new_product = Product(
+            product_code=product_code,
+            product_name=item.product_name,
+            industry=item.industry,
+            category=item.category,
+            unit=item.unit,
+            source=item.source,
+            source_url=item.source_url
+        )
+        session.add(new_product)
+        created_count += 1
+        results.append({
+            "product_name": item.product_name,
+            "status": "created",
+            "product_code": product_code
+        })
+
+    session.commit()
+    session.close()
+
+    return BatchProductResponse(
+        total=len(batch.products),
+        created=created_count,
+        skipped=skipped_count,
+        results=results
+    )

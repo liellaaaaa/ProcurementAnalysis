@@ -89,6 +89,17 @@
             <span class="btn-text">下载 Excel 报表</span>
             <span class="btn-desc">便于数据分析处理</span>
           </button>
+          <button class="download-btn html" @click="downloadHtml">
+            <div class="btn-icon-wrapper html">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="16 18 22 12 16 6"/>
+                <polyline points="8 6 2 12 8 18"/>
+                <line x1="12" y1="2" x2="12" y2="22"/>
+              </svg>
+            </div>
+            <span class="btn-text">下载 HTML 报表</span>
+            <span class="btn-desc">交互式图表展示</span>
+          </button>
         </div>
       </el-card>
 
@@ -139,7 +150,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { reportApi } from '../api/price'
+import { reportApi, priceApi } from '../api/price'
 
 const reportType = ref('weekly')
 const month = ref('')
@@ -173,32 +184,66 @@ function getEffectiveDates() {
 
 async function loadStats() {
   try {
-    let statsRes
-    if (reportType.value === 'weekly') {
-      statsRes = await reportApi.getWeeklyStats()
-    } else {
-      statsRes = await reportApi.getMonthlyStats(month.value)
+    const { startDate: s, endDate: e } = getEffectiveDates()
+    if (!s || !e) {
+      ElMessage.warning('请先选择日期范围')
+      return
     }
 
-    const products = statsRes.data.products || []
-    if (products.length > 0) {
-      stats.value = {
-        product_count: products.length,
-        record_count: products.reduce((sum, p) => sum + p.record_count, 0),
-        max_price: Math.max(...products.map(p => p.max_price)),
-        avg_price: products.reduce((sum, p) => sum + p.avg_price * p.record_count, 0) / products.reduce((sum, p) => sum + p.record_count, 0)
+    // 按日期范围获取所有价格记录，JS 端聚合
+    const params = { start_date: s, end_date: e, limit: 1000 }
+    const pricesRes = await priceApi.getPrices(params)
+    const records = pricesRes.data || []
+
+    if (records.length === 0) {
+      statCards.value.forEach(s => { s.value = 0 })
+      stats.value = {}
+      rankingData.value = { rising: [], falling: [] }
+      return
+    }
+
+    // 按 product_id 聚合
+    const productMap = {}
+    for (const r of records) {
+      if (!productMap[r.product_id]) {
+        productMap[r.product_id] = {
+          product_id: r.product_id,
+          product_name: r.product_name,
+          prices: [],
+          max_price: r.price,
+          min_price: r.price,
+          record_count: 0
+        }
       }
-      statCards.value[0].value = products.length
-      statCards.value[1].value = products.reduce((sum, p) => sum + p.record_count, 0)
-      statCards.value[2].value = `¥${Math.max(...products.map(p => p.max_price)).toLocaleString()}`
-      statCards.value[3].value = `¥${Math.round(stats.value.avg_price).toLocaleString()}`
-    } else {
-      statCards.value.forEach(s => s.value = 0)
+      const p = productMap[r.product_id]
+      p.prices.push(r.price)
+      if (r.price > p.max_price) p.max_price = r.price
+      if (r.price < p.min_price) p.min_price = r.price
+      p.record_count++
     }
 
+    const products = Object.values(productMap)
+    const totalRecordCount = records.length
+    const allPrices = records.map(r => r.price)
+    const maxPrice = Math.max(...allPrices)
+    const avgPrice = allPrices.reduce((a, b) => a + b, 0) / allPrices.length
+
+    stats.value = {
+      product_count: products.length,
+      record_count: totalRecordCount,
+      max_price: maxPrice,
+      avg_price: avgPrice
+    }
+    statCards.value[0].value = products.length
+    statCards.value[1].value = totalRecordCount
+    statCards.value[2].value = `¥${maxPrice.toLocaleString()}`
+    statCards.value[3].value = `¥${Math.round(avgPrice).toLocaleString()}`
+
+    // 涨跌排行基于当前数据计算
     const rankingRes = await reportApi.getRanking(7)
     rankingData.value = rankingRes.data
   } catch (e) {
+    console.error('loadStats failed', e)
     ElMessage.error('加载统计数据失败')
   }
 }
@@ -234,6 +279,23 @@ async function downloadExcel() {
     ElMessage.success('Excel 下载成功')
   } catch (e) {
     ElMessage.error('Excel 下载失败')
+  }
+}
+
+async function downloadHtml() {
+  try {
+    const { startDate: s, endDate: e } = getEffectiveDates()
+    const res = await reportApi.downloadHtml(reportType.value, s, e)
+    const blob = new Blob([res.data], { type: 'text/html' })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `price_${reportType.value}_${new Date().toISOString().slice(0, 10)}.html`
+    a.click()
+    window.URL.revokeObjectURL(url)
+    ElMessage.success('HTML 下载成功')
+  } catch (e) {
+    ElMessage.error('HTML 下载失败')
   }
 }
 </script>
@@ -429,6 +491,15 @@ async function downloadExcel() {
 .download-btn.excel .btn-icon-wrapper {
   background: rgba(42, 157, 92, 0.12);
   color: var(--fall-color);
+}
+
+.download-btn.html:hover {
+  border-color: var(--color-primary);
+}
+
+.download-btn.html .btn-icon-wrapper {
+  background: rgba(64, 158, 255, 0.12);
+  color: var(--color-primary);
 }
 
 .btn-icon-wrapper {

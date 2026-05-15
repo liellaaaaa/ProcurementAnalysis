@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, Date, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, Date, DateTime, ForeignKey, UniqueConstraint, JSON
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
@@ -34,6 +34,7 @@ class Product(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     product_code = Column(String(50), unique=True, nullable=False)
     product_name = Column(String(100), nullable=False)
+    industry = Column(String(20))  # 行业：化工/能源/农副/有色
     category = Column(String(50))
     unit = Column(String(20), default="元/吨")
     source = Column(String(50))
@@ -49,6 +50,9 @@ class PriceRecord(Base):
     product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
     price = Column(Float)
     currency = Column(String(10), default="CNY")
+    unit = Column(String(20))  # 单位：元/吨、元/克、元/立方米
+    price_original = Column(String(100))  # 原始报价文本，如"2750元/吨"
+    price_category = Column(String(20))  # 价格类别：现货/期货
     price_type = Column(String(20))
     trend = Column(String(10))  # 涨/跌/平
     change_percent = Column(Float)
@@ -57,6 +61,7 @@ class PriceRecord(Base):
     supplier = Column(String(100))   # 供应商
     brand = Column(String(100))      # 品牌
     specification = Column(String(200))  # 规格
+    extra_data = Column(JSON)  # 行业差异化字段
     record_date = Column(Date, nullable=False)
     created_at = Column(DateTime, default=datetime.now)
 

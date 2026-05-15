@@ -463,6 +463,290 @@ async def generate_pdf_report(
     )
 
 
+@router.get("/html")
+async def generate_html_report(
+    report_type: str = Query("weekly", enum=["weekly", "monthly"]),
+    start_date: str = Query(None, description="开始日期 yyyy/mm/dd"),
+    end_date: str = Query(None, description="结束日期 yyyy/mm/dd")
+):
+    """生成 HTML 报表"""
+
+    def parse_date(s):
+        if not s:
+            return None
+        try:
+            return date.fromisoformat(s.replace('/', '-'))
+        except:
+            return None
+
+    parsed_start = parse_date(start_date) if start_date else None
+    parsed_end = parse_date(end_date) if end_date else None
+
+    session = get_session()
+    start_date, end_date = get_date_range(report_type, parsed_start, parsed_end)
+    title = "周报" if report_type == "weekly" else "月报"
+
+    # 统计数据
+    stats = session.query(
+        func.count(func.distinct(PriceRecord.product_id)).label('product_count'),
+        func.count(PriceRecord.id).label('record_count'),
+        func.max(PriceRecord.price).label('max_price'),
+        func.min(PriceRecord.price).label('min_price'),
+        func.avg(PriceRecord.price).label('avg_price')
+    ).filter(
+        PriceRecord.record_date >= start_date,
+        PriceRecord.record_date <= end_date
+    ).first()
+
+    # 涨跌排行数据
+    subquery = session.query(
+        PriceRecord.product_id,
+        func.max(PriceRecord.record_date).label('max_date')
+    ).group_by(PriceRecord.product_id).subquery()
+
+    latest_prices = session.query(
+        PriceRecord.product_id,
+        PriceRecord.change_percent,
+        PriceRecord.price
+    ).join(
+        subquery,
+        (PriceRecord.product_id == subquery.c.product_id) &
+        (PriceRecord.record_date == subquery.c.max_date)
+    ).all()
+
+    product_ids = [lp.product_id for lp in latest_prices]
+    products_map = {p.id: p.product_name for p in session.query(Product).filter(Product.id.in_(product_ids)).all()}
+
+    ranking = [(products_map.get(lp.product_id, "未知"), float(lp.change_percent) if lp.change_percent else 0.0, float(lp.price) if lp.price else 0.0) for lp in latest_prices]
+    ranking.sort(key=lambda x: x[1], reverse=True)
+    top_rising = ranking[:10]
+    ranking.sort(key=lambda x: x[1])
+    top_falling = ranking[:10]
+
+    # 价格占比数据
+    distribution = session.query(
+        Product.product_name,
+        func.count(PriceRecord.id).label('count')
+    ).join(PriceRecord).filter(
+        PriceRecord.record_date >= start_date,
+        PriceRecord.record_date <= end_date
+    ).group_by(Product.id).order_by(func.count(PriceRecord.id).desc()).limit(8).all()
+
+    total_count = sum(d.count for d in distribution)
+    pie_data = [(d.product_name, d.count, round(d.count / total_count * 100, 1) if total_count else 0) for d in distribution]
+
+    # 产品明细
+    products_data = session.query(
+        Product.product_name,
+        func.max(PriceRecord.price).label('max_price'),
+        func.min(PriceRecord.price).label('min_price'),
+        func.avg(PriceRecord.price).label('avg_price'),
+        func.count(PriceRecord.id).label('record_count')
+    ).join(PriceRecord).filter(
+        PriceRecord.record_date >= start_date,
+        PriceRecord.record_date <= end_date
+    ).group_by(Product.id).order_by(func.avg(PriceRecord.price).desc()).limit(50).all()
+
+    # 趋势统计
+    trend_stats = session.query(
+        PriceRecord.trend,
+        func.count(PriceRecord.id).label('count')
+    ).filter(
+        PriceRecord.record_date >= start_date,
+        PriceRecord.record_date <= end_date,
+        PriceRecord.trend.in_(['涨', '跌', '平'])
+    ).group_by(PriceRecord.trend).all()
+    trend_dict = {t.trend: t.count for t in trend_stats}
+
+    session.close()
+
+    # 生成 HTML
+    html_content = f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>采购价格{title} - {format_date(start_date)} 至 {format_date(end_date)}</title>
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif; background: #f5f7fa; color: #303133; line-height: 1.6; }}
+        .container {{ max-width: 1200px; margin: 0 auto; padding: 24px; }}
+        .header {{ background: linear-gradient(135deg, #409eff 0%, #337ecc 100%); color: white; padding: 40px; border-radius: 16px; margin-bottom: 24px; text-align: center; }}
+        .header h1 {{ font-size: 28px; margin-bottom: 8px; }}
+        .header p {{ opacity: 0.9; font-size: 14px; }}
+        .stats-grid {{ display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 24px; }}
+        .stat-card {{ background: white; border-radius: 12px; padding: 20px; text-align: center; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }}
+        .stat-value {{ font-size: 28px; font-weight: 700; color: #409eff; }}
+        .stat-label {{ font-size: 13px; color: #909399; margin-top: 4px; }}
+        .card {{ background: white; border-radius: 12px; padding: 24px; margin-bottom: 24px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }}
+        .card-title {{ font-size: 16px; font-weight: 600; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #ebeef5; }}
+        .chart-container {{ display: flex; gap: 24px; flex-wrap: wrap; }}
+        .chart-box {{ flex: 1; min-width: 400px; }}
+        .bar-chart {{ display: flex; flex-direction: column; gap: 8px; }}
+        .bar-item {{ display: flex; align-items: center; gap: 12px; }}
+        .bar-name {{ width: 120px; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+        .bar-track {{ flex: 1; height: 24px; background: #f0f2f5; border-radius: 4px; overflow: hidden; position: relative; }}
+        .bar-fill {{ height: 100%; border-radius: 4px; transition: width 0.3s; }}
+        .bar-fill.rising {{ background: linear-gradient(90deg, #f56c6c, #e04040); }}
+        .bar-fill.falling {{ background: linear-gradient(90deg, #67c23a, #4aaa30); }}
+        .bar-value {{ width: 70px; text-align: right; font-size: 13px; font-weight: 600; font-family: 'Consolas', monospace; }}
+        .pie-container {{ display: flex; align-items: center; gap: 24px; }}
+        .pie-chart {{ width: 180px; height: 180px; border-radius: 50%; background: conic-gradient({', '.join([f'#{"409eff" if i % 2 == 0 else "67c23a" if i % 3 == 0 else "e6a23c" if i % 5 == 0 else "f56c6c"} {pct}%' for i, (_, _, pct) in enumerate(pie_data)])}); position: relative; }}
+        .pie-legend {{ display: flex; flex-direction: column; gap: 8px; }}
+        .legend-item {{ display: flex; align-items: center; gap: 8px; font-size: 13px; }}
+        .legend-dot {{ width: 12px; height: 12px; border-radius: 3px; }}
+        .trend-stats {{ display: flex; gap: 24px; margin-top: 16px; }}
+        .trend-item {{ display: flex; align-items: center; gap: 8px; padding: 12px 20px; border-radius: 8px; }}
+        .trend-item.rising {{ background: rgba(245, 108, 108, 0.1); color: #f56c6c; }}
+        .trend-item.falling {{ background: rgba(103, 194, 58, 0.1); color: #67c23a; }}
+        .trend-item.stable {{ background: rgba(144, 147, 153, 0.1); color: #909399; }}
+        .trend-value {{ font-size: 20px; font-weight: 700; }}
+        .table-container {{ overflow-x: auto; }}
+        table {{ width: 100%; border-collapse: collapse; }}
+        th {{ background: #409eff; color: white; padding: 12px 16px; text-align: left; font-weight: 500; }}
+        td {{ padding: 12px 16px; border-bottom: 1px solid #ebeef5; }}
+        tr:hover {{ background: #f5f7fa; }}
+        tr:nth-child(even) {{ background: #fafafa; }}
+        .footer {{ text-align: center; padding: 24px; color: #909399; font-size: 12px; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>采购价格{title}</h1>
+            <p>统计周期: {format_date(start_date)} 至 {format_date(end_date)}</p>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value">{stats.product_count or 0}</div>
+                <div class="stat-label">产品数量</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{stats.record_count or 0}</div>
+                <div class="stat-label">价格记录</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{'¥{:,.0f}'.format(stats.max_price) if stats.max_price else '-'}</div>
+                <div class="stat-label">最高价</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{'¥{:,.0f}'.format(stats.min_price) if stats.min_price else '-'}</div>
+                <div class="stat-label">最低价</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{'¥{:,.0f}'.format(stats.avg_price) if stats.avg_price else '-'}</div>
+                <div class="stat-label">平均价</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">趋势概览</div>
+            <div class="trend-stats">
+                <div class="trend-item rising">
+                    <span class="trend-value">{trend_dict.get('涨', 0)}</span>
+                    <span>产品上涨</span>
+                </div>
+                <div class="trend-item falling">
+                    <span class="trend-value">{trend_dict.get('跌', 0)}</span>
+                    <span>产品下跌</span>
+                </div>
+                <div class="trend-item stable">
+                    <span class="trend-value">{trend_dict.get('平', 0)}</span>
+                    <span>价格平稳</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <div class="chart-box card">
+                <div class="card-title">涨幅榜 TOP10</div>
+                <div class="bar-chart">
+                    {''.join([f'''<div class="bar-item">
+                        <span class="bar-name">{name}</span>
+                        <div class="bar-track">
+                            <div class="bar-fill rising" style="width: {min(abs(pct) * 2, 100)}%"></div>
+                        </div>
+                        <span class="bar-value" style="color: #f56c6c">+{pct}%</span>
+                    </div>''' for name, pct, price in top_rising])}
+                </div>
+            </div>
+            <div class="chart-box card">
+                <div class="card-title">跌幅榜 TOP10</div>
+                <div class="bar-chart">
+                    {''.join([f'''<div class="bar-item">
+                        <span class="bar-name">{name}</span>
+                        <div class="bar-track">
+                            <div class="bar-fill falling" style="width: {min(abs(pct) * 2, 100)}%"></div>
+                        </div>
+                        <span class="bar-value" style="color: #67c23a">{pct}%</span>
+                    </div>''' for name, pct, price in top_falling])}
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">价格记录占比</div>
+            <div class="pie-container">
+                <div class="pie-chart"></div>
+                <div class="pie-legend">
+                    {''.join([f'''<div class="legend-item">
+                        <div class="legend-dot" style="background: #{'409eff' if i % 2 == 0 else '67c23a' if i % 3 == 0 else 'e6a23c' if i % 5 == 0 else 'f56c6c'}"></div>
+                        <span>{name} ({pct}%)</span>
+                    </div>''' for i, (name, count, pct) in enumerate(pie_data)])}
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">产品明细</div>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>产品名称</th>
+                            <th>最高价</th>
+                            <th>最低价</th>
+                            <th>均价</th>
+                            <th>记录数</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {''.join([f'''<tr>
+                            <td>{p.product_name or 'N/A'}</td>
+                            <td>{'¥{:.2f}'.format(p.max_price) if p.max_price else '-'}</td>
+                            <td>{'¥{:.2f}'.format(p.min_price) if p.min_price else '-'}</td>
+                            <td>{'¥{:.2f}'.format(p.avg_price) if p.avg_price else '-'}</td>
+                            <td>{p.record_count}</td>
+                        </tr>''' for p in products_data])}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>生成时间: {date.today().strftime('%Y/%m/%d')} | 采购分析系统</p>
+        </div>
+    </div>
+</body>
+</html>"""
+
+    filename = f"price_{report_type}_{end_date.isoformat()}.html"
+
+    # 记录操作日志
+    OperationLogger.log_report_generate(
+        report_type=report_type,
+        date_range={"start": str(start_date), "end": str(end_date)},
+        format="html"
+    )
+
+    return StreamingResponse(
+        iter([html_content]),
+        media_type="text/html",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
 @router.get("/excel")
 async def generate_excel_report(
     report_type: str = Query("weekly", enum=["weekly", "monthly"]),
@@ -589,16 +873,17 @@ async def generate_excel_report(
     # ========== 工作表1: 产品列表 ==========
     products_ws = wb.create_sheet("产品列表")
     products = session.query(Product).filter(Product.is_active == True).all()
-    products_ws.append(["ID", "产品编码", "产品名称", "分类", "单位", "数据源"])
+    products_ws.append(["ID", "产品编码", "产品名称", "行业", "分类", "单位", "数据源"])
     for p in products:
-        products_ws.append([p.id, p.product_code, p.product_name, p.category, p.unit, p.source])
+        products_ws.append([p.id, p.product_code, p.product_name, p.industry, p.category, p.unit, p.source])
 
     products_ws.column_dimensions['A'].width = 8
     products_ws.column_dimensions['B'].width = 15
     products_ws.column_dimensions['C'].width = 25
-    products_ws.column_dimensions['D'].width = 15
-    products_ws.column_dimensions['E'].width = 10
-    products_ws.column_dimensions['F'].width = 15
+    products_ws.column_dimensions['D'].width = 10
+    products_ws.column_dimensions['E'].width = 15
+    products_ws.column_dimensions['F'].width = 10
+    products_ws.column_dimensions['G'].width = 15
 
     # ========== 工作表2: 价格历史（简化版） ==========
     history_ws = wb.create_sheet("价格历史")

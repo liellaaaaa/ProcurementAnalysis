@@ -256,6 +256,7 @@ async def compare_products(product_ids: str = Query(..., description="产品ID�
         results.append({
             "product_id": pid,
             "product_name": product.product_name,
+            "industry": product.industry,
             "category": product.category,
             "unit": product.unit,
             "latest_price": latest_record.price if latest_record else None,

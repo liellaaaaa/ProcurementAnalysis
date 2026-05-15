@@ -104,6 +104,7 @@ async def get_prices(
 @router.get("/latest", response_model=dict)
 async def get_latest_prices(
     source: Optional[str] = None,
+    industry: Optional[str] = None,
     category_id: Optional[int] = None,
     subcategory_id: Optional[int] = None,
     start_date: Optional[str] = None,
@@ -126,6 +127,9 @@ async def get_latest_prices(
 
     if source and source != '__all__':
         base_query = base_query.filter(PriceRecord.source == source)
+
+    if industry:
+        base_query = base_query.filter(Product.industry == industry)
 
     if category_id:
         subcat_ids = [c.id for c in session.query(Category).filter(Category.parent_id == category_id).all()]
@@ -348,6 +352,7 @@ async def delete_price_record(record_id: int):
 @router.get("/dashboard/distribution")
 async def get_dashboard_distribution(
     days: int = Query(30, ge=7, le=365),
+    industry: Optional[str] = None,
     category_id: Optional[int] = None,
     subcategory_id: Optional[int] = None,
     source: Optional[str] = None
@@ -365,6 +370,9 @@ async def get_dashboard_distribution(
 
     if source and source != '__all__':
         query = query.filter(PriceRecord.source == source)
+
+    if industry:
+        query = query.filter(Product.industry == industry)
 
     # Filter by category
     if category_id:
@@ -390,6 +398,7 @@ async def get_dashboard_distribution(
 async def get_dashboard_ranking(
     limit: int = Query(10, ge=5, le=30),
     days: int = Query(7, ge=1, le=90),
+    industry: Optional[str] = None,
     category_id: Optional[int] = None,
     subcategory_id: Optional[int] = None,
     source: Optional[str] = None
@@ -417,6 +426,10 @@ async def get_dashboard_ranking(
 
     if source and source != '__all__':
         query = query.filter(PriceRecord.source == source)
+
+    if industry:
+        product_ids_query = session.query(Product.id).filter(Product.industry == industry)
+        query = query.filter(PriceRecord.product_id.in_(product_ids_query))
 
     # Filter by category
     if category_id:
@@ -464,6 +477,7 @@ async def get_dashboard_ranking(
 async def get_dashboard_history_compare(
     product_ids: Optional[str] = Query(None, description="逗号分隔的产品ID，留空则返回分类下所有产品"),
     days: int = Query(30, ge=7, le=365),
+    industry: Optional[str] = None,
     category_id: Optional[int] = Query(None),
     subcategory_id: Optional[int] = Query(None),
     source: Optional[str] = None
@@ -492,6 +506,8 @@ async def get_dashboard_history_compare(
     else:
         # 未指定产品ID，按分类获取
         query = session.query(Product).distinct()
+        if industry:
+            query = query.filter(Product.industry == industry)
         if subcategory_id:
             pc_query = session.query(ProductCategory.product_id).filter(ProductCategory.category_id == subcategory_id)
             query = query.filter(Product.id.in_(pc_query))
@@ -542,6 +558,7 @@ async def get_dashboard_history_compare(
 @router.get("/dashboard/volatility")
 async def get_dashboard_volatility(
     days: int = Query(7, ge=1, le=30),
+    industry: Optional[str] = None,
     category_id: Optional[int] = None,
     subcategory_id: Optional[int] = None
 ):
@@ -553,9 +570,12 @@ async def get_dashboard_volatility(
         func.avg(func.abs(PriceRecord.change_percent)).label('avg_volatility'),
         func.max(func.abs(PriceRecord.change_percent)).label('max_volatility'),
         func.count(func.distinct(PriceRecord.product_id)).label('active_products')
-    ).filter(
+    ).join(Product).filter(
         PriceRecord.record_date >= start_date
     )
+
+    if industry:
+        base_query = base_query.filter(Product.industry == industry)
 
     # Filter by category
     if category_id:

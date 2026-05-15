@@ -15,6 +15,7 @@
             </div>
             <div class="controls">
               <SourceSelector v-model="filter1Source" />
+              <IndustrySelector v-model="filter1Industry" />
               <CategorySelector
                 v-model="filter1CategoryId"
                 v-model:subcategoryValue="filter1SubcategoryId"
@@ -110,6 +111,7 @@
             </div>
             <div class="controls">
               <SourceSelector v-model="filter2Source" />
+              <IndustrySelector v-model="filter2Industry" />
               <CategorySelector
                 v-model="filter2CategoryId"
                 v-model:subcategoryValue="filter2SubcategoryId"
@@ -192,6 +194,7 @@
             </div>
             <div class="controls">
               <SourceSelector v-model="filter3Source" />
+              <IndustrySelector v-model="filter3Industry" />
               <CategorySelector
                 v-model="filter3CategoryId"
                 v-model:subcategoryValue="filter3SubcategoryId"
@@ -310,6 +313,7 @@ import { priceApi } from '../api/price'
 import * as echarts from 'echarts'
 import CategorySelector from '../components/CategorySelector.vue'
 import SourceSelector from '../components/SourceSelector.vue'
+import IndustrySelector from '../components/IndustrySelector.vue'
 
 const lineChartRef = ref(null)
 const pieChartRef = ref(null)
@@ -332,22 +336,28 @@ const filter1CategoryId = ref(null)
 const filter1SubcategoryId = ref(null)
 const filter1DateRange = ref([])
 const filter1Source = ref(null)
+const filter1Industry = ref(null)
 
 watch(filter1Source, () => { loadFilter1Charts() })
+watch(filter1Industry, () => { loadFilter1Charts() })
 
 const filter2CategoryId = ref(null)
 const filter2SubcategoryId = ref(null)
 const filter2DateRange = ref([])
 const filter2Source = ref(null)
+const filter2Industry = ref(null)
 
 watch(filter2Source, () => { loadFilter2Charts() })
+watch(filter2Industry, () => { loadFilter2Charts() })
 
 const filter3CategoryId = ref(null)
 const filter3SubcategoryId = ref(null)
 const filter3Source = ref(null)
+const filter3Industry = ref(null)
 const searchKeyword = ref('')
 
 watch(filter3Source, () => { handleFilter3Change() })
+watch(filter3Industry, () => { handleFilter3Change() })
 
 const pagination = ref({ page: 1, pageSize: 50, total: 0 })
 const compareDays = ref(7)
@@ -367,7 +377,8 @@ async function loadLatestPrices() {
     const params = {
       category_id: filter3CategoryId.value || null,
       subcategory_id: filter3SubcategoryId.value || null,
-      source: filter3Source.value || null
+      source: filter3Source.value || null,
+      industry: filter3Industry.value || null
     }
     const res = await priceApi.getLatestPrices(params)
     latestPrices.value = (res.data.data || []).map(p => ({ ...p, history: [] }))
@@ -462,7 +473,8 @@ async function loadIndicatorCards() {
       days: days,
       category_id: filter2CategoryId.value || null,
       subcategory_id: filter2SubcategoryId.value || null,
-      source: filter2Source.value || null
+      source: filter2Source.value || null,
+      industry: filter2Industry.value || null
     }
     const res = await priceApi.getDashboardRanking(params)
     const rising = res.data.rising || []
@@ -520,7 +532,8 @@ async function loadLineChartData() {
       days,
       filter1CategoryId.value || null,
       filter1SubcategoryId.value || null,
-      filter1Source.value || null
+      filter1Source.value || null,
+      filter1Industry.value || null
     )
 
     if (!res.data || !res.data.dates || res.data.dates.length === 0) {
@@ -610,7 +623,8 @@ async function loadRankingData() {
       days: days,
       category_id: filter1CategoryId.value || null,
       subcategory_id: filter1SubcategoryId.value || null,
-      source: filter1Source.value || null
+      source: filter1Source.value || null,
+      industry: filter1Industry.value || null
     }
     const res = await priceApi.getDashboardRanking(params)
     const rising = res.data.rising || []
@@ -639,7 +653,8 @@ async function loadDistributionData() {
       days: 30,
       category_id: filter2CategoryId.value || null,
       subcategory_id: filter2SubcategoryId.value || null,
-      source: filter2Source.value || null
+      source: filter2Source.value || null,
+      industry: filter2Industry.value || null
     }
     const res = await priceApi.getDashboardDistribution(params)
     if (res.data.labels && res.data.labels.length > 0) {
