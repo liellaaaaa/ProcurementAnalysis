@@ -20,6 +20,8 @@ backend/
 │   ├── base.py          # 爬虫基类
 │   ├── registry.py      # 爬虫注册中心
 │   └── shengyishe.py    # 生意社爬虫
+├── scripts/            # 工具脚本
+│   └── seed_categories.py  # 品类初始化与匹配
 ├── api/routes/          # API 路由
 │   ├── products.py      # 产品 API
 │   ├── prices.py        # 价格 API (含 Dashboard API)
@@ -45,9 +47,10 @@ frontend/
 │   │   ├── CategoryManage.vue  # 分类管理
 │   │   ├── ReportView.vue      # 报表中心
 │   │   └── AlertView.vue       # 预警管理
-│   ├── components/      # 组件
+│   ├── components/      # 公共组件
 │   │   ├── SourceSelector.vue   # 数据源选择器
-│   │   └── CategorySelector.vue # 分类选择器
+│   │   ├── IndustrySelector.vue  # 行业选择器
+│   │   └── CategorySelector.vue # 品类选择器
 │   ├── api/             # API 调用
 │   └── router/          # 路由配置
 └── package.json

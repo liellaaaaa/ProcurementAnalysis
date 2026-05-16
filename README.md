@@ -61,17 +61,24 @@ npm run dev
 ```
 ProcurementAnalysis/
 ├── backend/
-│   ├── api/routes/       # API 路由
-│   ├── scrapers/         # 爬虫模块
-│   ├── services/         # 业务服务
-│   └── models/           # 数据模型
+│   ├── main.py              # FastAPI 入口
+│   ├── config.py            # 配置
+│   ├── scrapers/            # 爬虫模块
+│   │   ├── base.py          # 爬虫基类
+│   │   ├── registry.py      # 爬虫注册中心
+│   │   └── shengyishe.py    # 生意社爬虫
+│   ├── scripts/             # 工具脚本
+│   │   └── seed_categories.py  # 品类初始化与匹配
+│   ├── api/routes/          # API 路由
+│   ├── services/            # 业务服务
+│   └── models/              # 数据模型
 ├── frontend/
 │   └── src/
-│       ├── views/        # 页面组件
-│       ├── components/    # 公共组件
-│       └── api/          # API 调用
-├── log/                  # 操作日志
-└── data/database/        # SQLite 数据库
+│       ├── views/           # 页面组件
+│       ├── components/      # 公共组件
+│       └── api/             # API 调用
+├── log/                     # 操作日志
+└── data/                    # SQLite 数据库
 ```
 
 ## 主要模块

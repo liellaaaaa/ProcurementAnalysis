@@ -6,7 +6,7 @@ from typing import List, Dict, Optional
 from playwright.sync_api import sync_playwright
 
 from backend.scrapers.base import BaseScraper, ScrapedItem
-from backend.models.database import get_session, Product, PriceRecord, ScraperLog
+from backend.models.database import get_session, Product, PriceRecord, ScraperLog, ProductCategory
 from backend.services.alert_service import check_and_trigger_alerts
 
 
@@ -650,9 +650,29 @@ class ShengyisheScraper(BaseScraper):
                         # 更新已有记录
                         existing.price = record['price']
                         existing.trend = record['trend']
-                        existing.change_percent = record['change_percent']
+                        # 计算涨跌幅：对比该产品昨日收盘价
+                        prev_record = session.query(PriceRecord).filter(
+                            PriceRecord.product_id == product_id,
+                            PriceRecord.record_date < record_date,
+                            PriceRecord.source == self.SOURCE_KEY
+                        ).order_by(PriceRecord.record_date.desc()).first()
+                        if prev_record and prev_record.price > 0:
+                            existing.change_percent = round(((record['price'] - prev_record.price) / prev_record.price) * 100, 2)
+                            existing.trend = "涨" if existing.change_percent > 0 else "跌" if existing.change_percent < 0 else "平"
                     else:
-                        # 新增记录
+                        # 新增记录 - 先查上一条计算涨跌幅
+                        prev_record = session.query(PriceRecord).filter(
+                            PriceRecord.product_id == product_id,
+                            PriceRecord.record_date < record_date,
+                            PriceRecord.source == self.SOURCE_KEY
+                        ).order_by(PriceRecord.record_date.desc()).first()
+                        if prev_record and prev_record.price > 0:
+                            change_pct = round(((record['price'] - prev_record.price) / prev_record.price) * 100, 2)
+                            trend_val = "涨" if change_pct > 0 else "跌" if change_pct < 0 else "平"
+                        else:
+                            change_pct = 0.0
+                            trend_val = "平"
+
                         price_record = PriceRecord(
                             product_id=product_id,
                             price=record['price'],
@@ -660,8 +680,8 @@ class ShengyisheScraper(BaseScraper):
                             price_original=f"{record['price']}元/吨",
                             price_category='现货',
                             price_type='基准价',
-                            trend=record['trend'],
-                            change_percent=record['change_percent'],
+                            trend=trend_val,
+                            change_percent=change_pct,
                             source=self.SOURCE_KEY,
                             region='',
                             supplier='生意社',
@@ -774,6 +794,18 @@ class ShengyisheScraper(BaseScraper):
                     )
                     session.add(product)
                     session.flush()
+
+                    # 创建 ProductCategory 关联
+                    from backend.scripts.seed_categories import match_product_to_categories
+                    matched_ids = match_product_to_categories(product.product_name, session)
+                    for cat_id in matched_ids:
+                        existing_assoc = session.query(ProductCategory).filter(
+                            ProductCategory.product_id == product.id,
+                            ProductCategory.category_id == cat_id
+                        ).first()
+                        if not existing_assoc:
+                            assoc = ProductCategory(product_id=product.id, category_id=cat_id)
+                            session.add(assoc)
 
                 from datetime import datetime as dt, date
 

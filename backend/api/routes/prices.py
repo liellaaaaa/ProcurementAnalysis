@@ -106,7 +106,7 @@ async def get_latest_prices(
     source: Optional[str] = None,
     industry: Optional[str] = None,
     category_id: Optional[int] = None,
-    subcategory_id: Optional[int] = None,
+    subcategory_id: Optional[List[int]] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None
 ):
@@ -137,8 +137,12 @@ async def get_latest_prices(
         base_query = base_query.filter(PriceRecord.product_id.in_(pc_query))
 
     if subcategory_id:
-        pc_query = session.query(ProductCategory.product_id).filter(ProductCategory.category_id == subcategory_id)
-        base_query = base_query.filter(PriceRecord.product_id.in_(pc_query))
+        pc_ids = session.query(ProductCategory.product_id).filter(
+            ProductCategory.category_id.in_(subcategory_id)
+        ).all()
+        pc_ids = [p[0] for p in pc_ids]
+        if pc_ids:
+            base_query = base_query.filter(PriceRecord.product_id.in_(pc_ids))
 
     if start_date:
         base_query = base_query.filter(PriceRecord.record_date >= start_date)
@@ -354,7 +358,7 @@ async def get_dashboard_distribution(
     days: int = Query(30, ge=7, le=365),
     industry: Optional[str] = None,
     category_id: Optional[int] = None,
-    subcategory_id: Optional[int] = None,
+    subcategory_id: Optional[List[int]] = Query(None),
     source: Optional[str] = None
 ):
     """获取各产品/分类价格占比（饼图数据）"""
@@ -381,8 +385,12 @@ async def get_dashboard_distribution(
         query = query.filter(PriceRecord.product_id.in_(pc_query))
 
     if subcategory_id:
-        pc_query = session.query(ProductCategory.product_id).filter(ProductCategory.category_id == subcategory_id)
-        query = query.filter(PriceRecord.product_id.in_(pc_query))
+        pc_ids = session.query(ProductCategory.product_id).filter(
+            ProductCategory.category_id.in_(subcategory_id)
+        ).all()
+        pc_ids = [p[0] for p in pc_ids]
+        if pc_ids:
+            query = query.filter(PriceRecord.product_id.in_(pc_ids))
 
     results = query.group_by(Product.id).order_by(func.avg(PriceRecord.price).desc()).limit(10).all()
 
@@ -400,7 +408,7 @@ async def get_dashboard_ranking(
     days: int = Query(7, ge=1, le=90),
     industry: Optional[str] = None,
     category_id: Optional[int] = None,
-    subcategory_id: Optional[int] = None,
+    subcategory_id: Optional[List[int]] = Query(None),
     source: Optional[str] = None
 ):
     """获取涨跌排行（柱状图数据）"""
@@ -438,8 +446,13 @@ async def get_dashboard_ranking(
         query = query.filter(PriceRecord.product_id.in_(pc_query))
 
     if subcategory_id:
-        pc_query = session.query(ProductCategory.product_id).filter(ProductCategory.category_id == subcategory_id)
-        query = query.filter(PriceRecord.product_id.in_(pc_query))
+        # Get product IDs via explicit join query
+        matched_products = session.query(Product.id).join(
+            ProductCategory, Product.id == ProductCategory.product_id
+        ).filter(ProductCategory.category_id.in_(subcategory_id)).distinct().all()
+        pc_ids = [p[0] for p in matched_products]
+        if pc_ids:
+            query = query.filter(PriceRecord.product_id.in_(pc_ids))
 
     latest_prices = query.all()
 
@@ -479,7 +492,7 @@ async def get_dashboard_history_compare(
     days: int = Query(30, ge=7, le=365),
     industry: Optional[str] = None,
     category_id: Optional[int] = Query(None),
-    subcategory_id: Optional[int] = Query(None),
+    subcategory_id: Optional[List[int]] = Query(None),
     source: Optional[str] = None
 ):
     """获取多产品历史价格对比（折线图数据）"""
@@ -508,12 +521,22 @@ async def get_dashboard_history_compare(
         query = session.query(Product).distinct()
         if industry:
             query = query.filter(Product.industry == industry)
-        if subcategory_id:
-            pc_query = session.query(ProductCategory.product_id).filter(ProductCategory.category_id == subcategory_id)
+
+        # 如果 ProductCategory 为空，则忽略 subcategory_id 过滤（返回该行业所有产品）
+        pc_count = session.query(ProductCategory).count()
+        if subcategory_id and pc_count > 0:
+            pc_query = session.query(ProductCategory.product_id).filter(
+                ProductCategory.category_id.in_(subcategory_id)
+            )
             query = query.filter(Product.id.in_(pc_query))
+        elif subcategory_id and pc_count == 0:
+            # ProductCategory 为空，直接用 category_id 过滤（忽略 subcategory_id）
+            pass
         elif category_id:
             subcat_ids = [c.id for c in session.query(Category).filter(Category.parent_id == category_id).all()]
-            pc_query = session.query(ProductCategory.product_id).filter(ProductCategory.category_id.in_(subcat_ids + [category_id]))
+            pc_query = session.query(ProductCategory.product_id).filter(
+                ProductCategory.category_id.in_(subcat_ids + [category_id])
+            )
             query = query.filter(Product.id.in_(pc_query))
 
         products = query.limit(10).all()
@@ -584,8 +607,12 @@ async def get_dashboard_volatility(
         base_query = base_query.filter(PriceRecord.product_id.in_(pc_query))
 
     if subcategory_id:
-        pc_query = session.query(ProductCategory.product_id).filter(ProductCategory.category_id == subcategory_id)
-        base_query = base_query.filter(PriceRecord.product_id.in_(pc_query))
+        pc_ids = session.query(ProductCategory.product_id).filter(
+            ProductCategory.category_id.in_(subcategory_id)
+        ).all()
+        pc_ids = [p[0] for p in pc_ids]
+        if pc_ids:
+            base_query = base_query.filter(PriceRecord.product_id.in_(pc_ids))
 
     stats = base_query.first()
 
@@ -600,8 +627,12 @@ async def get_dashboard_volatility(
         today_count_query = today_count_query.filter(PriceRecord.product_id.in_(pc_query))
 
     if subcategory_id:
-        pc_query = session.query(ProductCategory.product_id).filter(ProductCategory.category_id == subcategory_id)
-        today_count_query = today_count_query.filter(PriceRecord.product_id.in_(pc_query))
+        pc_ids = session.query(ProductCategory.product_id).filter(
+            ProductCategory.category_id.in_(subcategory_id)
+        ).all()
+        pc_ids = [p[0] for p in pc_ids]
+        if pc_ids:
+            today_count_query = today_count_query.filter(PriceRecord.product_id.in_(pc_ids))
 
     today_count = today_count_query.scalar() or 0
 

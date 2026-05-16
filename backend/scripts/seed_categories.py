@@ -13,6 +13,17 @@ if project_root not in sys.path:
 
 from backend.models.database import get_session, Category, ProductCategory, Product
 from datetime import datetime
+from typing import List
+
+
+def match_product_to_categories(product_name: str, session) -> List[int]:
+    """按产品名 substring 匹配二级品类 ID"""
+    matched_ids = []
+    subcategories = session.query(Category).filter(Category.parent_id.isnot(None)).all()
+    for sub_cat in subcategories:
+        if sub_cat.name in product_name or product_name in sub_cat.name:
+            matched_ids.append(sub_cat.id)
+    return matched_ids
 
 # 定义 18 个一级品类及其二级品类
 CATEGORIES_DATA = [
@@ -91,36 +102,26 @@ def auto_match_products():
     session = get_session()
 
     try:
-        # 获取所有产品
         products = session.query(Product).filter(Product.is_active == True).all()
         print(f"\n开始匹配 {len(products)} 个产品...")
 
         matched_count = 0
         for product in products:
             product_name = product.product_name.strip()
-            matched = False
-
-            # 遍历所有二级品类，查找名称匹配的产品
-            subcategories = session.query(Category).filter(Category.parent_id.isnot(None)).all()
-            for sub_cat in subcategories:
-                if sub_cat.name in product_name or product_name in sub_cat.name:
-                    # 检查是否已有关联
-                    existing = session.query(ProductCategory).filter(
-                        ProductCategory.product_id == product.id,
-                        ProductCategory.category_id == sub_cat.id
-                    ).first()
-
-                    if not existing:
-                        assoc = ProductCategory(product_id=product.id, category_id=sub_cat.id)
-                        session.add(assoc)
-                        matched = True
-
-            if matched:
-                matched_count += 1
-                print(f"  匹配产品: {product_name}")
+            matched_ids = match_product_to_categories(product_name, session)
+            for cat_id in matched_ids:
+                existing = session.query(ProductCategory).filter(
+                    ProductCategory.product_id == product.id,
+                    ProductCategory.category_id == cat_id
+                ).first()
+                if not existing:
+                    assoc = ProductCategory(product_id=product.id, category_id=cat_id)
+                    session.add(assoc)
+                    matched_count += 1
+                    print(f"  匹配产品: {product_name} -> 品类ID {cat_id}")
 
         session.commit()
-        print(f"\n匹配完成！共匹配 {matched_count} 个产品。")
+        print(f"\n匹配完成！共创建 {matched_count} 个关联。")
 
     except Exception as e:
         session.rollback()
