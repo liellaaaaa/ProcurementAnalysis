@@ -138,7 +138,7 @@ export const scraperApi = {
     return api.get('/check-freshness')
   },
   runScraper(source) {
-    return api.post(`/scrapers/${source}/run`, {}, { timeout: 300000 })
+    return api.post(`/scrapers/${source}/run`, {}, { timeout: 600000 })
   }
 }
 

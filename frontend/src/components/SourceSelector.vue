@@ -45,8 +45,7 @@ const sources = ref([])
 const selectedSource = ref(props.modelValue)
 
 const sourceLabelMap = {
-  'shengyishe': '生意社',
-  'akshare': 'AKshare'
+  'shengyishe': '生意社'
 }
 
 function onChange(val) {

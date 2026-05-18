@@ -227,7 +227,8 @@
               <template #default="{ row }">
                 <div class="expand-content">
                   <p class="expand-title">历史价格记录</p>
-                  <el-table :data="row.history" size="small" class="detail-table">
+                  <div ref="historyChartRef" class="history-sparkline"></div>
+                  <el-table :data="paginatedHistoryData" size="small" class="detail-table">
                     <el-table-column prop="record_date" label="日期" width="120" />
                     <el-table-column prop="price" label="价格" width="120">
                       <template #default="{ row: detail }">
@@ -252,6 +253,19 @@
                     <el-table-column prop="supplier" label="供应商" show-overflow-tooltip />
                     <el-table-column prop="source" label="数据源" width="100" />
                   </el-table>
+                  <el-pagination
+                    v-if="expandedRows.length > 0 && latestPrices.find(p => p.product_id === expandedRows[0])?.history?.length > 0"
+                    background
+                    size="small"
+                    layout="sizes, prev, pager, next"
+                    :total="latestPrices.find(p => p.product_id === expandedRows[0])?.history?.length || 0"
+                    :page-size="historyPagination.pageSize"
+                    :page-sizes="[10, 20, 50, 100]"
+                    :current-page="historyPagination.page"
+                    @size-change="handleHistorySizeChange"
+                    @current-change="handleHistoryPageChange"
+                    style="margin-top: 10px; justify-content: center"
+                  />
                 </div>
               </template>
             </el-table-column>
@@ -284,7 +298,7 @@
             layout="sizes, prev, pager, next"
             :total="filteredAndSortedData.length"
             :page-size="pagination.pageSize"
-            :page-sizes="[20, 50, 100]"
+            :page-sizes="[10, 20, 50, 100]"
             :current-page="pagination.page"
             @size-change="handleSizeChange"
             @current-change="handlePageChange"
@@ -318,6 +332,7 @@ import IndustrySelector from '../components/IndustrySelector.vue'
 const lineChartRef = ref(null)
 const pieChartRef = ref(null)
 const barChartRef = ref(null)
+const historyChartRef = ref(null)
 
 const hoverChart = ref(null)
 const chartDetailVisible = ref(false)
@@ -359,7 +374,8 @@ const searchKeyword = ref('')
 watch(filter3Source, () => { handleFilter3Change() })
 watch(filter3Industry, () => { handleFilter3Change() })
 
-const pagination = ref({ page: 1, pageSize: 50, total: 0 })
+const pagination = ref({ page: 1, pageSize: 10, total: 0 })
+const historyPagination = ref({ page: 1, pageSize: 10 })
 const compareDays = ref(7)
 
 const indicatorCards = ref([
@@ -370,6 +386,7 @@ const indicatorCards = ref([
 let lineChart = null
 let pieChart = null
 let barChart = null
+let historyChart = null
 let searchTimer = null
 
 async function loadLatestPrices() {
@@ -412,12 +429,31 @@ const paginatedData = computed(() => {
   return filteredAndSortedData.value.slice(start, end)
 })
 
+const paginatedHistoryData = computed(() => {
+  if (!expandedRows.value.length) return []
+  const expandedId = expandedRows.value[0]
+  const row = latestPrices.value.find(p => p.product_id === expandedId)
+  if (!row || !row.history || row.history.length === 0) return []
+  const start = (historyPagination.value.page - 1) * historyPagination.value.pageSize
+  const end = start + historyPagination.value.pageSize
+  return row.history.slice(start, end)
+})
+
+watch(paginatedHistoryData, () => { nextTick(() => updateHistoryChart()) }, { deep: true })
+
 async function handleExpandChange(row) {
   const id = row.product_id
   if (expandedRows.value.includes(id)) {
     expandedRows.value = []
   } else {
     expandedRows.value = [id]
+    historyPagination.value.page = 1
+    if (historyChart) {
+      historyChart.clear()
+    }
+    nextTick(() => {
+      initHistoryChart()
+    })
     if (!row.history || row.history.length === 0) {
       try {
         const res = await priceApi.getPriceHistory(id, 365, filter3Source.value)
@@ -431,6 +467,15 @@ async function handleExpandChange(row) {
       }
     }
   }
+}
+
+function handleHistoryPageChange(page) {
+  historyPagination.value.page = page
+}
+
+function handleHistorySizeChange(size) {
+  historyPagination.value.pageSize = size
+  historyPagination.value.page = 1
 }
 
 function handleFilter1Change() {
@@ -826,14 +871,52 @@ function initBarChart() {
   })
 }
 
+function initHistoryChart() {
+  if (!historyChartRef.value) return
+  if (historyChart) {
+    historyChart.dispose()
+  }
+  historyChart = echarts.init(historyChartRef.value)
+  historyChart.setOption({
+    backgroundColor: 'transparent',
+    tooltip: { trigger: 'axis', backgroundColor: '#fff', borderColor: '#E8E3F3', textStyle: { color: '#1E293B', fontSize: 11 }, axisPointer: { type: 'line' } },
+    grid: { left: 50, right: 20, bottom: 20, top: 10, containLabel: true },
+    xAxis: { type: 'category', data: [], axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: '#94A3B8', fontSize: 10, rotate: 30 } },
+    yAxis: { type: 'value', axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: '#94A3B8', fontSize: 10, formatter: val => `¥${val.toLocaleString()}` }, splitLine: { lineStyle: { color: '#F0EBF9', type: 'dashed' } } },
+    series: [{
+      type: 'line',
+      smooth: true,
+      symbol: 'circle',
+      symbolSize: 6,
+      lineStyle: { color: '#7C3AED', width: 2 },
+      itemStyle: { color: '#7C3AED' },
+      areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(124,58,237,0.25)' }, { offset: 1, color: 'rgba(124,58,237,0.02)' }] } }
+    }]
+  })
+}
+
+function updateHistoryChart() {
+  if (!historyChart || !historyChartRef.value) return
+  const data = paginatedHistoryData.value
+  if (!data || data.length === 0) return
+  const dates = data.map(d => d.record_date)
+  const prices = data.map(d => d.price)
+  historyChart.setOption({
+    xAxis: { data: dates },
+    series: [{ data: prices }]
+  })
+}
+
 function initCharts() {
   initLineChart()
   initPieChart()
   initBarChart()
+  initHistoryChart()
   setTimeout(() => {
     lineChart?.resize()
     pieChart?.resize()
     barChart?.resize()
+    historyChart?.resize()
   }, 100)
 }
 
@@ -851,6 +934,7 @@ onMounted(async () => {
     lineChart?.resize()
     pieChart?.resize()
     barChart?.resize()
+    historyChart?.resize()
   })
 })
 
@@ -858,6 +942,7 @@ onUnmounted(() => {
   lineChart?.dispose()
   pieChart?.dispose()
   barChart?.dispose()
+  historyChart?.dispose()
 })
 </script>
 
@@ -1170,6 +1255,11 @@ onUnmounted(() => {
   background: var(--bg-primary);
   border-radius: 12px;
   margin: 8px 0;
+}
+
+.history-sparkline {
+  height: 140px;
+  margin-bottom: 12px;
 }
 
 .expand-title {

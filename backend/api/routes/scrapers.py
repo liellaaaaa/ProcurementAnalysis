@@ -14,7 +14,6 @@ router = APIRouter(prefix="/api/v1", tags=["scrapers"])
 
 SCRAPER_SCRIPTS = {
     "shengyishe": "backend/scrapers/shengyishe.py",
-    "akshare": "backend/scrapers/akshare.py"
 }
 
 
@@ -126,7 +125,7 @@ async def run_scraper(source: str):
             text=True,
             cwd=base_dir,
             env=env,
-            timeout=300
+            timeout=600
         )
 
         if result.returncode != 0:

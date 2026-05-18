@@ -217,7 +217,7 @@ async def get_price_history(
     if source and source != '__all__':
         query = query.filter(PriceRecord.source == source)
 
-    results = query.order_by(PriceRecord.record_date.asc()).all()
+    results = query.order_by(PriceRecord.record_date.desc()).all()
 
     response = []
     for pr, product_name, product_code in results:

@@ -20,7 +20,6 @@ SCRAPER_MIN_DELAY = 2  # seconds
 # 数据源新鲜度配置 (max_delay_days: 最大允许延迟天数)
 SOURCE_FRESHNESS_CONFIG = {
     "shengyishe": {"max_delay_days": 1, "description": "T+1延迟数据源"},
-    "akshare": {"max_delay_days": 1, "description": "AKshare 期货现货数据源"},
     "manual": {"max_delay_days": 0, "description": "实时数据源"},
 }
 

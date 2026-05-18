@@ -176,8 +176,7 @@ const updating = ref(false)
 const refreshingSource = ref(null)
 
 const sourceLabelMap = {
-  'shengyishe': '生意社',
-  'akshare': 'AKShare'
+  'shengyishe': '生意社'
 }
 
 const FRESHNESS_CACHE_KEY = 'procurement_freshness_check_ts'

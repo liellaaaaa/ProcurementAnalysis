@@ -71,8 +71,8 @@ class ShengyisheScraper(BaseScraper):
             page = context.new_page()
 
             try:
-                page.goto(url, timeout=60000, wait_until='networkidle')
-                page.wait_for_timeout(2000)
+                page.goto(url, timeout=30000, wait_until='networkidle')
+                page.wait_for_timeout(1000)
 
                 # 解析基准价
                 price_data = self._parse_benchmark_price(page, industry)
@@ -381,7 +381,7 @@ class ShengyisheScraper(BaseScraper):
                     all_results.append(self._dict_to_scraped_item(item))
 
             import time
-            time.sleep(1)
+            time.sleep(0.5)
 
         print(f"\n生意社爬取完成，共获取 {len(all_results)} 条去重后数据")
         return all_results
