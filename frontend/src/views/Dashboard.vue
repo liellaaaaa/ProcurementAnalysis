@@ -19,6 +19,7 @@
               <CategorySelector
                 v-model="filter1CategoryId"
                 v-model:subcategoryValue="filter1SubcategoryId"
+                :industry="filter1Industry"
                 @change="handleFilter1Change"
               />
               <el-date-picker
@@ -115,6 +116,7 @@
               <CategorySelector
                 v-model="filter2CategoryId"
                 v-model:subcategoryValue="filter2SubcategoryId"
+                :industry="filter2Industry"
                 @change="handleFilter2Change"
               />
               <el-date-picker
@@ -198,6 +200,7 @@
               <CategorySelector
                 v-model="filter3CategoryId"
                 v-model:subcategoryValue="filter3SubcategoryId"
+                :industry="filter3Industry"
                 @change="handleFilter3Change"
               />
               <el-input

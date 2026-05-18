@@ -21,12 +21,24 @@
         </template>
 
         <div class="selector-row">
+          <IndustrySelector v-model="selectedIndustry" />
           <CategorySelector
             v-model="selectedCategoryId"
             v-model:subcategoryValue="selectedSubcategoryId"
+            :industry="selectedIndustry"
             @change="handleCategoryChange"
           />
           <SourceSelector @update:source="val => { selectedSource = val; loadComparison() }" />
+          <el-date-picker
+            v-model="dateRange"
+            type="daterange"
+            range-separator="至"
+            start-placeholder="开始"
+            end-placeholder="结束"
+            size="default"
+            style="width: 200px"
+            @change="loadComparison"
+          />
         </div>
 
         <el-select
@@ -89,9 +101,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
 import { priceApi, productApi } from '../api/price'
 import SourceSelector from '../components/SourceSelector.vue'
+import IndustrySelector from '../components/IndustrySelector.vue'
 import CategorySelector from '../components/CategorySelector.vue'
 import * as echarts from 'echarts'
 
@@ -99,8 +112,10 @@ const chartRef = ref(null)
 const products = ref([])
 const selectedProducts = ref([])
 const selectedSource = ref(null)
+const selectedIndustry = ref(null)
 const selectedCategoryId = ref(null)
 const selectedSubcategoryId = ref(null)
+const dateRange = ref(null)
 let chartInstance = null
 
 const colors = ['#0077cc', '#00a8e8', '#4db8e8', '#005fa3', '#003d6b', '#006594']
@@ -111,6 +126,14 @@ const filteredProducts = computed(() => {
   return products.value
 })
 
+// 监听行业变化，重新加载产品列表
+watch(selectedIndustry, (newIndustry) => {
+  selectedProducts.value = []
+  selectedCategoryId.value = null
+  selectedSubcategoryId.value = null
+  loadProducts()
+})
+
 function getProductColor(id) {
   const idx = selectedProducts.value.indexOf(id)
   return colors[idx % colors.length]
@@ -119,6 +142,9 @@ function getProductColor(id) {
 async function loadProducts() {
   try {
     const params = { limit: 500 }
+    if (selectedIndustry.value) {
+      params.industry = selectedIndustry.value
+    }
     if (selectedCategoryId.value) {
       params.category_id = selectedCategoryId.value
     }
@@ -146,8 +172,17 @@ async function loadComparison() {
   if (selectedProducts.value.length < 2) return
 
   try {
+    // Calculate days from date range, default to 30 if not set
+    let days = 30
+    if (dateRange.value && dateRange.value.length === 2) {
+      const start = new Date(dateRange.value[0])
+      const end = new Date(dateRange.value[1])
+      days = Math.ceil((end - start) / (1000 * 60 * 60 * 24))
+      if (days < 1) days = 1
+    }
+
     const allData = await Promise.all(
-      selectedProducts.value.map(id => priceApi.getPriceHistory(id, 30, selectedSource.value))
+      selectedProducts.value.map(id => priceApi.getPriceHistory(id, days, selectedSource.value))
     )
 
     updateChart(allData.map((res, i) => ({

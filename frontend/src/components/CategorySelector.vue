@@ -5,6 +5,7 @@
       placeholder="一级目录"
       clearable
       size="default"
+      :disabled="industry && industry !== '化工'"
       @change="onLevelOneChange"
       class="selector-primary"
     >
@@ -25,7 +26,7 @@
       v-model="levelTwo"
       placeholder="二级目录"
       clearable
-      :disabled="!levelOne"
+      :disabled="!levelOne || (industry && industry !== '化工')"
       size="default"
       @change="onLevelTwoChange"
       class="selector-secondary"
@@ -56,6 +57,10 @@ const props = defineProps({
   },
   subcategoryValue: {
     type: Number,
+    default: null
+  },
+  industry: {
+    type: String,
     default: null
   }
 })
@@ -114,6 +119,17 @@ watch(() => props.modelValue, (val) => {
 
 watch(() => props.subcategoryValue, (val) => {
   levelTwo.value = val
+})
+
+watch(() => props.industry, (newIndustry) => {
+  if (newIndustry && newIndustry !== '化工') {
+    levelOne.value = null
+    levelTwo.value = null
+    levelOneCategories.value = []
+    levelTwoCategories.value = []
+  } else if (newIndustry === '化工') {
+    loadLevelOneCategories()
+  }
 })
 
 onMounted(() => {

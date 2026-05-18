@@ -29,6 +29,8 @@ class AlertConfigResponse(BaseModel):
     id: int
     product_id: int
     product_name: Optional[str] = None
+    industry: Optional[str] = None
+    category_id: Optional[int] = None
     alert_type: str
     threshold_value: Optional[float] = None
     change_percent: Optional[float] = None
@@ -59,7 +61,11 @@ class AlertRecordResponse(BaseModel):
 @router.get("/configs", response_model=List[AlertConfigResponse])
 async def get_alert_configs(
     product_id: Optional[int] = None,
-    is_active: Optional[bool] = None
+    is_active: Optional[bool] = None,
+    industry: Optional[str] = None,
+    source: Optional[str] = None,
+    category_id: Optional[int] = None,
+    subcategory_id: Optional[int] = None
 ):
     """获取预警配置列表"""
     session = get_session()
@@ -72,19 +78,49 @@ async def get_alert_configs(
 
     results = query.order_by(AlertConfig.created_at.desc()).all()
     product_ids = [r.product_id for r in results]
+
+    # Build product query with filters
+    product_query = session.query(Product)
+    if industry:
+        product_query = product_query.filter(Product.industry == industry)
+    if source:
+        product_query = product_query.filter(Product.source == source)
+    if category_id:
+        from backend.models.database import ProductCategory, Category
+        subcat_ids = [c.id for c in session.query(Category).filter(Category.parent_id == category_id).all()]
+        pc_query = session.query(ProductCategory.product_id).filter(ProductCategory.category_id.in_(subcat_ids + [category_id]))
+        product_query = product_query.filter(Product.id.in_(pc_query))
+    if subcategory_id:
+        from backend.models.database import ProductCategory
+        pc_query = session.query(ProductCategory.product_id).filter(ProductCategory.category_id == subcategory_id)
+        product_query = product_query.filter(Product.id.in_(pc_query))
+
+    filtered_products = {p.id: p for p in product_query.all()}
     product_names = {p.id: p.product_name for p in session.query(Product).filter(Product.id.in_(product_ids)).all()}
+
+    # Get product industry and category info
+    from backend.models.database import ProductCategory
+    product_industries = {p.id: p.industry for p in session.query(Product).filter(Product.id.in_(product_ids)).all()}
+    product_categories = {}
+    for pc in session.query(ProductCategory).filter(ProductCategory.product_id.in_(product_ids)).all():
+        if pc.product_id not in product_categories:
+            product_categories[pc.product_id] = pc.category_id
+
     response = []
     for config in results:
-        response.append(AlertConfigResponse(
-            id=config.id,
-            product_id=config.product_id,
-            product_name=product_names.get(config.product_id),
-            alert_type=config.alert_type,
-            threshold_value=config.threshold_value,
-            change_percent=config.change_percent,
-            is_active=config.is_active,
-            created_at=config.created_at
-        ))
+        if config.product_id in filtered_products:
+            response.append(AlertConfigResponse(
+                id=config.id,
+                product_id=config.product_id,
+                product_name=product_names.get(config.product_id),
+                industry=product_industries.get(config.product_id),
+                category_id=product_categories.get(config.product_id),
+                alert_type=config.alert_type,
+                threshold_value=config.threshold_value,
+                change_percent=config.change_percent,
+                is_active=config.is_active,
+                created_at=config.created_at
+            ))
     session.close()
     return response
 
@@ -194,10 +230,33 @@ async def delete_alert_config(config_id: int):
 async def get_alert_records(
     product_id: Optional[int] = None,
     is_read: Optional[bool] = None,
+    industry: Optional[str] = None,
+    source: Optional[str] = None,
+    category_id: Optional[int] = None,
+    subcategory_id: Optional[int] = None,
     limit: int = Query(100, le=500)
 ):
     """获取预警记录列表"""
     session = get_session()
+
+    # Build product filter base
+    product_query = session.query(Product)
+    if industry:
+        product_query = product_query.filter(Product.industry == industry)
+    if source:
+        product_query = product_query.filter(Product.source == source)
+    if category_id:
+        from backend.models.database import ProductCategory, Category
+        subcat_ids = [c.id for c in session.query(Category).filter(Category.parent_id == category_id).all()]
+        pc_query = session.query(ProductCategory.product_id).filter(ProductCategory.category_id.in_(subcat_ids + [category_id]))
+        product_query = product_query.filter(Product.id.in_(pc_query))
+    if subcategory_id:
+        from backend.models.database import ProductCategory
+        pc_query = session.query(ProductCategory.product_id).filter(ProductCategory.category_id == subcategory_id)
+        product_query = product_query.filter(Product.id.in_(pc_query))
+
+    filtered_product_ids = [p.id for p in product_query.all()]
+
     query = session.query(AlertRecord, Product.product_name, AlertConfig.alert_type).join(
         Product, AlertRecord.product_id == Product.id
     ).join(AlertConfig, AlertRecord.alert_config_id == AlertConfig.id)
@@ -206,6 +265,12 @@ async def get_alert_records(
         query = query.filter(AlertRecord.product_id == product_id)
     if is_read is not None:
         query = query.filter(AlertRecord.is_read == is_read)
+    if filtered_product_ids:
+        query = query.filter(AlertRecord.product_id.in_(filtered_product_ids))
+    else:
+        # No products match the filter, return empty
+        session.close()
+        return []
 
     results = query.order_by(AlertRecord.triggered_at.desc()).limit(limit).all()
     response = []

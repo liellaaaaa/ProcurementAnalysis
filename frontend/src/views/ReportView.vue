@@ -6,6 +6,14 @@
 
       <el-card class="filter-card animate-in">
         <el-form :inline="true" class="filter-form">
+          <SourceSelector v-model="selectedSource" />
+          <IndustrySelector v-model="selectedIndustry" />
+          <CategorySelector
+            v-model="selectedCategoryId"
+            v-model:subcategoryValue="selectedSubcategoryId"
+            :industry="selectedIndustry"
+            @change="handleFilterChange"
+          />
           <el-form-item label="报表类型">
             <el-select v-model="reportType" style="width: 120px">
               <el-option label="周报" value="weekly">
@@ -103,44 +111,49 @@
         </div>
       </el-card>
 
-      <div class="bottom-grid" v-if="rankingData.rising.length">
-        <el-card class="ranking-card animate-in" style="animation-delay: 0.3s" v-if="rankingData.rising.length">
+      <div class="ranking-row" v-if="rankingData.rising.length || rankingData.falling.length">
+        <el-card class="ranking-card animate-in" style="animation-delay: 0.3s">
           <template #header>
             <div class="card-header">
-              <div class="header-title">
-                <div class="title-icon-wrapper">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="18" y1="20" x2="18" y2="10"/>
-                    <line x1="12" y1="20" x2="12" y2="4"/>
-                    <line x1="6" y1="20" x2="6" y2="14"/>
-                  </svg>
-                </div>
-                <span>较昨日涨跌排行</span>
+              <div class="header-title rising">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
+                  <polyline points="17 6 23 6 23 12"/>
+                </svg>
+                <span>涨幅榜</span>
               </div>
             </div>
           </template>
-          <el-tabs>
-            <el-tab-pane label="涨幅榜">
-              <div class="ranking-list">
-                <div v-for="(item, index) in rankingData.rising" :key="index" class="ranking-item rising">
-                  <span class="rank-num">{{ index + 1 }}</span>
-                  <span class="rank-name">{{ item.product_name }}</span>
-                  <span class="rank-price">¥{{ item.latest_price?.toLocaleString() }}</span>
-                  <span class="rank-change rise">+{{ item.change_percent }}%</span>
-                </div>
+          <div class="ranking-list">
+            <div v-for="(item, index) in rankingData.rising" :key="index" class="ranking-item rising">
+              <span class="rank-num">{{ index + 1 }}</span>
+              <span class="rank-name">{{ item.product_name }}</span>
+              <span class="rank-price">¥{{ item.latest_price?.toLocaleString() }}</span>
+              <span class="rank-change rise">+{{ item.change_percent }}%</span>
+            </div>
+          </div>
+        </el-card>
+
+        <el-card class="ranking-card animate-in" style="animation-delay: 0.35s">
+          <template #header>
+            <div class="card-header">
+              <div class="header-title falling">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/>
+                  <polyline points="17 18 23 18 23 12"/>
+                </svg>
+                <span>跌幅榜</span>
               </div>
-            </el-tab-pane>
-            <el-tab-pane label="跌幅榜">
-              <div class="ranking-list">
-                <div v-for="(item, index) in rankingData.falling" :key="index" class="ranking-item falling">
-                  <span class="rank-num">{{ index + 1 }}</span>
-                  <span class="rank-name">{{ item.product_name }}</span>
-                  <span class="rank-price">¥{{ item.latest_price?.toLocaleString() }}</span>
-                  <span class="rank-change fall">{{ item.change_percent }}%</span>
-                </div>
-              </div>
-            </el-tab-pane>
-          </el-tabs>
+            </div>
+          </template>
+          <div class="ranking-list">
+            <div v-for="(item, index) in rankingData.falling" :key="index" class="ranking-item falling">
+              <span class="rank-num">{{ index + 1 }}</span>
+              <span class="rank-name">{{ item.product_name }}</span>
+              <span class="rank-price">¥{{ item.latest_price?.toLocaleString() }}</span>
+              <span class="rank-change fall">{{ item.change_percent }}%</span>
+            </div>
+          </div>
         </el-card>
       </div>
     </div>
@@ -151,11 +164,18 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { reportApi, priceApi } from '../api/price'
+import SourceSelector from '../components/SourceSelector.vue'
+import IndustrySelector from '../components/IndustrySelector.vue'
+import CategorySelector from '../components/CategorySelector.vue'
 
 const reportType = ref('weekly')
 const month = ref('')
 const startDate = ref('')
 const endDate = ref('')
+const selectedSource = ref(null)
+const selectedIndustry = ref(null)
+const selectedCategoryId = ref(null)
+const selectedSubcategoryId = ref(null)
 const stats = ref({})
 const rankingData = ref({ rising: [], falling: [] })
 
@@ -182,6 +202,11 @@ function getEffectiveDates() {
   return { startDate: s || null, endDate: e || null }
 }
 
+function handleFilterChange({ categoryId, subcategoryId }) {
+  selectedCategoryId.value = categoryId
+  selectedSubcategoryId.value = subcategoryId
+}
+
 async function loadStats() {
   try {
     const { startDate: s, endDate: e } = getEffectiveDates()
@@ -192,6 +217,10 @@ async function loadStats() {
 
     // 按日期范围获取所有价格记录，JS 端聚合
     const params = { start_date: s, end_date: e, limit: 1000 }
+    if (selectedSource.value) params.source = selectedSource.value
+    if (selectedIndustry.value) params.industry = selectedIndustry.value
+    if (selectedCategoryId.value) params.category_id = selectedCategoryId.value
+    if (selectedSubcategoryId.value) params.subcategory_id = selectedSubcategoryId.value
     const pricesRes = await priceApi.getPrices(params)
     const records = pricesRes.data || []
 
@@ -523,7 +552,7 @@ async function downloadHtml() {
   color: var(--text-muted);
 }
 
-.bottom-grid {
+.ranking-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 20px;
@@ -537,6 +566,14 @@ async function downloadHtml() {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.header-title.rising {
+  color: var(--rise-color);
+}
+
+.header-title.falling {
+  color: var(--fall-color);
 }
 
 .ranking-item {

@@ -14,6 +14,27 @@
         </div>
       </div>
 
+      <!-- 筛选器 -->
+      <el-card class="filter-card animate-in" style="animation-delay: 0.05s">
+        <div class="filter-row">
+          <SourceSelector v-model="filterSource" />
+          <IndustrySelector v-model="filterIndustry" />
+          <CategorySelector
+            v-model="filterCategoryId"
+            v-model:subcategoryValue="filterSubcategoryId"
+            :industry="filterIndustry"
+          />
+          <el-button type="primary" @click="loadAlertConfigs(); loadAlertRecords();" class="query-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            查询
+          </el-button>
+          <el-button @click="resetFilters" class="reset-btn">重置</el-button>
+        </div>
+      </el-card>
+
       <!-- 预警配置列表 -->
       <el-card class="config-card animate-in" style="animation-delay: 0.1s">
         <template #header>
@@ -27,13 +48,15 @@
               </div>
               <span>预警配置</span>
             </div>
-            <el-button type="primary" size="small" @click="openNewConfigDialog" class="add-btn">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="12" y1="5" x2="12" y2="19"/>
-                <line x1="5" y1="12" x2="19" y2="12"/>
-              </svg>
-              添加
-            </el-button>
+            <div class="controls">
+              <el-button type="primary" size="small" @click="openNewConfigDialog" class="add-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="12" y1="5" x2="12" y2="19"/>
+                  <line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                添加
+              </el-button>
+            </div>
           </div>
         </template>
         <el-table :data="alertConfigs" style="width: 100%" size="large" v-loading="configsLoading" class="alert-table">
@@ -133,13 +156,39 @@
       </el-card>
 
       <!-- 新建/编辑配置弹窗 -->
-      <el-dialog v-model="showConfigDialog" :title="editingConfig ? '编辑预警配置' : '添加预警配置'" width="520px" class="config-dialog">
+      <el-dialog v-model="showConfigDialog" :title="editingConfig ? '编辑预警配置' : '添加预警配置'" width="560px" class="config-dialog">
         <el-form :model="configForm" label-width="100px" class="config-form">
-          <el-form-item label="产品" required>
+          <el-form-item label="行业" required>
+            <IndustrySelector v-model="dialogIndustry" />
+          </el-form-item>
+          <el-form-item label="品类" v-if="dialogIndustry === '化工'">
             <CategorySelector
               v-model="dialogCategoryId"
               v-model:subcategoryValue="dialogSubcategoryId"
+              :industry="dialogIndustry"
             />
+          </el-form-item>
+          <el-form-item label="产品" required>
+            <el-select
+              v-model="configForm.product_id"
+              :placeholder="dialogIndustry === '化工' ? '请先选择行业和品类' : '请选择产品'"
+              style="width: 100%"
+              :disabled="!dialogIndustry || (dialogIndustry === '化工' && !dialogSubcategoryId)"
+              :loading="productsLoading"
+              @change="handleProductSelect"
+            >
+              <el-option
+                v-for="p in dialogProducts"
+                :key="p.id"
+                :label="p.product_name"
+                :value="p.id"
+              >
+                <span class="product-option">
+                  <span class="product-dot"></span>
+                  {{ p.product_name }}
+                </span>
+              </el-option>
+            </el-select>
           </el-form-item>
           <el-form-item label="预警类型">
             <el-select v-model="configForm.alert_type" placeholder="选择类型" style="width: 100%">
@@ -168,9 +217,11 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { alertApi } from '../api/price'
+import { ref, computed, watch, onMounted } from 'vue'
+import { alertApi, productApi } from '../api/price'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import SourceSelector from '../components/SourceSelector.vue'
+import IndustrySelector from '../components/IndustrySelector.vue'
 import CategorySelector from '../components/CategorySelector.vue'
 
 const alertConfigs = ref([])
@@ -180,9 +231,19 @@ const recordsLoading = ref(false)
 const showConfigDialog = ref(false)
 const editingConfig = ref(null)
 const filterUnread = ref(null)
+
+// 筛选器变量
+const filterSource = ref(null)
+const filterIndustry = ref(null)
+const filterCategoryId = ref(null)
+const filterSubcategoryId = ref(null)
+
+// 弹窗变量
+const dialogIndustry = ref(null)
 const dialogCategoryId = ref(null)
 const dialogSubcategoryId = ref(null)
-
+const dialogProducts = ref([])
+const productsLoading = ref(false)
 const configForm = ref({
   product_id: null,
   alert_type: 'threshold',
@@ -190,6 +251,43 @@ const configForm = ref({
   change_percent: null,
   is_active: true
 })
+
+// 监听行业和品类变化，加载产品列表
+watch([dialogIndustry, dialogSubcategoryId], () => {
+  // 切换行业时清空品类和产品选择
+  if (dialogIndustry.value) {
+    loadDialogProducts()
+  } else {
+    dialogProducts.value = []
+  }
+})
+
+async function loadDialogProducts() {
+  if (!dialogIndustry.value) {
+    dialogProducts.value = []
+    return
+  }
+  try {
+    productsLoading.value = true
+    const params = { limit: 500 }
+    params.industry = dialogIndustry.value
+    if (dialogCategoryId.value) params.category_id = dialogCategoryId.value
+    if (dialogSubcategoryId.value) params.subcategory_id = dialogSubcategoryId.value
+    console.log('Loading products with params:', params)
+    const res = await productApi.getProducts(params)
+    console.log('Products loaded:', res.data.length)
+    dialogProducts.value = res.data || []
+  } catch (e) {
+    console.error('Failed to load products', e)
+    dialogProducts.value = []
+  } finally {
+    productsLoading.value = false
+  }
+}
+
+function handleProductSelect(val) {
+  configForm.value.product_id = val
+}
 
 const statCards = ref([
   { icon: '⚠', label: '未读预警', value: 0, bgColor: 'rgba(255, 159, 10, 0.15)' },
@@ -207,7 +305,12 @@ function alertTypeLabel(type) {
 async function loadAlertConfigs() {
   configsLoading.value = true
   try {
-    const res = await alertApi.getAlertConfigs()
+    const params = {}
+    if (filterSource.value) params.source = filterSource.value
+    if (filterIndustry.value) params.industry = filterIndustry.value
+    if (filterCategoryId.value) params.category_id = filterCategoryId.value
+    if (filterSubcategoryId.value) params.subcategory_id = filterSubcategoryId.value
+    const res = await alertApi.getAlertConfigs(params)
     alertConfigs.value = res.data
     const activeCount = alertConfigs.value.filter(c => c.is_active).length
     statCards.value[1].value = activeCount
@@ -221,7 +324,12 @@ async function loadAlertConfigs() {
 async function loadAlertRecords() {
   recordsLoading.value = true
   try {
-    const res = await alertApi.getAlertRecords({ is_read: filterUnread.value })
+    const params = { is_read: filterUnread.value }
+    if (filterSource.value) params.source = filterSource.value
+    if (filterIndustry.value) params.industry = filterIndustry.value
+    if (filterCategoryId.value) params.category_id = filterCategoryId.value
+    if (filterSubcategoryId.value) params.subcategory_id = filterSubcategoryId.value
+    const res = await alertApi.getAlertRecords(params)
     alertRecords.value = res.data
     statCards.value[0].value = unreadCount.value
     const readCount = alertRecords.value.filter(r => r.is_read).length
@@ -234,11 +342,10 @@ async function loadAlertRecords() {
 }
 
 async function saveConfig() {
-  if (!dialogSubcategoryId.value) {
-    ElMessage.warning('请选择二级分类（产品）')
+  if (!configForm.value.product_id) {
+    ElMessage.warning('请选择产品')
     return
   }
-  configForm.value.product_id = dialogSubcategoryId.value
   try {
     if (editingConfig.value) {
       await alertApi.updateAlertConfig(editingConfig.value.id, configForm.value)
@@ -257,8 +364,10 @@ async function saveConfig() {
 
 function editConfig(row) {
   editingConfig.value = row
+  dialogIndustry.value = row.industry || null
   dialogCategoryId.value = null
-  dialogSubcategoryId.value = row.product_id
+  dialogSubcategoryId.value = null
+  dialogProducts.value = []
   configForm.value = {
     product_id: row.product_id,
     alert_type: row.alert_type,
@@ -267,12 +376,20 @@ function editConfig(row) {
     is_active: row.is_active
   }
   showConfigDialog.value = true
+  // 如果是化工行业，加载产品列表并选中当前产品
+  if (row.industry === '化工') {
+    loadDialogProducts().then(() => {
+      // 产品列表加载完成后保持选中状态
+    })
+  }
 }
 
 function openNewConfigDialog() {
   editingConfig.value = null
+  dialogIndustry.value = null
   dialogCategoryId.value = null
   dialogSubcategoryId.value = null
+  dialogProducts.value = []
   configForm.value = {
     product_id: null,
     alert_type: 'threshold',
@@ -325,6 +442,15 @@ function resetForm() {
   }
 }
 
+function resetFilters() {
+  filterSource.value = null
+  filterIndustry.value = null
+  filterCategoryId.value = null
+  filterSubcategoryId.value = null
+  loadAlertConfigs()
+  loadAlertRecords()
+}
+
 onMounted(() => {
   loadAlertConfigs()
   loadAlertRecords()
@@ -357,6 +483,30 @@ onMounted(() => {
   grid-template-columns: repeat(3, 1fr);
   gap: 16px;
   margin-bottom: 24px;
+}
+
+.filter-card {
+  margin-bottom: 20px;
+  border-radius: 16px !important;
+}
+
+.filter-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.query-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.reset-btn {
+  background: var(--bg-primary) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-secondary) !important;
 }
 
 .stat-card {
@@ -540,5 +690,18 @@ onMounted(() => {
 .animate-in {
   opacity: 0;
   animation: fadeInUp 0.5s ease-out forwards;
+}
+
+.product-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.product-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-primary);
 }
 </style>
