@@ -10,6 +10,7 @@ export default defineConfig({
         target: 'http://localhost:8000',
         changeOrigin: true
       }
-    }
+    },
+    allowedHosts: ['fritter-bagpipe-credible.ngrok-free.dev']
   }
 })
