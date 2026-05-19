@@ -14,6 +14,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Import routers
+from backend.api.routes import products, prices, scrapers, analytics, reports, alerts, categories, operation_logs
+
+# Include routers (必须放在 catch-all 路由之前)
+app.include_router(products.router)
+app.include_router(prices.router)
+app.include_router(scrapers.router)
+app.include_router(analytics.router)
+app.include_router(reports.router)
+app.include_router(alerts.router)
+app.include_router(categories.router)
+app.include_router(operation_logs.router)
+
 # 获取项目根目录
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FRONTEND_DIST = os.path.join(BASE_DIR, "frontend", "dist")
@@ -38,19 +51,6 @@ async def serve_static(path: str):
         return FileResponse(file_path)
     # SPA fallback
     return FileResponse(os.path.join(FRONTEND_DIST, "index.html"))
-
-# Import routers
-from backend.api.routes import products, prices, scrapers, analytics, reports, alerts, categories, operation_logs
-
-# Include routers
-app.include_router(products.router)
-app.include_router(prices.router)
-app.include_router(scrapers.router)
-app.include_router(analytics.router)
-app.include_router(reports.router)
-app.include_router(alerts.router)
-app.include_router(categories.router)
-app.include_router(operation_logs.router)
 
 @app.get("/")
 async def root():
