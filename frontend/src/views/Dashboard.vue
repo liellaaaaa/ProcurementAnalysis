@@ -179,8 +179,54 @@
         </div>
       </el-card>
 
+      <div class="ranking-row" v-if="rankingData.rising.length || rankingData.falling.length">
+        <el-card class="ranking-card animate-in" style="animation-delay: 0.2s">
+          <template #header>
+            <div class="card-header">
+              <div class="header-title rising">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
+                  <polyline points="17 6 23 6 23 12"/>
+                </svg>
+                <span>涨幅榜</span>
+              </div>
+            </div>
+          </template>
+          <div class="ranking-list">
+            <div v-for="(item, index) in rankingData.rising" :key="index" class="ranking-item rising">
+              <span class="rank-num">{{ index + 1 }}</span>
+              <span class="rank-name">{{ item.product_name }}</span>
+              <span class="rank-price">¥{{ item.latest_price?.toLocaleString() }}</span>
+              <span class="rank-change rise">+{{ item.change_percent }}%</span>
+            </div>
+          </div>
+        </el-card>
+
+        <el-card class="ranking-card animate-in" style="animation-delay: 0.25s">
+          <template #header>
+            <div class="card-header">
+              <div class="header-title falling">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/>
+                  <polyline points="17 18 23 18 23 12"/>
+                </svg>
+                <span>跌幅榜</span>
+              </div>
+            </div>
+          </template>
+          <div class="ranking-list">
+            <div v-for="(item, index) in rankingData.falling" :key="index" class="ranking-item falling">
+              <span class="rank-num">{{ index + 1 }}</span>
+              <span class="rank-name">{{ item.product_name }}</span>
+              <span class="rank-price">¥{{ item.latest_price?.toLocaleString() }}</span>
+              <span class="rank-change fall">{{ item.change_percent }}%</span>
+            </div>
+          </div>
+        </el-card>
+      </div>
+
       <!-- 第三张卡片：详细数据表格 -->
-      <el-card class="chart-card animate-in" style="animation-delay: 0.15s">
+      <el-card class="chart-card animate-in" style="animation-delay: 0.3s">
         <template #header>
           <div class="card-header">
             <div class="header-title">
@@ -349,6 +395,7 @@ const pieChartRawData = ref({ labels: [], sizes: [] })
 
 const latestPrices = ref([])
 const expandedRows = ref([])
+const rankingData = ref({ rising: [], falling: [] })
 
 const filter1CategoryId = ref(null)
 const filter1SubcategoryId = ref(null)
@@ -676,6 +723,8 @@ async function loadRankingData() {
     }
     const res = await priceApi.getDashboardRanking(params)
     const rising = res.data.rising || []
+    const falling = res.data.falling || []
+    rankingData.value = { rising, falling }
     barChartRawData.value = {
       categories: rising.map(r => r.product_name),
       values: rising.map(r => r.change_percent),
@@ -1281,6 +1330,89 @@ onUnmounted(() => {
 .text-rise { color: var(--rise-color); font-weight: 500; }
 .text-fall { color: var(--fall-color); font-weight: 500; }
 .text-flat { color: var(--text-secondary); }
+
+.ranking-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.ranking-card {
+  border-radius: 16px !important;
+}
+
+.ranking-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.header-title.rising {
+  color: var(--rise-color);
+}
+
+.header-title.falling {
+  color: var(--fall-color);
+}
+
+.ranking-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--bg-primary);
+  border-radius: 8px;
+  transition: transform 0.2s ease;
+}
+
+.ranking-item:hover {
+  transform: translateX(4px);
+}
+
+.rank-num {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-hover);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.ranking-item.rising .rank-num {
+  background: rgba(230, 57, 70, 0.12);
+  color: var(--rise-color);
+}
+
+.ranking-item.falling .rank-num {
+  background: rgba(42, 157, 92, 0.12);
+  color: var(--fall-color);
+}
+
+.rank-name {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.rank-price {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-family: 'Fira Code', monospace;
+}
+
+.rank-change {
+  font-size: 13px;
+  font-weight: 600;
+  font-family: 'Fira Code', monospace;
+}
+
+.rank-change.rise { color: var(--rise-color); }
+.rank-change.fall { color: var(--fall-color); }
 
 @keyframes fadeInUp {
   from { opacity: 0; transform: translateY(12px); }

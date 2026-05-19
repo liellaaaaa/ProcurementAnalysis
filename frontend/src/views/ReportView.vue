@@ -5,35 +5,16 @@
       </header>
 
       <el-card class="filter-card animate-in">
-        <el-form :inline="true" class="filter-form">
-          <SourceSelector v-model="selectedSource" />
-          <IndustrySelector v-model="selectedIndustry" />
-          <CategorySelector
-            v-model="selectedCategoryId"
-            v-model:subcategoryValue="selectedSubcategoryId"
-            :industry="selectedIndustry"
-            @change="handleFilterChange"
-          />
-          <el-form-item label="报表类型">
-            <el-select v-model="reportType" style="width: 120px">
-              <el-option label="周报" value="weekly">
-                <span class="option-label">◫ 周报</span>
-              </el-option>
-              <el-option label="月报" value="monthly">
-                <span class="option-label">◧ 月报</span>
-              </el-option>
-            </el-select>
-          </el-form-item>
-          <el-form-item label="月份" v-if="reportType === 'monthly'">
-            <el-date-picker v-model="month" type="month" value-format="YYYY-MM" placeholder="选择月份" />
-          </el-form-item>
-          <el-form-item label="开始日期" v-if="reportType === 'weekly'">
-            <el-date-picker v-model="startDate" type="date" value-format="YYYY-MM-DD" placeholder="选择开始日期" />
-          </el-form-item>
-          <el-form-item label="结束日期" v-if="reportType === 'weekly'">
-            <el-date-picker v-model="endDate" type="date" value-format="YYYY-MM-DD" placeholder="选择结束日期" />
-          </el-form-item>
-          <el-form-item>
+        <div class="filter-form">
+          <div class="filter-row">
+            <SourceSelector v-model="selectedSource" />
+            <IndustrySelector v-model="selectedIndustry" />
+            <CategorySelector
+              v-model="selectedCategoryId"
+              v-model:subcategoryValue="selectedSubcategoryId"
+              :industry="selectedIndustry"
+              @change="handleFilterChange"
+            />
             <el-button type="primary" @click="loadStats" class="query-btn">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="11" cy="11" r="8"/>
@@ -41,8 +22,29 @@
               </svg>
               查询数据
             </el-button>
-          </el-form-item>
-        </el-form>
+          </div>
+          <div class="filter-row">
+            <el-form-item label="报表类型">
+              <el-select v-model="reportType" style="width: 120px">
+                <el-option label="周报" value="weekly">
+                  <span class="option-label">◫ 周报</span>
+                </el-option>
+                <el-option label="月报" value="monthly">
+                  <span class="option-label">◧ 月报</span>
+                </el-option>
+              </el-select>
+            </el-form-item>
+            <el-form-item label="月份" v-if="reportType === 'monthly'">
+              <el-date-picker v-model="month" type="month" value-format="YYYY-MM" placeholder="选择月份" />
+            </el-form-item>
+            <el-form-item label="开始日期" v-if="reportType === 'weekly'">
+              <el-date-picker v-model="startDate" type="date" value-format="YYYY-MM-DD" placeholder="选择开始日期" />
+            </el-form-item>
+            <el-form-item label="结束日期" v-if="reportType === 'weekly'">
+              <el-date-picker v-model="endDate" type="date" value-format="YYYY-MM-DD" placeholder="选择结束日期" />
+            </el-form-item>
+          </div>
+        </div>
       </el-card>
 
       <div class="stats-grid">
@@ -111,57 +113,12 @@
         </div>
       </el-card>
 
-      <div class="ranking-row" v-if="rankingData.rising.length || rankingData.falling.length">
-        <el-card class="ranking-card animate-in" style="animation-delay: 0.3s">
-          <template #header>
-            <div class="card-header">
-              <div class="header-title rising">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
-                  <polyline points="17 6 23 6 23 12"/>
-                </svg>
-                <span>涨幅榜</span>
-              </div>
-            </div>
-          </template>
-          <div class="ranking-list">
-            <div v-for="(item, index) in rankingData.rising" :key="index" class="ranking-item rising">
-              <span class="rank-num">{{ index + 1 }}</span>
-              <span class="rank-name">{{ item.product_name }}</span>
-              <span class="rank-price">¥{{ item.latest_price?.toLocaleString() }}</span>
-              <span class="rank-change rise">+{{ item.change_percent }}%</span>
-            </div>
           </div>
-        </el-card>
-
-        <el-card class="ranking-card animate-in" style="animation-delay: 0.35s">
-          <template #header>
-            <div class="card-header">
-              <div class="header-title falling">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/>
-                  <polyline points="17 18 23 18 23 12"/>
-                </svg>
-                <span>跌幅榜</span>
-              </div>
-            </div>
-          </template>
-          <div class="ranking-list">
-            <div v-for="(item, index) in rankingData.falling" :key="index" class="ranking-item falling">
-              <span class="rank-num">{{ index + 1 }}</span>
-              <span class="rank-name">{{ item.product_name }}</span>
-              <span class="rank-price">¥{{ item.latest_price?.toLocaleString() }}</span>
-              <span class="rank-change fall">{{ item.change_percent }}%</span>
-            </div>
-          </div>
-        </el-card>
-      </div>
-    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { reportApi, priceApi } from '../api/price'
 import SourceSelector from '../components/SourceSelector.vue'
@@ -185,6 +142,21 @@ const statCards = ref([
   { icon: '◎', label: '最高价', value: '-', bgColor: 'rgba(0, 196, 140, 0.15)' },
   { icon: '◫', label: '平均价', value: '-', bgColor: 'rgba(255, 217, 61, 0.15)' }
 ])
+
+function getDefaultWeeklyRange() {
+  const today = new Date()
+  const sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
+  const fmt = (d) => d.toISOString().slice(0, 10)
+  return { start: fmt(sevenDaysAgo), end: fmt(today) }
+}
+
+watch(reportType, (type) => {
+  if (type === 'weekly' && !startDate.value && !endDate.value) {
+    const defaults = getDefaultWeeklyRange()
+    startDate.value = defaults.start
+    endDate.value = defaults.end
+  }
+}, { immediate: true })
 
 onMounted(() => {
   loadStats()
@@ -378,6 +350,13 @@ async function downloadHtml() {
 
 .filter-form :deep(.el-form-item) {
   margin-bottom: 0;
+}
+
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
 }
 
 .option-label {
