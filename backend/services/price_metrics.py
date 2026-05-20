@@ -44,8 +44,16 @@ def _get_product_ids_by_category(session: Session, category_id: int):
     ).distinct().all()]
 
 
-def _get_product_ids_by_subcategory(session: Session, subcategory_ids: List[int]):
+def _get_product_ids_by_subcategory(session: Session, subcategory_ids):
     """获取指定子分类的产品ID列表"""
+    # 检查是否是有效的列表类型
+    if subcategory_ids is None:
+        return []
+    if isinstance(subcategory_ids, list):
+        if len(subcategory_ids) == 0:
+            return []
+    elif not isinstance(subcategory_ids, (list, tuple)):
+        return []
     return [p[0] for p in session.query(Product.id).join(
         ProductCategory, Product.id == ProductCategory.product_id
     ).filter(ProductCategory.category_id.in_(subcategory_ids)).distinct().all()]
