@@ -4,8 +4,9 @@
     placeholder="数据来源"
     size="default"
     clearable
-    @change="onChange"
     class="source-selector"
+    :remote-method="loadSources"
+    @change="onChange"
   >
     <template #prefix>
       <span class="selector-prefix">来源</span>

@@ -20,6 +20,9 @@ export const priceApi = {
   getDashboardRanking(params) {
     return api.get('/prices/dashboard/ranking', { params })
   },
+  getDashboardIndicatorCards(params) {
+    return api.get('/prices/dashboard/indicator-cards', { params })
+  },
   getDashboardVolatility(params) {
     return api.get('/prices/dashboard/volatility', { params })
   },

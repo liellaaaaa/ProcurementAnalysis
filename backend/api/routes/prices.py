@@ -9,6 +9,7 @@ import numpy
 from backend.models.database import get_session, Product, PriceRecord, Category, ProductCategory
 from backend.services.alert_service import check_and_trigger_alerts
 from backend.services.operation_logger import OperationLogger
+from backend.services.price_metrics import calculate_yoy_mom, calculate_day_change
 
 router = APIRouter(prefix="/api/v1/prices", tags=["价格数据"])
 
@@ -429,83 +430,116 @@ async def get_dashboard_ranking(
     industry: Optional[str] = None,
     category_id: Optional[int] = None,
     subcategory_id: Optional[List[int]] = Query(None),
-    source: Optional[str] = None
+    source: Optional[str] = None,
+    period_type: Optional[str] = Query(None, regex="^(yoy|qoq)$", description="yoy=同比, qoq=环比")
 ):
     """获取涨跌排行（柱状图数据）"""
     session = get_session()
-    start_date = (date.today() - timedelta(days=days)).isoformat()
+    try:
+        # 如果指定了 period_type，使用同比/环比计算
+        if period_type:
+            result = calculate_yoy_mom(
+                session=session,
+                period_type=period_type,
+                source=source,
+                industry=industry,
+                category_id=category_id,
+                subcategory_id=subcategory_id,
+                top_n=limit
+            )
+            items = result["items"]
+            rising = [item for item in items if item["trend"] == "rise"]
+            falling = [item for item in items if item["trend"] == "fall"]
+            # 转换字段名以兼容前端
+            rising = [{
+                "product_id": i["product_id"],
+                "product_name": i["product_name"],
+                "latest_price": i.get("latest_price", 0),
+                "change_percent": i["change_percent"],
+                "avg_price": i["current_avg"]
+            } for i in rising]
+            falling = [{
+                "product_id": i["product_id"],
+                "product_name": i["product_name"],
+                "latest_price": i.get("latest_price", 0),
+                "change_percent": i["change_percent"],
+                "avg_price": i["current_avg"]
+            } for i in falling]
+            return {"rising": rising, "falling": falling}
 
-    # 获取每个产品的最新价格和变化率
-    subquery = session.query(
-        PriceRecord.product_id,
-        func.max(PriceRecord.record_date).label('max_date')
-    ).group_by(PriceRecord.product_id).subquery()
+        # 原有的日变化计算逻辑
+        start_date = (date.today() - timedelta(days=days)).isoformat()
 
-    query = session.query(
-        PriceRecord.product_id,
-        PriceRecord.price,
-        PriceRecord.change_percent,
-        PriceRecord.record_date
-    ).join(
-        subquery,
-        (PriceRecord.product_id == subquery.c.product_id) &
-        (PriceRecord.record_date == subquery.c.max_date)
-    )
+        # 获取每个产品的最新价格和变化率
+        subquery = session.query(
+            PriceRecord.product_id,
+            func.max(PriceRecord.record_date).label('max_date')
+        ).group_by(PriceRecord.product_id).subquery()
 
-    if source and source != '__all__':
-        query = query.filter(PriceRecord.source == source)
-
-    if industry:
-        product_ids_query = session.query(Product.id).filter(Product.industry == industry)
-        query = query.filter(PriceRecord.product_id.in_(product_ids_query))
-
-    # Filter by category
-    if category_id:
-        subcat_ids = [c.id for c in session.query(Category).filter(Category.parent_id == category_id).all()]
-        pc_query = session.query(ProductCategory.product_id).filter(ProductCategory.category_id.in_(subcat_ids + [category_id]))
-        query = query.filter(PriceRecord.product_id.in_(pc_query))
-
-    if subcategory_id:
-        # Get product IDs via explicit join query
-        matched_products = session.query(Product.id).join(
-            ProductCategory, Product.id == ProductCategory.product_id
-        ).filter(ProductCategory.category_id.in_(subcategory_id)).distinct().all()
-        pc_ids = [p[0] for p in matched_products]
-        if pc_ids:
-            query = query.filter(PriceRecord.product_id.in_(pc_ids))
-
-    latest_prices = query.all()
-
-    product_ids = [lp.product_id for lp in latest_prices]
-    products = {p.id: p.product_name for p in session.query(Product).filter(Product.id.in_(product_ids)).all()}
-
-    ranking = []
-    for lp in latest_prices:
-        # 计算该产品历史平均价格
-        hist_query = session.query(func.avg(PriceRecord.price)).filter(
-            PriceRecord.product_id == lp.product_id,
-            PriceRecord.record_date >= start_date
+        query = session.query(
+            PriceRecord.product_id,
+            PriceRecord.price,
+            PriceRecord.change_percent,
+            PriceRecord.record_date
+        ).join(
+            subquery,
+            (PriceRecord.product_id == subquery.c.product_id) &
+            (PriceRecord.record_date == subquery.c.max_date)
         )
+
         if source and source != '__all__':
-            hist_query = hist_query.filter(PriceRecord.source == source)
-        hist = hist_query.scalar() or 0
-        ranking.append({
-            "product_id": lp.product_id,
-            "product_name": products.get(lp.product_id, "未知"),
-            "latest_price": lp.price,
-            "change_percent": lp.change_percent or 0,
-            "avg_price": round(hist, 2)
-        })
+            query = query.filter(PriceRecord.source == source)
 
-    # 按涨跌排序
-    ranking.sort(key=lambda x: x["change_percent"], reverse=True)
-    rising = ranking[:limit]
-    falling = ranking[-limit:][::-1]
+        if industry:
+            product_ids_query = session.query(Product.id).filter(Product.industry == industry)
+            query = query.filter(PriceRecord.product_id.in_(product_ids_query))
 
-    session.close()
-    return {"rising": rising, "falling": falling}
+        # Filter by category
+        if category_id:
+            subcat_ids = [c.id for c in session.query(Category).filter(Category.parent_id == category_id).all()]
+            pc_query = session.query(ProductCategory.product_id).filter(ProductCategory.category_id.in_(subcat_ids + [category_id]))
+            query = query.filter(PriceRecord.product_id.in_(pc_query))
 
+        if subcategory_id:
+            # Get product IDs via explicit join query
+            matched_products = session.query(Product.id).join(
+                ProductCategory, Product.id == ProductCategory.product_id
+            ).filter(ProductCategory.category_id.in_(subcategory_id)).distinct().all()
+            pc_ids = [p[0] for p in matched_products]
+            if pc_ids:
+                query = query.filter(PriceRecord.product_id.in_(pc_ids))
 
+        latest_prices = query.all()
+
+        product_ids = [lp.product_id for lp in latest_prices]
+        products = {p.id: p.product_name for p in session.query(Product).filter(Product.id.in_(product_ids)).all()}
+
+        ranking = []
+        for lp in latest_prices:
+            # 计算该产品历史平均价格
+            hist_query = session.query(func.avg(PriceRecord.price)).filter(
+                PriceRecord.product_id == lp.product_id,
+                PriceRecord.record_date >= start_date
+            )
+            if source and source != '__all__':
+                hist_query = hist_query.filter(PriceRecord.source == source)
+            hist = hist_query.scalar() or 0
+            ranking.append({
+                "product_id": lp.product_id,
+                "product_name": products.get(lp.product_id, "未知"),
+                "latest_price": lp.price,
+                "change_percent": lp.change_percent or 0,
+                "avg_price": round(hist, 2)
+            })
+
+        # 按涨跌排序
+        ranking.sort(key=lambda x: x["change_percent"], reverse=True)
+        rising = ranking[:limit]
+        falling = ranking[-limit:][::-1]
+
+        return {"rising": rising, "falling": falling}
+    finally:
+        session.close()
 @router.get("/dashboard/history/compare")
 async def get_dashboard_history_compare(
     product_ids: Optional[str] = Query(None, description="逗号分隔的产品ID，留空则返回分类下所有产品"),
@@ -664,3 +698,40 @@ async def get_dashboard_volatility(
         "active_products": stats.active_products or 0,
         "today_updated": today_count
     }
+
+
+@router.get("/dashboard/indicator-cards")
+async def get_dashboard_indicator_cards(
+    period_type: str = Query(..., regex="^(yoy|qoq|d7|d30)$", description="yoy=同比, qoq=环比, d7=7日涨跌, d30=30日涨跌"),
+    industry: Optional[str] = None,
+    category_id: Optional[int] = None,
+    subcategory_id: Optional[List[int]] = Query(None),
+    source: Optional[str] = None
+):
+    """获取指标卡片数据（同比/环比/7日涨跌/30日涨跌）"""
+    session = get_session()
+    try:
+        if period_type in ("yoy", "qoq"):
+            result = calculate_yoy_mom(
+                session=session,
+                period_type=period_type,
+                source=source,
+                industry=industry,
+                category_id=category_id,
+                subcategory_id=subcategory_id,
+                top_n=10
+            )
+        else:
+            days = int(period_type[1:])
+            result = calculate_day_change(
+                session=session,
+                days=days,
+                source=source,
+                industry=industry,
+                category_id=category_id,
+                subcategory_id=subcategory_id,
+                top_n=10
+            )
+        return result
+    finally:
+        session.close()

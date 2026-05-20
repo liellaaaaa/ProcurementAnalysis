@@ -154,24 +154,25 @@
           </div>
           <div class="chart-6">
             <div class="indicator-cards">
-              <div class="indicator-card" v-for="(card, idx) in indicatorCards" :key="card.type" :style="{animationDelay: `${0.15 + idx * 0.05}s`}">
+              <div class="indicator-card" v-for="(card, idx) in indicatorCards" :key="card.metricType" :style="{animationDelay: `${0.15 + idx * 0.05}s`}">
                 <div class="card-header-row">
-                  <span class="card-label">{{ card.type }}</span>
-                  <el-select v-model="card.selected" placeholder="同比/环比" size="small" style="width: 90px">
+                  <span class="card-placeholder"></span>
+                  <el-select v-model="card.metricType" size="small" style="width: 80px" @change="onMetricTypeChange(idx)">
                     <el-option label="同比" value="yoy" />
                     <el-option label="环比" value="qoq" />
+                    <el-option label="7日涨跌" value="d7" />
+                    <el-option label="30日涨跌" value="d30" />
                   </el-select>
                 </div>
-                <div class="card-content">
-                  <div class="card-product">{{ card.productName }}</div>
-                  <div class="card-value" :class="card.trend">
-                    <span class="trend-icon">{{ card.trend === 'rise' ? '↑' : '↓' }}</span>
-                    <span class="value-num">{{ card.changePercent }}%</span>
+                <div class="card-body" :class="{ 'no-data': !card.hasData }">
+                  <div class="card-main">
+                    <div class="card-product">{{ card.productName }}</div>
+                    <div class="card-value" :class="card.trend">
+                      <span class="trend-icon">{{ card.trend === 'rise' ? '↑' : '↓' }}</span>
+                      <span class="value-num">{{ card.changePercent }}%</span>
+                    </div>
                   </div>
-                  <div class="card-detail">
-                    <span class="detail-label">当前价格</span>
-                    <span class="detail-value">¥{{ card.price?.toLocaleString() }}</span>
-                  </div>
+                  <div class="card-price">¥{{ card.price?.toLocaleString() }}</div>
                 </div>
               </div>
             </div>
@@ -415,6 +416,8 @@ const filter2Industry = ref(null)
 
 watch(filter2Source, () => { loadFilter2Charts() })
 watch(filter2Industry, () => { loadFilter2Charts() })
+watch(filter2CategoryId, () => { loadFilter2Charts() })
+watch(filter2SubcategoryId, () => { loadFilter2Charts() })
 
 const filter3CategoryId = ref(null)
 const filter3SubcategoryId = ref(null)
@@ -430,8 +433,10 @@ const historyPagination = ref({ page: 1, pageSize: 10 })
 const compareDays = ref(7)
 
 const indicatorCards = ref([
-  { type: '较昨日同比最高', selected: 'yoy', productName: '-', changePercent: 0, trend: 'rise', price: 0 },
-  { type: '较昨日环比最高', selected: 'qoq', productName: '-', changePercent: 0, trend: 'rise', price: 0 }
+  { metricType: 'yoy', metricLabel: '同比涨幅', productName: '-', changePercent: 0, trend: 'rise', price: 0, hasData: true },
+  { metricType: 'qoq', metricLabel: '环比涨幅', productName: '-', changePercent: 0, trend: 'rise', price: 0, hasData: true },
+  { metricType: 'd7', metricLabel: '7日涨跌', productName: '-', changePercent: 0, trend: 'rise', price: 0, hasData: true },
+  { metricType: 'd30', metricLabel: '30日涨跌', productName: '-', changePercent: 0, trend: 'rise', price: 0, hasData: true }
 ])
 
 // 行业列配置：各行业显示不同字段
@@ -633,59 +638,109 @@ async function loadFilter2Charts() {
 
 async function loadIndicatorCards() {
   try {
-    let days = 30
-    if (filter2DateRange.value && filter2DateRange.value.length === 2) {
-      const start = new Date(filter2DateRange.value[0])
-      const end = new Date(filter2DateRange.value[1])
-      days = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1
-    }
-
     const params = {
-      days: days,
       category_id: filter2CategoryId.value || null,
       subcategory_id: filter2SubcategoryId.value || null,
       source: filter2Source.value || null,
       industry: filter2Industry.value || null
     }
-    const res = await priceApi.getDashboardRanking(params)
-    const rising = res.data.rising || []
 
-    if (rising.length > 0) {
-      const top1 = rising[0]
-      indicatorCards.value[0] = {
-        type: '较昨日同比最高',
-        selected: 'yoy',
-        productName: top1.product_name,
-        changePercent: Math.abs(top1.change_percent),
-        trend: top1.change_percent >= 0 ? 'rise' : 'fall',
-        price: top1.latest_price || 0
-      }
+    // 并行加载所有4种指标
+    const [yoyRes, qoqRes, d7Res, d30Res] = await Promise.all([
+      priceApi.getDashboardIndicatorCards({ ...params, period_type: 'yoy' }),
+      priceApi.getDashboardIndicatorCards({ ...params, period_type: 'qoq' }),
+      priceApi.getDashboardIndicatorCards({ ...params, period_type: 'd7' }),
+      priceApi.getDashboardIndicatorCards({ ...params, period_type: 'd30' })
+    ])
+
+    const metricMap = {
+      yoy: yoyRes.data.items || [],
+      qoq: qoqRes.data.items || [],
+      d7: d7Res.data.items || [],
+      d30: d30Res.data.items || []
     }
 
-    if (rising.length > 1) {
-      const top2 = rising[1]
-      indicatorCards.value[1] = {
-        type: '较昨日环比最高',
-        selected: 'qoq',
-        productName: top2.product_name,
-        changePercent: Math.abs(top2.change_percent),
-        trend: top2.change_percent >= 0 ? 'rise' : 'fall',
-        price: top2.latest_price || 0
-      }
-    } else if (rising.length === 1) {
-      const top1 = rising[0]
-      indicatorCards.value[1] = {
-        type: '较昨日环比最高',
-        selected: 'qoq',
-        productName: top1.product_name + '(次)',
-        changePercent: Math.max(0, Math.abs(top1.change_percent) - 5),
-        trend: 'rise',
-        price: top1.latest_price || 0
+    // 更新每个卡片
+    for (let i = 0; i < indicatorCards.value.length; i++) {
+      const card = indicatorCards.value[i]
+      const items = metricMap[card.metricType] || []
+      if (items.length > 0) {
+        const top1 = items[0]
+        indicatorCards.value[i] = {
+          ...card,
+          productName: top1.product_name,
+          changePercent: Math.abs(top1.change_percent),
+          trend: top1.change_percent >= 0 ? 'rise' : 'fall',
+          price: top1.latest_price || 0,
+          hasData: true
+        }
+      } else {
+        // 无数据时显示提示
+        const noDataMsg = {
+          yoy: '暂无去年同比数据',
+          qoq: '暂无上月环比数据',
+          d7: '暂无7日数据',
+          d30: '暂无30日数据'
+        }
+        indicatorCards.value[i] = {
+          ...card,
+          productName: noDataMsg[card.metricType] || '暂无数据',
+          changePercent: 0,
+          trend: 'rise',
+          price: 0,
+          hasData: false
+        }
       }
     }
   } catch (e) {
     console.error('Failed to load indicator cards', e)
   }
+}
+
+async function onMetricTypeChange(idx) {
+  // 当用户切换指标类型时，重新加载该卡片数据
+  try {
+    const card = indicatorCards.value[idx]
+    const params = {
+      period_type: card.metricType,
+      category_id: filter2CategoryId.value || null,
+      subcategory_id: filter2SubcategoryId.value || null,
+      source: filter2Source.value || null,
+      industry: filter2Industry.value || null
+    }
+    const res = await priceApi.getDashboardIndicatorCards(params)
+    const items = res.data.items || []
+    if (items.length > 0) {
+      const top1 = items[0]
+      indicatorCards.value[idx] = {
+        ...card,
+        metricLabel: getMetricLabel(card.metricType),
+        productName: top1.product_name,
+        changePercent: Math.abs(top1.change_percent),
+        trend: top1.change_percent >= 0 ? 'rise' : 'fall',
+        price: top1.latest_price || 0,
+        hasData: true
+      }
+    } else {
+      const noDataMsg = { yoy: '暂无去年同比数据', qoq: '暂无上月环比数据', d7: '暂无7日数据', d30: '暂无30日数据' }
+      indicatorCards.value[idx] = {
+        ...card,
+        metricLabel: getMetricLabel(card.metricType),
+        productName: noDataMsg[card.metricType] || '暂无数据',
+        changePercent: 0,
+        trend: 'rise',
+        price: 0,
+        hasData: false
+      }
+    }
+  } catch (e) {
+    console.error('Failed to load indicator card', e)
+  }
+}
+
+function getMetricLabel(metricType) {
+  const labels = { yoy: '同比涨幅', qoq: '环比涨幅', d7: '7日涨跌', d30: '30日涨跌' }
+  return labels[metricType] || metricType
 }
 
 async function loadLineChartData() {
@@ -1168,14 +1223,15 @@ onUnmounted(() => {
 
 .charts-grid-46 {
   display: flex;
-  gap: 24px;
+  gap: 16px;
   align-items: stretch;
 }
 
 .chart-4 {
-  flex: 0 0 45%;
+  flex: 0 0 50%;
   display: flex;
   align-items: stretch;
+  min-height: 200px;
 }
 
 .chart-6 {
@@ -1188,7 +1244,7 @@ onUnmounted(() => {
 .pie-chart {
   width: 100%;
   height: 100%;
-  min-height: 240px;
+  min-height: 200px;
 }
 
 .chart-title {
@@ -1196,18 +1252,19 @@ onUnmounted(() => {
 }
 
 .indicator-cards {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
   gap: 16px;
   flex: 1;
+  overflow: hidden;
+  padding-right: 8px;
 }
 
 .indicator-card {
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
-  padding: 16px;
-  flex: 1;
+  border-radius: 8px;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
   opacity: 0;
@@ -1218,18 +1275,42 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 4px;
+}
+
+.card-placeholder {
+  flex: 1;
 }
 
 .card-label {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-muted);
   font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
 }
 
-.card-content {
+.card-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 100%;
+}
+
+.card-body.no-data .card-product {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.card-body.no-data .value-num {
+  color: var(--text-muted);
+  font-size: 16px;
+}
+
+.card-body.no-data .card-price {
+  visibility: hidden;
+}
+
+.card-main {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -1237,10 +1318,10 @@ onUnmounted(() => {
 }
 
 .card-product {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-primary);
-  font-weight: 500;
-  margin-bottom: 8px;
+  font-weight: 600;
+  margin-bottom: 6px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1249,8 +1330,8 @@ onUnmounted(() => {
 .card-value {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: 6px;
+  margin-bottom: 6px;
 }
 
 .trend-icon {
@@ -1267,7 +1348,7 @@ onUnmounted(() => {
 }
 
 .value-num {
-  font-size: 26px;
+  font-size: 24px;
   font-weight: 700;
   font-family: 'Fira Sans', sans-serif;
 }
@@ -1280,11 +1361,10 @@ onUnmounted(() => {
   color: var(--fall-color);
 }
 
-.card-detail {
-  display: flex;
-  justify-content: space-between;
+.card-price {
   font-size: 12px;
   color: var(--text-muted);
+  text-align: right;
 }
 
 .chart-container {

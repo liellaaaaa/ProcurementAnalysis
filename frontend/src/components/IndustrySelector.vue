@@ -4,8 +4,8 @@
     placeholder="行业"
     clearable
     size="default"
-    @change="onChange"
     class="industry-selector"
+    @change="onChange"
   >
     <template #prefix>
       <span class="selector-prefix">行业</span>
