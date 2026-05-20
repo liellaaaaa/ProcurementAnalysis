@@ -279,11 +279,15 @@
                   <div ref="historyChartRef" class="history-sparkline"></div>
                   <el-table :data="paginatedHistoryData" size="small" class="detail-table">
                     <el-table-column prop="record_date" label="日期" width="120" />
+                    <el-table-column prop="specification" label="规格" width="100" />
+                    <el-table-column prop="brand" label="品牌/产地" width="120" />
                     <el-table-column prop="price" label="价格" width="120">
                       <template #default="{ row: detail }">
                         <span class="price-value">¥{{ detail.price.toLocaleString() }}</span>
                       </template>
                     </el-table-column>
+                    <el-table-column prop="unit" label="单位" width="80" />
+                    <el-table-column prop="price_type" label="报价类型" width="90" />
                     <el-table-column prop="trend" label="趋势" width="80">
                       <template #default="{ row: detail }">
                         <span :class="['trend-badge', detail.trend]">
@@ -298,8 +302,8 @@
                         </span>
                       </template>
                     </el-table-column>
-                    <el-table-column prop="region" label="地区" width="100" />
-                    <el-table-column prop="supplier" label="供应商" show-overflow-tooltip />
+                    <el-table-column prop="region" label="交货地" width="100" />
+                    <el-table-column prop="supplier" label="交易商" show-overflow-tooltip />
                     <el-table-column prop="source" label="数据源" width="100" />
                   </el-table>
                   <el-pagination
@@ -318,28 +322,25 @@
                 </div>
               </template>
             </el-table-column>
-            <el-table-column prop="product_name" label="产品名称" min-width="150" />
-            <el-table-column prop="price" label="最新价格" width="130">
-              <template #default="{ row }">
-                <span class="price-value">¥{{ row.price?.toLocaleString() }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column prop="change_percent" label="较昨日涨跌幅" width="100">
-              <template #default="{ row }">
-                <span :class="row.change_percent > 0 ? 'text-rise' : row.change_percent < 0 ? 'text-fall' : 'text-flat'">
-                  {{ row.change_percent > 0 ? '+' : '' }}{{ row.change_percent }}%
-                </span>
-              </template>
-            </el-table-column>
-            <el-table-column prop="trend" label="趋势" width="80">
-              <template #default="{ row }">
-                <span :class="['trend-badge', row.trend]">
-                  {{ row.trend === '涨' ? '↑' : row.trend === '跌' ? '↓' : '—' }}
-                </span>
-              </template>
-            </el-table-column>
-            <el-table-column prop="latest_date" label="最新日期" width="120" />
-            <el-table-column prop="source" label="数据源" width="100" />
+            <template v-for="col in currentColumns" :key="col.prop">
+              <el-table-column
+                :prop="col.prop"
+                :label="col.label"
+                :min-width="col.minWidth"
+                show-overflow-tooltip
+              >
+                <template #default="{ row }">
+                  <span v-if="col.prop === 'price'" class="price-value">¥{{ row.price?.toLocaleString() }}</span>
+                  <span v-else-if="col.prop === 'change_percent'" :class="row.change_percent > 0 ? 'text-rise' : row.change_percent < 0 ? 'text-fall' : 'text-flat'">
+                    {{ row.change_percent > 0 ? '+' : '' }}{{ row.change_percent }}%
+                  </span>
+                  <span v-else-if="col.prop === 'trend'" :class="['trend-badge', row.trend]">
+                    {{ row.trend === '涨' ? '↑' : row.trend === '跌' ? '↓' : '—' }}
+                  </span>
+                  <span v-else>{{ row[col.prop] || '-' }}</span>
+                </template>
+              </el-table-column>
+            </template>
           </el-table>
           <el-pagination
             v-if="filteredAndSortedData.length > 0"
@@ -432,6 +433,81 @@ const indicatorCards = ref([
   { type: '较昨日同比最高', selected: 'yoy', productName: '-', changePercent: 0, trend: 'rise', price: 0 },
   { type: '较昨日环比最高', selected: 'qoq', productName: '-', changePercent: 0, trend: 'rise', price: 0 }
 ])
+
+// 行业列配置：各行业显示不同字段
+const industryColumns = {
+  '化工': [
+    { prop: 'product_name', label: '商品名称', minWidth: 120 },
+    { prop: 'specification', label: '规格', minWidth: 80 },
+    { prop: 'brand', label: '品牌/产地', minWidth: 100 },
+    { prop: 'price', label: '单价', minWidth: 100 },
+    { prop: 'unit', label: '单位', minWidth: 70 },
+    { prop: 'price_type', label: '报价类型', minWidth: 80 },
+    { prop: 'region', label: '交货地', minWidth: 80 },
+    { prop: 'supplier', label: '交易商', minWidth: 80 },
+    { prop: 'change_percent', label: '较昨日涨跌幅', minWidth: 100 },
+    { prop: 'trend', label: '趋势', minWidth: 60 },
+    { prop: 'latest_date', label: '发布时间', minWidth: 100 },
+    { prop: 'source', label: '数据源', minWidth: 80 }
+  ],
+  '能源': [
+    { prop: 'product_name', label: '商品名称', minWidth: 120 },
+    { prop: 'specification', label: '规格', minWidth: 80 },
+    { prop: 'price', label: '单价', minWidth: 100 },
+    { prop: 'unit', label: '单位', minWidth: 70 },
+    { prop: 'region', label: '交货地', minWidth: 80 },
+    { prop: 'change_percent', label: '较昨日涨跌幅', minWidth: 100 },
+    { prop: 'trend', label: '趋势', minWidth: 60 },
+    { prop: 'latest_date', label: '发布时间', minWidth: 100 },
+    { prop: 'source', label: '数据源', minWidth: 80 }
+  ],
+  '农副': [
+    { prop: 'product_name', label: '商品名称', minWidth: 120 },
+    { prop: 'specification', label: '规格', minWidth: 80 },
+    { prop: 'brand', label: '品牌/产地', minWidth: 100 },
+    { prop: 'price', label: '单价', minWidth: 100 },
+    { prop: 'unit', label: '单位', minWidth: 70 },
+    { prop: 'price_type', label: '报价类型', minWidth: 80 },
+    { prop: 'region', label: '交货地', minWidth: 80 },
+    { prop: 'supplier', label: '交易商', minWidth: 80 },
+    { prop: 'change_percent', label: '较昨日涨跌幅', minWidth: 100 },
+    { prop: 'trend', label: '趋势', minWidth: 60 },
+    { prop: 'latest_date', label: '发布时间', minWidth: 100 },
+    { prop: 'source', label: '数据源', minWidth: 80 }
+  ],
+  '有色': [
+    { prop: 'product_name', label: '商品名称', minWidth: 120 },
+    { prop: 'specification', label: '规格', minWidth: 80 },
+    { prop: 'brand', label: '品牌/产地', minWidth: 100 },
+    { prop: 'price', label: '单价', minWidth: 100 },
+    { prop: 'unit', label: '单位', minWidth: 70 },
+    { prop: 'price_type', label: '报价类型', minWidth: 80 },
+    { prop: 'region', label: '交货地', minWidth: 80 },
+    { prop: 'supplier', label: '交易商', minWidth: 80 },
+    { prop: 'change_percent', label: '较昨日涨跌幅', minWidth: 100 },
+    { prop: 'trend', label: '趋势', minWidth: 60 },
+    { prop: 'latest_date', label: '发布时间', minWidth: 100 },
+    { prop: 'source', label: '数据源', minWidth: 80 }
+  ]
+}
+
+// 默认列（未选择行业时）
+const defaultColumns = [
+  { prop: 'product_name', label: '产品名称', minWidth: 150 },
+  { prop: 'price', label: '最新价格', minWidth: 110 },
+  { prop: 'change_percent', label: '较昨日涨跌幅', minWidth: 110 },
+  { prop: 'trend', label: '趋势', minWidth: 80 },
+  { prop: 'latest_date', label: '最新日期', minWidth: 110 },
+  { prop: 'source', label: '数据源', minWidth: 100 }
+]
+
+const currentColumns = computed(() => {
+  const industry = filter3Industry.value
+  if (industry && industryColumns[industry]) {
+    return industryColumns[industry]
+  }
+  return defaultColumns
+})
 
 let lineChart = null
 let pieChart = null
@@ -1263,9 +1339,9 @@ onUnmounted(() => {
 }
 
 .table-section {
-  margin-top: 16px;
-  border-top: 1px solid var(--border-color);
-  padding-top: 16px;
+  margin-top: 0;
+  border-top: none;
+  padding-top: 0;
 }
 
 .table-section :deep(.el-table__header-wrapper th) {
@@ -1433,5 +1509,21 @@ onUnmounted(() => {
 @media (max-width: 768px) {
   .controls { flex-direction: column; align-items: stretch; }
   .dashboard { padding: 16px; }
+}
+
+.data-table {
+  width: 100% !important;
+}
+
+.table-section :deep(.el-table) {
+  width: 100% !important;
+}
+
+.table-section :deep(.el-table__body-wrapper) {
+  overflow: hidden !important;
+}
+
+.table-section :deep(.el-table__header-wrapper) {
+  overflow: hidden !important;
 }
 </style>

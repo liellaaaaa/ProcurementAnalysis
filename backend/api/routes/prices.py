@@ -118,11 +118,18 @@ async def get_latest_prices(
         PriceRecord.product_id,
         Product.product_name,
         Product.product_code,
+        Product.industry,
         PriceRecord.record_date,
         PriceRecord.price,
         PriceRecord.change_percent,
         PriceRecord.trend,
-        PriceRecord.source
+        PriceRecord.source,
+        PriceRecord.specification,
+        PriceRecord.brand,
+        PriceRecord.region,
+        PriceRecord.supplier,
+        PriceRecord.price_type,
+        PriceRecord.unit
     ).join(Product)
 
     if source and source != '__all__':
@@ -160,13 +167,20 @@ async def get_latest_prices(
                 "product_id": r.product_id,
                 "product_name": name,
                 "product_code": r.product_code,
+                "industry": r.industry,
                 "latest_date": r.record_date,
                 "price": r.price,
                 "min_price": r.price,
                 "max_price": r.price,
                 "change_percent": r.change_percent,
                 "trend": r.trend,
-                "source": r.source
+                "source": r.source,
+                "specification": r.specification,
+                "brand": r.brand,
+                "region": r.region,
+                "supplier": r.supplier,
+                "price_type": r.price_type,
+                "unit": r.unit
             }
         else:
             # 更新价格区间
@@ -186,6 +200,12 @@ async def get_latest_prices(
         p["price"] = p["price"] or 0
         p["min_price"] = p["min_price"] or 0
         p["max_price"] = p["max_price"] or 0
+        p["specification"] = p["specification"] or ""
+        p["brand"] = p["brand"] or ""
+        p["region"] = p["region"] or ""
+        p["supplier"] = p["supplier"] or ""
+        p["price_type"] = p["price_type"] or ""
+        p["unit"] = p["unit"] or "元/吨"
 
     total = len(products)
 
