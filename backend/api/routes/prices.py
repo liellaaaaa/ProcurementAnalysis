@@ -36,10 +36,13 @@ class PriceRecordResponse(BaseModel):
     supplier: Optional[str] = None
     brand: Optional[str] = None
     specification: Optional[str] = None
+    unit: Optional[str] = None
+    price_type: Optional[str] = None
     record_date: str  # yyyy/mm/dd 格式
+    extra_data: Optional[dict] = None  # 行业差异化字段
 
     @staticmethod
-    def from_record(pr, product_name=None, product_code=None):
+    def from_record(pr, product_name=None, product_code=None, extra_data=None):
         """从 PriceRecord 创建响应对象"""
         record_date = pr.record_date
         if hasattr(record_date, 'strftime'):
@@ -59,7 +62,10 @@ class PriceRecordResponse(BaseModel):
             supplier=pr.supplier,
             brand=pr.brand,
             specification=pr.specification,
-            record_date=formatted_date
+            unit=pr.unit,
+            price_type=pr.price_type,
+            record_date=formatted_date,
+            extra_data=extra_data or pr.extra_data
         )
 
     class Config:
@@ -90,7 +96,7 @@ async def get_prices(
 
     response = []
     for pr, product_name, product_code in results:
-        response.append(PriceRecordResponse.from_record(pr, product_name, product_code))
+        response.append(PriceRecordResponse.from_record(pr, product_name, product_code, pr.extra_data))
 
     session.close()
 
@@ -130,7 +136,8 @@ async def get_latest_prices(
         PriceRecord.region,
         PriceRecord.supplier,
         PriceRecord.price_type,
-        PriceRecord.unit
+        PriceRecord.unit,
+        PriceRecord.extra_data
     ).join(Product)
 
     if source and source != '__all__':
@@ -181,7 +188,8 @@ async def get_latest_prices(
                 "region": r.region,
                 "supplier": r.supplier,
                 "price_type": r.price_type,
-                "unit": r.unit
+                "unit": r.unit,
+                "extra_data": r.extra_data or {}
             }
         else:
             # 更新价格区间
@@ -242,7 +250,7 @@ async def get_price_history(
 
     response = []
     for pr, product_name, product_code in results:
-        response.append(PriceRecordResponse.from_record(pr, product_name, product_code))
+        response.append(PriceRecordResponse.from_record(pr, product_name, product_code, pr.extra_data))
 
     session.close()
 

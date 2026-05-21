@@ -276,50 +276,44 @@
             <el-table-column type="expand" width="48">
               <template #default="{ row }">
                 <div class="expand-content">
-                  <p class="expand-title">历史价格记录</p>
-                  <div ref="historyChartRef" class="history-sparkline"></div>
-                  <el-table :data="paginatedHistoryData" size="small" class="detail-table">
-                    <el-table-column prop="record_date" label="日期" width="120" />
-                    <el-table-column prop="specification" label="规格" width="100" />
-                    <el-table-column prop="brand" label="品牌/产地" width="120" />
-                    <el-table-column prop="price" label="价格" width="120">
-                      <template #default="{ row: detail }">
-                        <span class="price-value">¥{{ detail.price.toLocaleString() }}</span>
-                      </template>
-                    </el-table-column>
-                    <el-table-column prop="unit" label="单位" width="80" />
-                    <el-table-column prop="price_type" label="报价类型" width="90" />
-                    <el-table-column prop="trend" label="趋势" width="80">
-                      <template #default="{ row: detail }">
-                        <span :class="['trend-badge', detail.trend]">
-                          {{ detail.trend === '涨' ? '↑' : detail.trend === '跌' ? '↓' : '—' }}
-                        </span>
-                      </template>
-                    </el-table-column>
-                    <el-table-column prop="change_percent" label="较昨日涨跌幅" width="100">
-                      <template #default="{ row: detail }">
-                        <span :class="detail.change_percent > 0 ? 'text-rise' : detail.change_percent < 0 ? 'text-fall' : 'text-flat'">
-                          {{ detail.change_percent > 0 ? '+' : '' }}{{ detail.change_percent }}%
-                        </span>
-                      </template>
-                    </el-table-column>
-                    <el-table-column prop="region" label="交货地" width="100" />
-                    <el-table-column prop="supplier" label="交易商" show-overflow-tooltip />
-                    <el-table-column prop="source" label="数据源" width="100" />
-                  </el-table>
-                  <el-pagination
-                    v-if="expandedRows.length > 0 && latestPrices.find(p => p.product_id === expandedRows[0])?.history?.length > 0"
-                    background
-                    size="small"
-                    layout="sizes, prev, pager, next"
-                    :total="latestPrices.find(p => p.product_id === expandedRows[0])?.history?.length || 0"
-                    :page-size="historyPagination.pageSize"
-                    :page-sizes="[10, 20, 50, 100]"
-                    :current-page="historyPagination.page"
-                    @size-change="handleHistorySizeChange"
-                    @current-change="handleHistoryPageChange"
-                    style="margin-top: 10px; justify-content: center"
-                  />
+                  <p class="expand-title" v-if="row.extra_data?.详细报价?.length">
+                    详细报价（{{ row.extra_data.详细报价.length }}家供应商）基准价: ¥{{ row.price?.toLocaleString() }}
+                  </p>
+                  <p class="expand-title" v-else>暂无详细报价数据</p>
+                  <template v-if="row.extra_data?.详细报价?.length">
+                    <el-table :data="paginatedHistoryData" size="small" class="detail-table">
+                      <el-table-column prop="brand" label="品牌/产地" width="120" />
+                      <el-table-column prop="spec_raw" label="规格" width="100" />
+                      <el-table-column prop="price" label="单价" width="120">
+                        <template #default="{ row: detail }">
+                          <span class="price-value">¥{{ Number(detail.price || 0).toLocaleString() }}</span>
+                        </template>
+                      </el-table-column>
+                      <el-table-column prop="price_type" label="报价类型" width="90" />
+                      <el-table-column prop="region" label="交货地" width="100" />
+                      <el-table-column prop="supplier" label="交易商" show-overflow-tooltip>
+                        <template #default="{ row: detail }">
+                          <span>{{ detail.supplier || '-' }}</span>
+                        </template>
+                      </el-table-column>
+                    </el-table>
+                    <el-pagination
+                      v-if="expandedRows.length > 0 && row.extra_data?.详细报价?.length > 0"
+                      background
+                      size="small"
+                      layout="sizes, prev, pager, next"
+                      :total="row.extra_data?.详细报价?.length || 0"
+                      :page-size="historyPagination.pageSize"
+                      :page-sizes="[10, 20, 50, 100]"
+                      :current-page="historyPagination.page"
+                      @size-change="handleHistorySizeChange"
+                      @current-change="handleHistoryPageChange"
+                      style="margin-top: 10px; justify-content: center"
+                    />
+                  </template>
+                  <div v-else class="no-detail-data">
+                    <span>暂无详细报价数据</span>
+                  </div>
                 </div>
               </template>
             </el-table-column>
@@ -338,6 +332,7 @@
                   <span v-else-if="col.prop === 'trend'" :class="['trend-badge', row.trend]">
                     {{ row.trend === '涨' ? '↑' : row.trend === '跌' ? '↓' : '—' }}
                   </span>
+                  <span v-else-if="col.useExtraData">{{ row.extra_data?.[col.useExtraData] || row[col.prop] || '-' }}</span>
                   <span v-else>{{ row[col.prop] || '-' }}</span>
                 </template>
               </el-table-column>
@@ -383,7 +378,6 @@ import IndustrySelector from '../components/IndustrySelector.vue'
 const lineChartRef = ref(null)
 const pieChartRef = ref(null)
 const barChartRef = ref(null)
-const historyChartRef = ref(null)
 
 const hoverChart = ref(null)
 const chartDetailVisible = ref(false)
@@ -440,6 +434,11 @@ const indicatorCards = ref([
 ])
 
 // 行业列配置：各行业显示不同字段
+// extra_data 字段说明:
+//   化工: { '规格': '', '品牌/产地': brand, '报价类型': '市场价/基准价' }
+//   能源: { '规格': spec, '数量': '', '现货类型': '', '有效时间': '' }
+//   农副: { '分类': '', '等级/熔点': '', '品牌/产地': brand, '报价类型': '' }
+//   有色: { '品名/纯度': name, '品牌/产地': region, '报价类型': '' }
 const industryColumns = {
   '化工': [
     { prop: 'product_name', label: '商品名称', minWidth: 120 },
@@ -456,7 +455,7 @@ const industryColumns = {
     { prop: 'source', label: '数据源', minWidth: 80 }
   ],
   '能源': [
-    { prop: 'product_name', label: '商品名称', minWidth: 120 },
+    { prop: 'product_name', label: '产品名', minWidth: 120 },
     { prop: 'specification', label: '规格', minWidth: 80 },
     { prop: 'price', label: '单价', minWidth: 100 },
     { prop: 'unit', label: '单位', minWidth: 70 },
@@ -469,26 +468,26 @@ const industryColumns = {
   '农副': [
     { prop: 'product_name', label: '商品名称', minWidth: 120 },
     { prop: 'specification', label: '规格', minWidth: 80 },
-    { prop: 'brand', label: '品牌/产地', minWidth: 100 },
+    { prop: 'brand', label: '产地', minWidth: 100 },
     { prop: 'price', label: '单价', minWidth: 100 },
     { prop: 'unit', label: '单位', minWidth: 70 },
     { prop: 'price_type', label: '报价类型', minWidth: 80 },
     { prop: 'region', label: '交货地', minWidth: 80 },
-    { prop: 'supplier', label: '交易商', minWidth: 80 },
+    { prop: 'supplier', label: '市场', minWidth: 80 },
     { prop: 'change_percent', label: '较昨日涨跌幅', minWidth: 100 },
     { prop: 'trend', label: '趋势', minWidth: 60 },
     { prop: 'latest_date', label: '发布时间', minWidth: 100 },
     { prop: 'source', label: '数据源', minWidth: 80 }
   ],
   '有色': [
-    { prop: 'product_name', label: '商品名称', minWidth: 120 },
+    { prop: 'product_name', label: '商品名称', minWidth: 120, useExtraData: '品名/纯度' },
     { prop: 'specification', label: '规格', minWidth: 80 },
-    { prop: 'brand', label: '品牌/产地', minWidth: 100 },
+    { prop: 'brand', label: '产区', minWidth: 100 },
     { prop: 'price', label: '单价', minWidth: 100 },
     { prop: 'unit', label: '单位', minWidth: 70 },
     { prop: 'price_type', label: '报价类型', minWidth: 80 },
     { prop: 'region', label: '交货地', minWidth: 80 },
-    { prop: 'supplier', label: '交易商', minWidth: 80 },
+    { prop: 'supplier', label: '市场', minWidth: 80 },
     { prop: 'change_percent', label: '较昨日涨跌幅', minWidth: 100 },
     { prop: 'trend', label: '趋势', minWidth: 60 },
     { prop: 'latest_date', label: '发布时间', minWidth: 100 },
@@ -517,7 +516,6 @@ const currentColumns = computed(() => {
 let lineChart = null
 let pieChart = null
 let barChart = null
-let historyChart = null
 let searchTimer = null
 
 async function loadLatestPrices() {
@@ -529,7 +527,7 @@ async function loadLatestPrices() {
       industry: filter3Industry.value || null
     }
     const res = await priceApi.getLatestPrices(params)
-    latestPrices.value = (res.data.data || []).map(p => ({ ...p, history: [] }))
+    latestPrices.value = res.data.data || []
     pagination.value.total = res.data.total || 0
   } catch (e) {
     console.error('Failed to load prices', e)
@@ -564,13 +562,13 @@ const paginatedHistoryData = computed(() => {
   if (!expandedRows.value.length) return []
   const expandedId = expandedRows.value[0]
   const row = latestPrices.value.find(p => p.product_id === expandedId)
-  if (!row || !row.history || row.history.length === 0) return []
+  if (!row || !row.extra_data?.详细报价 || row.extra_data.详细报价.length === 0) return []
   const start = (historyPagination.value.page - 1) * historyPagination.value.pageSize
   const end = start + historyPagination.value.pageSize
-  return row.history.slice(start, end)
+  return row.extra_data.详细报价.slice(start, end)
 })
 
-watch(paginatedHistoryData, () => { nextTick(() => updateHistoryChart()) }, { deep: true })
+watch(paginatedHistoryData, () => { nextTick(() => {}) }, { deep: true })
 
 async function handleExpandChange(row) {
   const id = row.product_id
@@ -579,24 +577,6 @@ async function handleExpandChange(row) {
   } else {
     expandedRows.value = [id]
     historyPagination.value.page = 1
-    if (historyChart) {
-      historyChart.clear()
-    }
-    nextTick(() => {
-      initHistoryChart()
-    })
-    if (!row.history || row.history.length === 0) {
-      try {
-        const res = await priceApi.getPriceHistory(id, 365, filter3Source.value)
-        const historyData = res.data || []
-        const product = latestPrices.value.find(p => p.product_id === id)
-        if (product) {
-          product.history = historyData
-        }
-      } catch (e) {
-        console.error('Failed to load history', e)
-      }
-    }
   }
 }
 
@@ -1054,61 +1034,19 @@ function initBarChart() {
   })
 }
 
-function initHistoryChart() {
-  if (!historyChartRef.value) return
-  if (historyChart) {
-    historyChart.dispose()
-  }
-  historyChart = echarts.init(historyChartRef.value)
-  historyChart.setOption({
-    backgroundColor: 'transparent',
-    tooltip: { trigger: 'axis', backgroundColor: '#fff', borderColor: '#E8E3F3', textStyle: { color: '#1E293B', fontSize: 11 }, axisPointer: { type: 'line' } },
-    grid: { left: 50, right: 20, bottom: 20, top: 10, containLabel: true },
-    xAxis: { type: 'category', data: [], axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: '#94A3B8', fontSize: 10, rotate: 30 } },
-    yAxis: { type: 'value', axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: '#94A3B8', fontSize: 10, formatter: val => `¥${val.toLocaleString()}` }, splitLine: { lineStyle: { color: '#F0EBF9', type: 'dashed' } } },
-    series: [{
-      type: 'line',
-      smooth: true,
-      symbol: 'circle',
-      symbolSize: 6,
-      lineStyle: { color: '#7C3AED', width: 2 },
-      itemStyle: { color: '#7C3AED' },
-      areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(124,58,237,0.25)' }, { offset: 1, color: 'rgba(124,58,237,0.02)' }] } }
-    }]
-  })
-}
-
-function updateHistoryChart() {
-  if (!historyChart || !historyChartRef.value) return
-  const data = paginatedHistoryData.value
-  if (!data || data.length === 0) return
-  const dates = data.map(d => d.record_date)
-  const prices = data.map(d => d.price)
-  historyChart.setOption({
-    xAxis: { data: dates },
-    series: [{ data: prices }]
-  })
-}
-
-function initCharts() {
+onMounted(async () => {
   initLineChart()
   initPieChart()
   initBarChart()
-  initHistoryChart()
   setTimeout(() => {
     lineChart?.resize()
     pieChart?.resize()
     barChart?.resize()
-    historyChart?.resize()
   }, 100)
-}
-
-onMounted(async () => {
   await nextTick()
   await nextTick()
   await nextTick()
   setTimeout(() => {
-    initCharts()
     loadLatestPrices()
     loadFilter1Charts()
     loadFilter2Charts()
@@ -1117,7 +1055,6 @@ onMounted(async () => {
     lineChart?.resize()
     pieChart?.resize()
     barChart?.resize()
-    historyChart?.resize()
   })
 })
 
@@ -1125,7 +1062,6 @@ onUnmounted(() => {
   lineChart?.dispose()
   pieChart?.dispose()
   barChart?.dispose()
-  historyChart?.dispose()
 })
 </script>
 
@@ -1466,8 +1402,14 @@ onUnmounted(() => {
 }
 
 .history-sparkline {
-  height: 140px;
-  margin-bottom: 12px;
+  display: none;
+}
+
+.no-detail-data {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 24px;
+  font-size: 13px;
 }
 
 .expand-title {

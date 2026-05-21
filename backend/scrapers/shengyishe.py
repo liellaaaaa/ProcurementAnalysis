@@ -21,7 +21,7 @@ class ShengyisheScraper(BaseScraper):
         self._product_industry_map = {}
 
     def get_entry_urls(self) -> List[str]:
-        """从数据库获取已导入产品的 source_url"""
+        """从数据库获取已导入产品的 source_url（去重）"""
         session = get_session()
         try:
             products = session.query(Product).filter(
@@ -29,13 +29,16 @@ class ShengyisheScraper(BaseScraper):
                 Product.is_active == True
             ).all()
 
+            # 去重，每个URL只爬一次
             urls = []
+            seen_urls = set()
             for p in products:
-                if p.source_url:
+                if p.source_url and p.source_url not in seen_urls:
                     urls.append(p.source_url)
+                    seen_urls.add(p.source_url)
                     self._product_industry_map[p.source_url] = p.industry
 
-            print(f"从数据库获取到 {len(urls)} 个产品URL")
+            print(f"从数据库获取到 {len(urls)} 个唯一产品URL")
             return urls
         except Exception as e:
             print(f"数据库读取失败: {e}")
@@ -56,7 +59,7 @@ class ShengyisheScraper(BaseScraper):
         return None
 
     def scrape_page(self, url: str) -> List[Dict]:
-        """爬取单个产品详情页，提取基准价"""
+        """爬取单个产品详情页或列表页，提取基准价和详细报价"""
         industry = self._product_industry_map.get(url, "化工")
         print(f"  正在爬取 [{industry}]: {url}")
 
@@ -74,10 +77,43 @@ class ShengyisheScraper(BaseScraper):
                 page.goto(url, timeout=30000, wait_until='networkidle')
                 page.wait_for_timeout(1000)
 
-                # 解析基准价
-                price_data = self._parse_benchmark_price(page, industry)
-                if price_data:
-                    results.append(price_data)
+                # 判断是列表页还是详情页
+                if 'plist-' in url:
+                    # 列表页：解析所有报价行，按日期和产品分组，计算基准价
+                    rows = self._parse_list_page(page, industry)
+                    if rows:
+                        grouped = self._group_by_date_and_calculate_benchmark(rows)
+                        if grouped:
+                            # 按日期分组，每组包含多个产品
+                            from collections import defaultdict
+                            by_date = defaultdict(list)
+                            for g in grouped:
+                                by_date[g['date']].append(g)
+
+                            # 取最新一天的数据（该天包含所有产品）
+                            latest_date = max(by_date.keys())
+                            latest_items = by_date[latest_date]
+                            for item_data in latest_items:
+                                item_list = self._create_price_items(item_data, url, industry)
+                                results.extend(item_list)
+                else:
+                    # 详情页：使用原有逻辑
+                    if industry == "化工":
+                        results = self._parse_chemical_detail(page)
+                    elif industry == "能源":
+                        results = self._parse_energy_detail(page)
+                    elif industry == "农副":
+                        results = self._parse_agri_detail(page)
+                    elif industry == "有色":
+                        results = self._parse_nonferrous_detail(page)
+                    else:
+                        results = self._parse_chemical_detail(page)
+
+                    # 如果行业解析方法返回空，fallback 到基准价
+                    if not results:
+                        price_data = self._parse_benchmark_price(page, industry)
+                        if price_data:
+                            results.append(price_data)
 
             except Exception as e:
                 print(f"  页面加载失败: {e}")
@@ -90,6 +126,164 @@ class ShengyisheScraper(BaseScraper):
 
         print(f"  获取到 {len(results)} 条数据")
         return results
+
+    def _parse_list_page(self, page, industry: str) -> List[Dict]:
+        """
+        统一解析列表页表格（四个行业通用）
+        返回: 当日所有报价行的解析结果
+        """
+        results = []
+        try:
+            table = page.query_selector('table.lp-table.mb15')
+            if not table:
+                table = page.query_selector('table.lp-table')
+            if not table:
+                return results
+
+            rows = table.query_selector_all('tr')
+            for row in rows:
+                cells = row.query_selector_all('td')
+                if len(cells) < 8:
+                    continue
+
+                product_name = cells[0].text_content().strip()
+                if not product_name or product_name == '商品名称':
+                    continue
+
+                spec_text = cells[1].text_content().strip()     # 规格
+                brand = cells[2].text_content().strip()          # 品牌/产地
+                price_str = cells[3].text_content().strip()      # 报价
+                price_type = cells[4].text_content().strip()     # 报价类型
+                region = cells[5].text_content().strip()          # 交货地
+                supplier = cells[6].text_content().strip()        # 交易商
+                publish_date = cells[7].text_content().strip()    # 发布时间
+
+                price = self.parse_price(price_str)
+                if price is None or price <= 0:
+                    continue
+
+                parsed_spec = self._parse_spec_text(spec_text, industry)
+
+                results.append({
+                    'product_name': product_name,
+                    'spec_raw': spec_text,
+                    'brand': brand,
+                    'price': price,
+                    'price_str': price_str,
+                    'price_type': price_type,
+                    'region': region,
+                    'supplier': supplier,
+                    'publish_date': publish_date,
+                    'industry': industry,
+                    'parsed_spec': parsed_spec
+                })
+        except Exception as e:
+            print(f"  列表页解析失败: {e}")
+
+        return results
+
+    def _group_by_date_and_calculate_benchmark(self, rows: List[Dict]) -> List[Dict]:
+        """
+        按日期分组，计算每日的基准价（按产品分组计算）
+        """
+        from collections import defaultdict
+
+        by_date = defaultdict(list)
+        for row in rows:
+            by_date[row['publish_date']].append(row)
+
+        results = []
+        for date, day_rows in by_date.items():
+            # 先按产品分组，计算每个产品的基准价
+            by_product = defaultdict(list)
+            for row in day_rows:
+                by_product[row['product_name']].append(row)
+
+            product_results = []
+            for product_name, product_rows in by_product.items():
+                prices = [r['price'] for r in product_rows]
+                benchmark = sum(prices) / len(prices) if prices else 0
+
+                product_results.append({
+                    'date': date,
+                    'product_name': product_name,
+                    'benchmark': round(benchmark, 2),
+                    'quote_count': len(product_rows),
+                    'details': product_rows
+                })
+
+            results.extend(product_results)
+
+        return results
+
+    def _parse_spec_text(self, spec_text: str, industry: str) -> Dict:
+        """
+        从规格文本中解析行业特有信息
+        """
+        result = {}
+
+        if industry == '农副':
+            if '分类:' in spec_text:
+                result['分类'] = spec_text.split('分类:')[1].split(';')[0]
+            match = re.search(r'熔点\(℃\):([\d]+);?', spec_text)
+            if match:
+                result['熔点'] = match.group(1) + '℃'
+
+        elif industry == '能源':
+            if '类别:' in spec_text:
+                result['类别'] = spec_text.split('类别:')[1]
+
+        elif industry == '有色':
+            match = re.search(r'Au不小于\(%\):([\d.]+)', spec_text)
+            if match:
+                result['纯度'] = match.group(1) + '%'
+            result['品名'] = '黄金'
+
+        elif industry == '化工':
+            if '品级:' in spec_text:
+                result['品级'] = spec_text.split('品级:')[1].rstrip(';')
+            purity_match = re.search(r'(\d+\.?\d*%以上?)', spec_text)
+            if not purity_match:
+                purity_match = re.search(r'(\d+元以上)', spec_text)
+            if purity_match:
+                result['纯度描述'] = purity_match.group(1)
+
+        return result
+
+    def _create_price_items(self, grouped_data: Dict, source_url: str, industry: str) -> List[Dict]:
+        """
+        从分组数据创建价格项
+        grouped_data 格式: {date, product_name, benchmark, quote_count, details}
+        """
+        details = grouped_data['details']
+        if not details:
+            return []
+
+        first = details[0]
+        benchmark = grouped_data['benchmark']
+
+        item = {
+            'name': grouped_data['product_name'],
+            'specification': '',  # 规格在详细报价中
+            'brand': '',  # 品牌在详细报价中
+            'price': benchmark,  # 基准价
+            'price_str': f'{benchmark}元/吨',
+            'price_type': first['price_type'],
+            'region': '',  # 交货地在详细报价中
+            'supplier': '',  # 供应商在详细报价中
+            'date': grouped_data['date'],
+            'unit': '元/吨' if industry in ['化工', '农副'] else ('元/立方米' if industry == '能源' else '元/克'),
+            'price_category': '现货',
+            'industry': industry,
+            'source_url': source_url,
+            'extra_data': {
+                '报价类型': first['price_type'],
+                '基准价': benchmark,
+                '详细报价': details,  # 该产品的所有详细报价
+                '行业特有': first.get('parsed_spec', {})
+            }
+        }
+        return [item]
 
     def _parse_benchmark_price(self, page, industry: str) -> Optional[Dict]:
         """解析详情页的基准价"""
@@ -155,7 +349,7 @@ class ShengyisheScraper(BaseScraper):
                 'region': '',
                 'supplier': '生意社',
                 'date': record_date,
-                'unit': '元/吨',
+                'unit': '元/吨' if industry == '化工' else ('元/吨' if industry == '农副' else ('元/立方米' if industry == '能源' else '元/克')),
                 'price_category': '现货',
                 'extra_data': extra_data
             }
@@ -164,48 +358,53 @@ class ShengyisheScraper(BaseScraper):
             return None
 
     def _parse_chemical_detail(self, page) -> List[Dict]:
-        """化工详情页解析"""
+        """化工详情页解析 - 解析产品详细价格表格"""
         results = []
         try:
-            rows = page.query_selector_all('table tr')
+            rows = page.query_selector_all('table.rmbpj tr')
             for row in rows:
                 cells = row.query_selector_all('td')
-                if len(cells) < 8:
+                if len(cells) < 5:
                     continue
 
+                # 商品名称在第一个 td
                 name = cells[0].text_content() or ""
                 name = name.strip()
-                if not name or name == '商品名称' or name == '品种名称':
+                if not name or name == '产品' or '查看更多' in name:
                     continue
 
-                price_str = cells[3].text_content() or ""
+                # 价格列是第二个 td
+                price_str = cells[1].text_content() or ""
                 price = self.parse_price(price_str)
                 if price is None or price <= 0:
                     continue
 
-                spec = cells[1].text_content() or ""
-                brand = cells[2].text_content() or ""
-                price_type = cells[4].text_content() or ""
-                region = cells[5].text_content() or ""
-                supplier = cells[6].text_content() or ""
-                date = cells[7].text_content() or ""
+                # 其他列：较昨日等
+                # 提取品牌（可能在其他单元格）
+                brand = ''
+                region = ''
+                for cell in cells[1:]:
+                    text = cell.text_content() or ""
+                    if '华东' in text or '华南' in text or '华北' in text:
+                        region = text.strip()
+                        break
 
                 results.append({
                     'name': name,
-                    'specification': spec.strip(),
-                    'brand': brand.strip(),
+                    'specification': '',
+                    'brand': brand,
                     'price': price,
                     'price_str': price_str.strip(),
-                    'price_type': price_type.strip() or '市场价',
-                    'region': region.strip(),
-                    'supplier': supplier.strip(),
-                    'date': date.strip(),
+                    'price_type': '市场价',
+                    'region': region,
+                    'supplier': '生意社',
+                    'date': '',
                     'unit': '元/吨',
                     'price_category': '现货',
                     'extra_data': {
-                        '规格': spec.strip(),
-                        '品牌/产地': brand.strip(),
-                        '报价类型': price_type.strip() or '市场价'
+                        '规格': '',
+                        '品牌/产地': brand,
+                        '报价类型': '市场价'
                     }
                 })
         except Exception as e:
@@ -248,7 +447,7 @@ class ShengyisheScraper(BaseScraper):
                     'region': region.strip(),
                     'supplier': '',
                     'date': date.strip(),
-                    'unit': '元/吨',
+                    'unit': '元/立方米',
                     'price_category': '现货',
                     'extra_data': {
                         '规格': spec.strip(),
@@ -320,42 +519,48 @@ class ShengyisheScraper(BaseScraper):
             rows = page.query_selector_all('table tr')
             for row in rows:
                 cells = row.query_selector_all('td')
-                if len(cells) < 6:
+                if len(cells) < 5:
                     continue
 
-                purity = cells[0].text_content() or ""
-                purity = purity.strip()
-                if not purity or purity in ['品名', '纯度']:
+                # 产品分类在第一个 td
+                category = cells[0].text_content() or ""
+                category = category.strip()
+                if not category or category == '产品分类' or '查看更多' in category:
                     continue
 
-                price_str = cells[3].text_content() or ""
+                # 基准价在第二个 td (cells[1])，实时价格在 cells[4]
+                # 使用实时价格（cells[4]）作为主价格
+                price_str = cells[4].text_content() or ""
                 price = self.parse_price(price_str)
                 if price is None or price <= 0:
                     continue
 
-                brand = cells[4].text_content() or ""
-                price_type = cells[5].text_content() or ""
-                region = page.query_selector('.region, .location') or None
-                region_text = region.text_content() if region else ""
-                date = page.query_selector('.date, .publish-date') or None
-                date_text = date.text_content() if date else ""
+                # 产品名称在 cells[2]
+                name = cells[2].text_content() or ""
+                # 产区在 cells[3]
+                region = cells[3].text_content() or ""
+                # 时间在最后一个 td
+                date = cells[-1].text_content() or ""
+
+                # 从品名中提取纯度作为规格
+                spec = name.split()[-1] if name else ''
 
                 results.append({
-                    'name': '',
-                    'specification': purity.strip(),
-                    'brand': brand.strip(),
+                    'name': name.strip(),
+                    'specification': spec,
+                    'brand': region.strip(),  # 产区就是品牌/产地
                     'price': price,
                     'price_str': price_str.strip(),
-                    'price_type': price_type.strip() or '市场价',
-                    'region': region_text.strip(),
+                    'price_type': '市场价',
+                    'region': region.strip(),
                     'supplier': '',
-                    'date': date_text.strip(),
-                    'unit': '元/吨',
+                    'date': date.strip(),
+                    'unit': '元/克',
                     'price_category': '现货',
                     'extra_data': {
-                        '品名/纯度': purity.strip(),
-                        '品牌/产地': brand.strip(),
-                        '报价类型': price_type.strip() or '市场价'
+                        '品名/纯度': name.strip(),
+                        '品牌/产地': region.strip(),
+                        '报价类型': '市场价'
                     }
                 })
         except Exception as e:
@@ -375,7 +580,9 @@ class ShengyisheScraper(BaseScraper):
         for url in urls:
             items = self.scrape_page(url)
             for item in items:
-                key = f"{item['name']}|{item['specification']}|{item['supplier']}|{item['date']}"
+                # 对于列表页数据，supplier为空，不作为去重依据
+                supplier_part = item['supplier'] if item['supplier'] else 'NOSUPPLIER'
+                key = f"{item['name']}|{item['specification']}|{supplier_part}|{item['date']}"
                 if key not in seen:
                     seen.add(key)
                     all_results.append(self._dict_to_scraped_item(item))
@@ -739,17 +946,10 @@ class ShengyisheScraper(BaseScraper):
         )
 
     def _get_product_code_from_db(self, source_url: str, product_name: str) -> Optional[str]:
-        """从数据库根据 source_url 或 product_name 获取 product_code"""
+        """从数据库根据 product_name 获取 product_code"""
         session = get_session()
         try:
-            if source_url:
-                product = session.query(Product).filter(
-                    Product.source_url == source_url
-                ).first()
-                if product:
-                    return product.product_code
-
-            # 兜底：用 product_name 查找
+            # 用 product_name 查找（列表页一个产品只对应一条基准价记录）
             product = session.query(Product).filter(
                 Product.product_name == product_name,
                 Product.is_active == True
