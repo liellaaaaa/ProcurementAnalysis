@@ -1,11 +1,13 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from datetime import date, timedelta
 from io import BytesIO
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-from backend.models.database import get_session, Product, PriceRecord, AlertRecord, AlertConfig
+from backend.api.deps import get_db
+from backend.models.database import Product, PriceRecord, AlertRecord, AlertConfig
 from backend.services.operation_logger import OperationLogger
+from backend.utils.date_utils import format_date, get_date_range, get_previous_period_range, parse_date
 
 router = APIRouter(prefix="/api/v1/reports", tags=["报表生成"])
 
@@ -40,49 +42,9 @@ except ImportError:
     HAS_CHART_GENERATOR = False
 
 
-def format_date(dt):
-    """统一日期格式为 yyyy/mm/dd"""
-    if isinstance(dt, str):
-        # 尝试解析字符串日期
-        try:
-            dt = date.fromisoformat(dt[:10])
-        except:
-            return dt
-    if hasattr(dt, 'strftime'):
-        return dt.strftime('%Y/%m/%d')
-    return str(dt)
-
-
-def get_date_range(report_type: str, start_date=None, end_date=None):
-    """获取报表日期范围，优先使用传入的自定义范围"""
-    if start_date and end_date:
-        return start_date, end_date
-
-    today = date.today()
-    if report_type == "weekly":
-        week_start = today - timedelta(days=today.weekday())
-        week_end = week_start + timedelta(days=6)
-        return week_start, week_end
-    elif report_type == "monthly":
-        month_start = date(today.year, today.month, 1)
-        if today.month == 12:
-            month_end = date(today.year + 1, 1, 1) - timedelta(days=1)
-        else:
-            month_end = date(today.year, today.month + 1, 1) - timedelta(days=1)
-        return month_start, month_end
-    return today - timedelta(days=7), today
-
-
-def get_previous_period_range(report_type: str, start_date, end_date):
-    """获取上一个周期的日期范围（用于环比）"""
-    period_length = (end_date - start_date).days + 1
-    prev_end = start_date - timedelta(days=1)
-    prev_start = prev_end - timedelta(days=period_length - 1)
-    return prev_start, prev_end
-
-
 @router.get("/pdf")
 async def generate_pdf_report(
+    db: Session = Depends(get_db),
     report_type: str = Query("weekly", enum=["weekly", "monthly"]),
     start_date: str = Query(None, description="开始日期 yyyy/mm/dd"),
     end_date: str = Query(None, description="结束日期 yyyy/mm/dd")
@@ -125,7 +87,6 @@ async def generate_pdf_report(
         except Exception:
             CHINESE_FONT = 'Helvetica'
 
-    session = get_session()
     start_date, end_date = get_date_range(report_type, parsed_start, parsed_end)
 
     title = "周报" if report_type == "weekly" else "月报"
@@ -148,7 +109,7 @@ async def generate_pdf_report(
     elements.append(Spacer(1, 0.5 * cm))
 
     # 统计数据
-    stats = session.query(
+    stats = db.query(
         func.count(func.distinct(PriceRecord.product_id)).label('product_count'),
         func.count(PriceRecord.id).label('record_count'),
         func.max(PriceRecord.price).label('max_price'),
@@ -193,7 +154,7 @@ async def generate_pdf_report(
     prev_start, prev_end = get_previous_period_range(report_type, start_date, end_date)
 
     # 统计上期数据
-    prev_stats = session.query(
+    prev_stats = db.query(
         func.count(func.distinct(PriceRecord.product_id)).label('product_count'),
         func.count(PriceRecord.id).label('record_count'),
         func.avg(PriceRecord.price).label('avg_price')
@@ -204,7 +165,7 @@ async def generate_pdf_report(
 
     if report_type == "weekly":
         # 周报：新增数据汇总 + 价格变动汇总
-        new_products = session.query(
+        new_products = db.query(
             func.count(func.distinct(Product.id)).label('new_count')
         ).join(PriceRecord).filter(
             PriceRecord.record_date >= start_date,
@@ -212,13 +173,13 @@ async def generate_pdf_report(
             Product.created_at >= start_date
         ).scalar() or 0
 
-        new_records = session.query(func.count(PriceRecord.id)).filter(
+        new_records = db.query(func.count(PriceRecord.id)).filter(
             PriceRecord.record_date >= start_date,
             PriceRecord.record_date <= end_date
         ).scalar() or 0
 
         # 价格变动统计
-        trend_stats = session.query(
+        trend_stats = db.query(
             PriceRecord.trend,
             func.count(PriceRecord.id).label('count')
         ).filter(
@@ -230,7 +191,7 @@ async def generate_pdf_report(
         trend_dict = {t.trend: t.count for t in trend_stats}
 
         # 异常告警统计（通过 AlertConfig 获取 alert_type）
-        alert_stats = session.query(
+        alert_stats = db.query(
             AlertConfig.alert_type,
             func.count(AlertRecord.id).label('count')
         ).join(AlertConfig, AlertRecord.alert_config_id == AlertConfig.id).filter(
@@ -356,12 +317,12 @@ async def generate_pdf_report(
     if HAS_CHART_GENERATOR:
         try:
             # 涨跌排行柱状图
-            subquery = session.query(
+            subquery = db.query(
                 PriceRecord.product_id,
                 func.max(PriceRecord.record_date).label('max_date')
             ).group_by(PriceRecord.product_id).subquery()
 
-            latest_prices = session.query(
+            latest_prices = db.query(
                 PriceRecord.product_id,
                 PriceRecord.change_percent
             ).join(
@@ -371,7 +332,7 @@ async def generate_pdf_report(
             ).all()
 
             product_ids = [lp.product_id for lp in latest_prices]
-            products = {p.id: p.product_name for p in session.query(Product).filter(Product.id.in_(product_ids)).all()}
+            products = {p.id: p.product_name for p in db.query(Product).filter(Product.id.in_(product_ids)).all()}
 
             ranking_data = [(products.get(lp.product_id, "未知")[:10], float(lp.change_percent) if lp.change_percent else 0.0) for lp in latest_prices]
             ranking_data.sort(key=lambda x: x[1], reverse=True)
@@ -389,7 +350,7 @@ async def generate_pdf_report(
 
         try:
             # 价格占比饼图
-            distribution = session.query(
+            distribution = db.query(
                 Product.product_name,
                 func.count(PriceRecord.id).label('count')
             ).join(PriceRecord).filter(
@@ -409,7 +370,7 @@ async def generate_pdf_report(
     elements.append(PageBreak())
 
     # 产品明细表 (扩展到 100 条)
-    products_data = session.query(
+    products_data = db.query(
         Product.product_name,
         func.max(PriceRecord.price).label('max_price'),
         func.min(PriceRecord.price).label('min_price'),
@@ -447,8 +408,6 @@ async def generate_pdf_report(
     doc.build(elements)
     buffer.seek(0)
 
-    session.close()
-
     # 记录操作日志
     OperationLogger.log_report_generate(
         report_type=report_type,
@@ -465,6 +424,7 @@ async def generate_pdf_report(
 
 @router.get("/html")
 async def generate_html_report(
+    db: Session = Depends(get_db),
     report_type: str = Query("weekly", enum=["weekly", "monthly"]),
     start_date: str = Query(None, description="开始日期 yyyy/mm/dd"),
     end_date: str = Query(None, description="结束日期 yyyy/mm/dd")
@@ -482,12 +442,11 @@ async def generate_html_report(
     parsed_start = parse_date(start_date) if start_date else None
     parsed_end = parse_date(end_date) if end_date else None
 
-    session = get_session()
     start_date, end_date = get_date_range(report_type, parsed_start, parsed_end)
     title = "周报" if report_type == "weekly" else "月报"
 
     # 统计数据
-    stats = session.query(
+    stats = db.query(
         func.count(func.distinct(PriceRecord.product_id)).label('product_count'),
         func.count(PriceRecord.id).label('record_count'),
         func.max(PriceRecord.price).label('max_price'),
@@ -499,12 +458,12 @@ async def generate_html_report(
     ).first()
 
     # 涨跌排行数据
-    subquery = session.query(
+    subquery = db.query(
         PriceRecord.product_id,
         func.max(PriceRecord.record_date).label('max_date')
     ).group_by(PriceRecord.product_id).subquery()
 
-    latest_prices = session.query(
+    latest_prices = db.query(
         PriceRecord.product_id,
         PriceRecord.change_percent,
         PriceRecord.price
@@ -515,7 +474,7 @@ async def generate_html_report(
     ).all()
 
     product_ids = [lp.product_id for lp in latest_prices]
-    products_map = {p.id: p.product_name for p in session.query(Product).filter(Product.id.in_(product_ids)).all()}
+    products_map = {p.id: p.product_name for p in db.query(Product).filter(Product.id.in_(product_ids)).all()}
 
     ranking = [(products_map.get(lp.product_id, "未知"), float(lp.change_percent) if lp.change_percent else 0.0, float(lp.price) if lp.price else 0.0) for lp in latest_prices]
     ranking.sort(key=lambda x: x[1], reverse=True)
@@ -524,7 +483,7 @@ async def generate_html_report(
     top_falling = ranking[:10]
 
     # 价格占比数据
-    distribution = session.query(
+    distribution = db.query(
         Product.product_name,
         func.count(PriceRecord.id).label('count')
     ).join(PriceRecord).filter(
@@ -536,7 +495,7 @@ async def generate_html_report(
     pie_data = [(d.product_name, d.count, round(d.count / total_count * 100, 1) if total_count else 0) for d in distribution]
 
     # 产品明细
-    products_data = session.query(
+    products_data = db.query(
         Product.product_name,
         func.max(PriceRecord.price).label('max_price'),
         func.min(PriceRecord.price).label('min_price'),
@@ -548,7 +507,7 @@ async def generate_html_report(
     ).group_by(Product.id).order_by(func.avg(PriceRecord.price).desc()).limit(50).all()
 
     # 趋势统计
-    trend_stats = session.query(
+    trend_stats = db.query(
         PriceRecord.trend,
         func.count(PriceRecord.id).label('count')
     ).filter(
@@ -557,8 +516,6 @@ async def generate_html_report(
         PriceRecord.trend.in_(['涨', '跌', '平'])
     ).group_by(PriceRecord.trend).all()
     trend_dict = {t.trend: t.count for t in trend_stats}
-
-    session.close()
 
     # 生成 HTML
     html_content = f"""<!DOCTYPE html>
@@ -749,6 +706,7 @@ async def generate_html_report(
 
 @router.get("/excel")
 async def generate_excel_report(
+    db: Session = Depends(get_db),
     report_type: str = Query("weekly", enum=["weekly", "monthly"]),
     start_date: str = Query(None, description="开始日期 yyyy/mm/dd"),
     end_date: str = Query(None, description="结束日期 yyyy/mm/dd")
@@ -769,7 +727,6 @@ async def generate_excel_report(
     if not HAS_OPENPYXL:
         return {"error": "openpyxl 未安装，请运行: pip install openpyxl"}
 
-    session = get_session()
     start_date, end_date = get_date_range(report_type, parsed_start, parsed_end)
 
     wb = Workbook()
@@ -788,7 +745,7 @@ async def generate_excel_report(
     overview_ws.row_dimensions[1].height = 30
 
     # 统计数据
-    stats = session.query(
+    stats = db.query(
         func.count(func.distinct(PriceRecord.product_id)).label('product_count'),
         func.count(PriceRecord.id).label('record_count'),
         func.max(PriceRecord.price).label('max_price'),
@@ -826,7 +783,7 @@ async def generate_excel_report(
     summary_ws = wb.create_sheet("价格总表")
 
     # 完整的价格记录数据
-    summary_records = session.query(PriceRecord, Product.product_name).join(Product).filter(
+    summary_records = db.query(PriceRecord, Product.product_name).join(Product).filter(
         PriceRecord.record_date >= start_date,
         PriceRecord.record_date <= end_date
     ).order_by(PriceRecord.record_date.desc()).all()
@@ -872,7 +829,7 @@ async def generate_excel_report(
 
     # ========== 工作表1: 产品列表 ==========
     products_ws = wb.create_sheet("产品列表")
-    products = session.query(Product).filter(Product.is_active == True).all()
+    products = db.query(Product).filter(Product.is_active == True).all()
     products_ws.append(["ID", "产品编码", "产品名称", "行业", "分类", "单位", "数据源"])
     for p in products:
         products_ws.append([p.id, p.product_code, p.product_name, p.industry, p.category, p.unit, p.source])
@@ -887,7 +844,7 @@ async def generate_excel_report(
 
     # ========== 工作表2: 价格历史（简化版） ==========
     history_ws = wb.create_sheet("价格历史")
-    history_records = session.query(PriceRecord, Product.product_name).join(Product).filter(
+    history_records = db.query(PriceRecord, Product.product_name).join(Product).filter(
         PriceRecord.record_date >= start_date,
         PriceRecord.record_date <= end_date
     ).order_by(PriceRecord.record_date.desc()).all()
@@ -911,7 +868,7 @@ async def generate_excel_report(
 
     # ========== 工作表3: 统计汇总 ==========
     summary_stats_ws = wb.create_sheet("统计汇总")
-    stats_list = session.query(
+    stats_list = db.query(
         Product.product_name,
         func.max(PriceRecord.price).label('max_price'),
         func.min(PriceRecord.price).label('min_price'),
@@ -944,12 +901,12 @@ async def generate_excel_report(
         chart_ws.append(["产品名称", "较昨日涨跌幅(%)"])
 
         # 获取最新价格变化率
-        subquery = session.query(
+        subquery = db.query(
             PriceRecord.product_id,
             func.max(PriceRecord.record_date).label('max_date')
         ).group_by(PriceRecord.product_id).subquery()
 
-        latest_prices = session.query(
+        latest_prices = db.query(
             PriceRecord.product_id,
             PriceRecord.change_percent
         ).join(
@@ -959,7 +916,7 @@ async def generate_excel_report(
         ).all()
 
         product_ids = [lp.product_id for lp in latest_prices]
-        products_map = {p.id: p.product_name for p in session.query(Product).filter(Product.id.in_(product_ids)).all()}
+        products_map = {p.id: p.product_name for p in db.query(Product).filter(Product.id.in_(product_ids)).all()}
 
         ranking = [(products_map.get(lp.product_id, "未知"), float(lp.change_percent) if lp.change_percent else 0.0) for lp in latest_prices]
         ranking.sort(key=lambda x: x[1], reverse=True)
@@ -987,7 +944,7 @@ async def generate_excel_report(
 
         # ========== 工作表5: 价格占比饼图 ==========
         pie_ws = wb.create_sheet("价格占比")
-        distribution = session.query(
+        distribution = db.query(
             Product.product_name,
             func.count(PriceRecord.id).label('count')
         ).join(PriceRecord).filter(
@@ -1032,7 +989,7 @@ async def generate_excel_report(
         cell.alignment = Alignment(horizontal='center', vertical='center')
 
     # 获取上期和本期每个产品的数据
-    curr_data = session.query(
+    curr_data = db.query(
         Product.id,
         Product.product_name,
         func.avg(PriceRecord.price).label('avg_price'),
@@ -1044,7 +1001,7 @@ async def generate_excel_report(
 
     curr_map = {p.id: (p.avg_price, p.record_count) for p in curr_data}
 
-    prev_data = session.query(
+    prev_data = db.query(
         Product.id,
         func.avg(PriceRecord.price).label('avg_price'),
         func.count(PriceRecord.id).label('record_count')
@@ -1110,7 +1067,7 @@ async def generate_excel_report(
     alert_ws.row_dimensions[1].height = 25
 
     # 告警汇总统计（通过 AlertConfig 获取 alert_type）
-    alert_summary = session.query(
+    alert_summary = db.query(
         AlertConfig.alert_type,
         func.count(AlertRecord.id).label('count')
     ).join(AlertConfig, AlertRecord.alert_config_id == AlertConfig.id).filter(
@@ -1140,7 +1097,7 @@ async def generate_excel_report(
         cell.fill = PatternFill(start_color='F56C6C', end_color='F56C6C', fill_type='solid')
         cell.alignment = Alignment(horizontal='center', vertical='center')
 
-    alert_records = session.query(
+    alert_records = db.query(
         AlertRecord, Product.product_name, AlertConfig.alert_type
     ).join(Product, AlertRecord.product_id == Product.id
     ).join(AlertConfig, AlertRecord.alert_config_id == AlertConfig.id).filter(
@@ -1166,8 +1123,7 @@ async def generate_excel_report(
     buffer.seek(0)
 
     filename = f"price_{report_type}_{end_date.isoformat()}.xlsx"
-    session.close()
-
+    
     # 记录操作日志
     OperationLogger.log_report_generate(
         report_type=report_type,

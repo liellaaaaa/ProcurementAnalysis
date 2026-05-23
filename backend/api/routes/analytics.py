@@ -1,23 +1,14 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Depends
 from typing import List, Optional
 from datetime import date, timedelta, datetime
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-from backend.models.database import get_session, Product, PriceRecord
+from backend.api.deps import get_db
+from backend.utils.date_utils import format_date
+from backend.models.database import Product, PriceRecord
 
 router = APIRouter(prefix="/api/v1/prices", tags=["价格分析"])
 
-
-def format_date(dt):
-    """统一日期格式为 yyyy/mm/dd"""
-    if isinstance(dt, str):
-        try:
-            dt = date.fromisoformat(dt[:10])
-        except:
-            return dt
-    if hasattr(dt, 'strftime'):
-        return dt.strftime('%Y/%m/%d')
-    return str(dt)
 
 def simple_linear_regression(values: List[float]) -> tuple:
     """简单线性回归，返回斜率和预测值"""
@@ -40,15 +31,13 @@ def simple_linear_regression(values: List[float]) -> tuple:
 
 
 @router.get("/stats/weekly")
-async def get_weekly_stats():
+async def get_weekly_stats(db: Session = Depends(get_db)):
     """本周价格统计"""
-    session = get_session()
-
     today = date.today()
     week_start = today - timedelta(days=today.weekday())
     week_end = week_start + timedelta(days=6)
 
-    results = session.query(
+    results = db.query(
         PriceRecord.product_id,
         Product.product_name,
         func.max(PriceRecord.price).label('max_price'),
@@ -59,8 +48,6 @@ async def get_weekly_stats():
         PriceRecord.record_date >= week_start,
         PriceRecord.record_date <= week_end
     ).group_by(PriceRecord.product_id).all()
-
-    session.close()
 
     return {
         "week_start": week_start.isoformat(),
@@ -80,10 +67,8 @@ async def get_weekly_stats():
 
 
 @router.get("/stats/monthly")
-async def get_monthly_stats(month: Optional[str] = None):
+async def get_monthly_stats(month: Optional[str] = None, db: Session = Depends(get_db)):
     """本月价格统计"""
-    session = get_session()
-
     today = date.today()
     if month:
         year, month_num = map(int, month.split('-'))
@@ -99,7 +84,7 @@ async def get_monthly_stats(month: Optional[str] = None):
         else:
             month_end = date(today.year, today.month + 1, 1) - timedelta(days=1)
 
-    results = session.query(
+    results = db.query(
         PriceRecord.product_id,
         Product.product_name,
         func.max(PriceRecord.price).label('max_price'),
@@ -110,8 +95,6 @@ async def get_monthly_stats(month: Optional[str] = None):
         PriceRecord.record_date >= month_start,
         PriceRecord.record_date <= month_end
     ).group_by(PriceRecord.product_id).all()
-
-    session.close()
 
     return {
         "month_start": month_start.isoformat(),
@@ -131,30 +114,28 @@ async def get_monthly_stats(month: Optional[str] = None):
 
 
 @router.get("/stats/ranking")
-async def get_price_ranking(limit: int = Query(10, le=50), days: int = Query(7, le=90)):
+async def get_price_ranking(limit: int = Query(10, le=50), days: int = Query(7, le=90), db: Session = Depends(get_db)):
     """价格涨跌排行榜"""
-    session = get_session()
-
     start_date = date.today() - timedelta(days=days)
 
-    subquery = session.query(
+    subquery = db.query(
         PriceRecord.product_id,
         func.max(PriceRecord.record_date).label('latest_date')
     ).filter(PriceRecord.record_date >= start_date).group_by(PriceRecord.product_id).subquery()
 
-    latest_records = session.query(PriceRecord).join(
+    latest_records = db.query(PriceRecord).join(
         subquery,
         (PriceRecord.product_id == subquery.c.product_id) &
         (PriceRecord.record_date == subquery.c.latest_date)
     ).all()
 
     product_ids = [r.product_id for r in latest_records]
-    products_map = {p.id: p.product_name for p in session.query(Product).filter(Product.id.in_(product_ids)).all()}
+    products_map = {p.id: p.product_name for p in db.query(Product).filter(Product.id.in_(product_ids)).all()}
 
     change_data = []
     for record in latest_records:
         old_date = record.record_date - timedelta(days=days)
-        old_record = session.query(PriceRecord).filter(
+        old_record = db.query(PriceRecord).filter(
             PriceRecord.product_id == record.product_id,
             PriceRecord.record_date <= old_date,
             PriceRecord.source == record.source
@@ -171,8 +152,6 @@ async def get_price_ranking(limit: int = Query(10, le=50), days: int = Query(7, 
                 "source": record.source
             })
 
-    session.close()
-
     rising = sorted([x for x in change_data if x['change_percent'] > 0], key=lambda x: x['change_percent'], reverse=True)[:limit]
     falling = sorted([x for x in change_data if x['change_percent'] < 0], key=lambda x: x['change_percent'])[:limit]
 
@@ -183,21 +162,17 @@ async def get_price_ranking(limit: int = Query(10, le=50), days: int = Query(7, 
 
 
 @router.get("/forecast/{product_id}")
-async def get_price_forecast(product_id: int, days: int = Query(30, le=90)):
+async def get_price_forecast(product_id: int, days: int = Query(30, le=90), db: Session = Depends(get_db)):
     """价格预测（基于移动平均和线性回归）"""
-    session = get_session()
-
-    product = session.query(Product).filter(Product.id == product_id).first()
+    product = db.query(Product).filter(Product.id == product_id).first()
     if not product:
-        session.close()
         return {"error": "产品不存在"}
 
-    records = session.query(PriceRecord).filter(
+    records = db.query(PriceRecord).filter(
         PriceRecord.product_id == product_id
     ).order_by(PriceRecord.record_date.asc()).limit(days).all()
 
     if len(records) < 3:
-        session.close()
         return {"error": "数据不足，无法预测", "record_count": len(records)}
 
     prices = [r.price for r in records]
@@ -209,8 +184,6 @@ async def get_price_forecast(product_id: int, days: int = Query(30, le=90)):
     slope, next_pred = simple_linear_regression(prices)
 
     trend_direction = "上涨" if slope > 0.5 else ("下跌" if slope < -0.5 else "平稳")
-
-    session.close()
 
     return {
         "product_id": product_id,
@@ -230,23 +203,21 @@ async def get_price_forecast(product_id: int, days: int = Query(30, le=90)):
 
 
 @router.get("/compare")
-async def compare_products(product_ids: str = Query(..., description="产品ID列表，逗号分隔")):
+async def compare_products(product_ids: str = Query(..., description="产品ID列表，逗号分隔"), db: Session = Depends(get_db)):
     """多产品横向对比"""
-    session = get_session()
-
     ids = [int(x.strip()) for x in product_ids.split(',')]
 
     results = []
     for pid in ids:
-        product = session.query(Product).filter(Product.id == pid).first()
+        product = db.query(Product).filter(Product.id == pid).first()
         if not product:
             continue
 
-        latest_record = session.query(PriceRecord).filter(
+        latest_record = db.query(PriceRecord).filter(
             PriceRecord.product_id == pid
         ).order_by(PriceRecord.record_date.desc()).first()
 
-        records_30 = session.query(PriceRecord).filter(
+        records_30 = db.query(PriceRecord).filter(
             PriceRecord.product_id == pid,
             PriceRecord.record_date >= date.today() - timedelta(days=30)
         ).all()
@@ -267,5 +238,4 @@ async def compare_products(product_ids: str = Query(..., description="产品ID�
             "record_count_30d": len(records_30)
         })
 
-    session.close()
     return {"products": results}

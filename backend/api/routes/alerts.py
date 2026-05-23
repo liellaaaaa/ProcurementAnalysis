@@ -1,8 +1,10 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime
-from backend.models.database import get_session, AlertConfig, AlertRecord, Product, Category
+from sqlalchemy.orm import Session
+from backend.api.deps import get_db
+from backend.models.database import AlertConfig, AlertRecord, Product, Category
 from backend.services.operation_logger import OperationLogger
 
 router = APIRouter(prefix="/api/v1/alerts", tags=["预警管理"])
@@ -65,11 +67,11 @@ async def get_alert_configs(
     industry: Optional[str] = None,
     source: Optional[str] = None,
     category_id: Optional[int] = None,
-    subcategory_id: Optional[int] = None
+    subcategory_id: Optional[int] = None,
+    db: Session = Depends(get_db)
 ):
     """获取预警配置列表"""
-    session = get_session()
-    query = session.query(AlertConfig)
+    query = db.query(AlertConfig)
 
     if product_id:
         query = query.filter(AlertConfig.product_id == product_id)
@@ -80,29 +82,29 @@ async def get_alert_configs(
     product_ids = [r.product_id for r in results]
 
     # Build product query with filters
-    product_query = session.query(Product)
+    product_query = db.query(Product)
     if industry:
         product_query = product_query.filter(Product.industry == industry)
     if source:
         product_query = product_query.filter(Product.source == source)
     if category_id:
         from backend.models.database import ProductCategory, Category
-        subcat_ids = [c.id for c in session.query(Category).filter(Category.parent_id == category_id).all()]
-        pc_query = session.query(ProductCategory.product_id).filter(ProductCategory.category_id.in_(subcat_ids + [category_id]))
+        subcat_ids = [c.id for c in db.query(Category).filter(Category.parent_id == category_id).all()]
+        pc_query = db.query(ProductCategory.product_id).filter(ProductCategory.category_id.in_(subcat_ids + [category_id]))
         product_query = product_query.filter(Product.id.in_(pc_query))
     if subcategory_id:
         from backend.models.database import ProductCategory
-        pc_query = session.query(ProductCategory.product_id).filter(ProductCategory.category_id == subcategory_id)
+        pc_query = db.query(ProductCategory.product_id).filter(ProductCategory.category_id == subcategory_id)
         product_query = product_query.filter(Product.id.in_(pc_query))
 
     filtered_products = {p.id: p for p in product_query.all()}
-    product_names = {p.id: p.product_name for p in session.query(Product).filter(Product.id.in_(product_ids)).all()}
+    product_names = {p.id: p.product_name for p in db.query(Product).filter(Product.id.in_(product_ids)).all()}
 
     # Get product industry and category info
     from backend.models.database import ProductCategory
-    product_industries = {p.id: p.industry for p in session.query(Product).filter(Product.id.in_(product_ids)).all()}
+    product_industries = {p.id: p.industry for p in db.query(Product).filter(Product.id.in_(product_ids)).all()}
     product_categories = {}
-    for pc in session.query(ProductCategory).filter(ProductCategory.product_id.in_(product_ids)).all():
+    for pc in db.query(ProductCategory).filter(ProductCategory.product_id.in_(product_ids)).all():
         if pc.product_id not in product_categories:
             product_categories[pc.product_id] = pc.category_id
 
@@ -121,19 +123,16 @@ async def get_alert_configs(
                 is_active=config.is_active,
                 created_at=config.created_at
             ))
-    session.close()
     return response
 
 
 @router.post("/configs", response_model=AlertConfigResponse)
-async def create_alert_config(config: AlertConfigCreate):
+async def create_alert_config(config: AlertConfigCreate, db: Session = Depends(get_db)):
     """创建预警配置"""
-    session = get_session()
 
     # 验证产品存在
-    product = session.query(Product).filter(Product.id == config.product_id).first()
+    product = db.query(Product).filter(Product.id == config.product_id).first()
     if not product:
-        session.close()
         raise HTTPException(status_code=404, detail="产品不存在")
 
     product_name = product.product_name
@@ -145,10 +144,9 @@ async def create_alert_config(config: AlertConfigCreate):
         change_percent=config.change_percent,
         is_active=config.is_active
     )
-    session.add(new_config)
-    session.commit()
-    session.refresh(new_config)
-    session.close()
+    db.add(new_config)
+    db.commit()
+    db.refresh(new_config)
 
     # 记录操作日志
     OperationLogger.log_alert_create(
@@ -170,25 +168,22 @@ async def create_alert_config(config: AlertConfigCreate):
 
 
 @router.put("/configs/{config_id}", response_model=AlertConfigResponse)
-async def update_alert_config(config_id: int, config: AlertConfigUpdate):
+async def update_alert_config(config_id: int, config: AlertConfigUpdate, db: Session = Depends(get_db)):
     """更新预警配置"""
-    session = get_session()
-    db_config = session.query(AlertConfig).filter(AlertConfig.id == config_id).first()
+    db_config = db.query(AlertConfig).filter(AlertConfig.id == config_id).first()
 
     if not db_config:
-        session.close()
         raise HTTPException(status_code=404, detail="预警配置不存在")
 
     update_data = config.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(db_config, field, value)
 
-    session.commit()
-    session.refresh(db_config)
+    db.commit()
+    db.refresh(db_config)
 
-    product = session.query(Product).filter(Product.id == db_config.product_id).first()
+    product = db.query(Product).filter(Product.id == db_config.product_id).first()
     product_name = product.product_name if product else None
-    session.close()
 
     # 记录操作日志
     OperationLogger.log_alert_update(config_id, update_data)
@@ -206,18 +201,15 @@ async def update_alert_config(config_id: int, config: AlertConfigUpdate):
 
 
 @router.delete("/configs/{config_id}")
-async def delete_alert_config(config_id: int):
+async def delete_alert_config(config_id: int, db: Session = Depends(get_db)):
     """删除预警配置"""
-    session = get_session()
-    config = session.query(AlertConfig).filter(AlertConfig.id == config_id).first()
+    config = db.query(AlertConfig).filter(AlertConfig.id == config_id).first()
 
     if not config:
-        session.close()
         raise HTTPException(status_code=404, detail="预警配置不存在")
 
-    session.delete(config)
-    session.commit()
-    session.close()
+    db.delete(config)
+    db.commit()
 
     # 记录操作日志
     OperationLogger.log_alert_delete(config_id)
@@ -234,30 +226,30 @@ async def get_alert_records(
     source: Optional[str] = None,
     category_id: Optional[int] = None,
     subcategory_id: Optional[int] = None,
-    limit: int = Query(100, le=500)
+    limit: int = Query(100, le=500),
+    db: Session = Depends(get_db)
 ):
     """获取预警记录列表"""
-    session = get_session()
 
     # Build product filter base
-    product_query = session.query(Product)
+    product_query = db.query(Product)
     if industry:
         product_query = product_query.filter(Product.industry == industry)
     if source:
         product_query = product_query.filter(Product.source == source)
     if category_id:
         from backend.models.database import ProductCategory, Category
-        subcat_ids = [c.id for c in session.query(Category).filter(Category.parent_id == category_id).all()]
-        pc_query = session.query(ProductCategory.product_id).filter(ProductCategory.category_id.in_(subcat_ids + [category_id]))
+        subcat_ids = [c.id for c in db.query(Category).filter(Category.parent_id == category_id).all()]
+        pc_query = db.query(ProductCategory.product_id).filter(ProductCategory.category_id.in_(subcat_ids + [category_id]))
         product_query = product_query.filter(Product.id.in_(pc_query))
     if subcategory_id:
         from backend.models.database import ProductCategory
-        pc_query = session.query(ProductCategory.product_id).filter(ProductCategory.category_id == subcategory_id)
+        pc_query = db.query(ProductCategory.product_id).filter(ProductCategory.category_id == subcategory_id)
         product_query = product_query.filter(Product.id.in_(pc_query))
 
     filtered_product_ids = [p.id for p in product_query.all()]
 
-    query = session.query(AlertRecord, Product.product_name, AlertConfig.alert_type).join(
+    query = db.query(AlertRecord, Product.product_name, AlertConfig.alert_type).join(
         Product, AlertRecord.product_id == Product.id
     ).join(AlertConfig, AlertRecord.alert_config_id == AlertConfig.id)
 
@@ -269,7 +261,6 @@ async def get_alert_records(
         query = query.filter(AlertRecord.product_id.in_(filtered_product_ids))
     else:
         # No products match the filter, return empty
-        session.close()
         return []
 
     results = query.order_by(AlertRecord.triggered_at.desc()).limit(limit).all()
@@ -286,47 +277,38 @@ async def get_alert_records(
             triggered_at=record.triggered_at,
             is_read=record.is_read
         ))
-    session.close()
     return response
 
 
 @router.put("/{record_id}/read")
-async def mark_alert_as_read(record_id: int):
+async def mark_alert_as_read(record_id: int, db: Session = Depends(get_db)):
     """标记预警为已读"""
-    session = get_session()
-    record = session.query(AlertRecord).filter(AlertRecord.id == record_id).first()
+    record = db.query(AlertRecord).filter(AlertRecord.id == record_id).first()
 
     if not record:
-        session.close()
         raise HTTPException(status_code=404, detail="预警记录不存在")
 
     record.is_read = True
-    session.commit()
-    session.close()
+    db.commit()
     return {"message": "已标记为已读"}
 
 
 @router.put("/read-all")
-async def mark_all_alerts_as_read():
+async def mark_all_alerts_as_read(db: Session = Depends(get_db)):
     """标记所有预警为已读"""
-    session = get_session()
-    session.query(AlertRecord).filter(AlertRecord.is_read == False).update({"is_read": True})
-    session.commit()
-    session.close()
+    db.query(AlertRecord).filter(AlertRecord.is_read == False).update({"is_read": True})
+    db.commit()
     return {"message": "已标记全部已读"}
 
 
 @router.delete("/{record_id}")
-async def delete_alert_record(record_id: int):
+async def delete_alert_record(record_id: int, db: Session = Depends(get_db)):
     """删除预警记录"""
-    session = get_session()
-    record = session.query(AlertRecord).filter(AlertRecord.id == record_id).first()
+    record = db.query(AlertRecord).filter(AlertRecord.id == record_id).first()
 
     if not record:
-        session.close()
         raise HTTPException(status_code=404, detail="预警记录不存在")
 
-    session.delete(record)
-    session.commit()
-    session.close()
+    db.delete(record)
+    db.commit()
     return {"message": "预警记录已删除"}

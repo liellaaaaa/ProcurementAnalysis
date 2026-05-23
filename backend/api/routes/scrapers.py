@@ -1,12 +1,14 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import List
+from sqlalchemy.orm import Session
 import subprocess
 import sys
 import os
 from datetime import date, datetime
 
 from backend.scrapers import ScraperRegistry
-from backend.models.database import get_session, PriceRecord, ScraperLog, Product
+from backend.models.database import PriceRecord, ScraperLog, Product
+from backend.api.deps import get_db
 from backend.services.operation_logger import OperationLogger
 from config import SOURCE_FRESHNESS_CONFIG, SCRAPER_MIN_INTERVAL
 
@@ -24,14 +26,13 @@ async def get_sources():
 
 
 @router.get("/check-freshness")
-async def check_data_freshness():
+async def check_data_freshness(db: Session = Depends(get_db)):
     """检查各数据源数据的最新日期，提醒是否需要更新"""
-    session = get_session()
     today = date.today()
 
     # 查询每个数据源的最新记录日期
     from sqlalchemy import func
-    results = session.query(
+    results = db.query(
         PriceRecord.source,
         func.max(PriceRecord.record_date).label('latest_date')
     ).group_by(PriceRecord.source).all()
@@ -77,7 +78,6 @@ async def check_data_freshness():
                 "message": "暂无数据，请抓取"
             })
 
-    session.close()
     return {
         "today": today.isoformat(),
         "sources": source_status,
@@ -86,18 +86,16 @@ async def check_data_freshness():
 
 
 @router.post("/scrapers/{source}/run")
-async def run_scraper(source: str):
+async def run_scraper(source: str, db: Session = Depends(get_db)):
     """触发指定数据源的爬取（在独立进程中运行爬虫脚本）"""
     if source not in SCRAPER_SCRIPTS:
         raise HTTPException(status_code=404, detail=f"Unknown source: {source}")
 
     # 检查距上次成功抓取是否不足30分钟
-    session = get_session()
-    last_success = session.query(ScraperLog).filter(
+    last_success = db.query(ScraperLog).filter(
         ScraperLog.scraper_name == source,
         ScraperLog.status == "success"
     ).order_by(ScraperLog.completed_at.desc()).first()
-    session.close()
 
     if last_success and last_success.completed_at:
         elapsed = (datetime.now() - last_success.completed_at).total_seconds()
@@ -150,49 +148,44 @@ async def run_scraper(source: str):
 
 
 @router.post("/scrapers/{source}/scrape-history")
-async def scrape_historical(source: str, days: int = Query(default=365, description="爬取天数")):
+async def scrape_historical(source: str, days: int = Query(default=365, description="爬取天数"), db: Session = Depends(get_db)):
     """爬取指定数据源所有产品的历史价格数据"""
     if source not in SCRAPER_SCRIPTS:
         raise HTTPException(status_code=404, detail=f"Unknown source: {source}")
 
     from backend.scrapers.shengyishe import ShengyisheScraper
 
-    session = get_session()
-    try:
-        # 获取该数据源的所有产品
-        products = session.query(Product).filter(
-            Product.source == source,
-            Product.is_active == True
-        ).all()
+    # 获取该数据源的所有产品
+    products = db.query(Product).filter(
+        Product.source == source,
+        Product.is_active == True
+    ).all()
 
-        if not products:
-            raise HTTPException(status_code=404, detail=f"No active products found for source: {source}")
+    if not products:
+        raise HTTPException(status_code=404, detail=f"No active products found for source: {source}")
 
-        scraper = ShengyisheScraper()
-        total_saved = 0
-        failed_products = []
+    scraper = ShengyisheScraper()
+    total_saved = 0
+    failed_products = []
 
-        for product in products:
-            try:
-                print(f"\n=== 开始爬取产品: {product.product_name} (ID: {product.id}) ===")
-                records = scraper.scrape_historical_prices(product.id, days)
-                if records:
-                    saved = scraper.save_historical_to_db(product.id, records)
-                    total_saved += saved
-                    print(f"  -> 新增 {saved} 条记录")
-                else:
-                    print(f"  -> 无新数据")
+    for product in products:
+        try:
+            print(f"\n=== 开始爬取产品: {product.product_name} (ID: {product.id}) ===")
+            records = scraper.scrape_historical_prices(product.id, days)
+            if records:
+                saved = scraper.save_historical_to_db(product.id, records)
+                total_saved += saved
+                print(f"  -> 新增 {saved} 条记录")
+            else:
+                print(f"  -> 无新数据")
 
-                import time
-                time.sleep(2)  # 速率控制
+            import time
+            time.sleep(2)  # 速率控制
 
-            except Exception as e:
-                print(f"  产品 {product.product_name} 爬取失败: {e}")
-                failed_products.append(product.product_name)
-                continue
-
-    finally:
-        session.close()
+        except Exception as e:
+            print(f"  产品 {product.product_name} 爬取失败: {e}")
+            failed_products.append(product.product_name)
+            continue
 
     return {
         "status": "completed",

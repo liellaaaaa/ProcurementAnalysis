@@ -1,9 +1,10 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import date
 from sqlalchemy.orm import Session
-from backend.models.database import get_session, Product, ProductCategory, Category
+from backend.api.deps import get_db
+from backend.models.database import Product, ProductCategory, Category
 from backend.services.operation_logger import OperationLogger
 
 router = APIRouter(prefix="/api/v1/products", tags=["产品管理"])
@@ -33,6 +34,7 @@ class ProductResponse(BaseModel):
 
 @router.get("", response_model=List[ProductResponse])
 async def get_products(
+    db: Session = Depends(get_db),
     industry: Optional[str] = None,
     category: Optional[str] = None,
     category_id: Optional[int] = None,
@@ -41,8 +43,7 @@ async def get_products(
     limit: int = Query(100, le=500)
 ):
     """获取产品列表（支持行业、品类筛选）"""
-    session = get_session()
-    query = session.query(Product)
+    query = db.query(Product)
 
     if industry:
         query = query.filter(Product.industry == industry)
@@ -53,17 +54,16 @@ async def get_products(
 
     # Filter by category (一级品类)
     if category_id:
-        subcat_ids = [c.id for c in session.query(Category).filter(Category.parent_id == category_id).all()]
-        pc_query = session.query(ProductCategory.product_id).filter(ProductCategory.category_id.in_(subcat_ids + [category_id]))
+        subcat_ids = [c.id for c in db.query(Category).filter(Category.parent_id == category_id).all()]
+        pc_query = db.query(ProductCategory.product_id).filter(ProductCategory.category_id.in_(subcat_ids + [category_id]))
         query = query.filter(Product.id.in_(pc_query))
 
     # Filter by subcategory (二级品类)
     if subcategory_id:
-        pc_query = session.query(ProductCategory.product_id).filter(ProductCategory.category_id == subcategory_id)
+        pc_query = db.query(ProductCategory.product_id).filter(ProductCategory.category_id == subcategory_id)
         query = query.filter(Product.id.in_(pc_query))
 
     products = query.limit(limit).all()
-    session.close()
 
     # 记录查询日志
     OperationLogger.log_product_query(
@@ -73,24 +73,20 @@ async def get_products(
     return products
 
 @router.get("/{product_id}", response_model=ProductResponse)
-async def get_product(product_id: int):
+async def get_product(product_id: int, db: Session = Depends(get_db)):
     """获取产品详情"""
-    session = get_session()
-    product = session.query(Product).filter(Product.id == product_id).first()
-    session.close()
+    product = db.query(Product).filter(Product.id == product_id).first()
 
     if not product:
         raise HTTPException(status_code=404, detail="产品不存在")
     return product
 
 @router.post("", response_model=ProductResponse)
-async def create_product(product: ProductCreate):
+async def create_product(product: ProductCreate, db: Session = Depends(get_db)):
     """创建产品"""
-    session = get_session()
 
-    existing = session.query(Product).filter(Product.product_code == product.product_code).first()
+    existing = db.query(Product).filter(Product.product_code == product.product_code).first()
     if existing:
-        session.close()
         raise HTTPException(status_code=400, detail="产品编码已存在")
 
     # Extract category_ids before creating product
@@ -98,19 +94,17 @@ async def create_product(product: ProductCreate):
     product_data = product.model_dump(exclude={"category_ids"})
 
     new_product = Product(**product_data)
-    session.add(new_product)
-    session.commit()
-    session.refresh(new_product)
+    db.add(new_product)
+    db.commit()
+    db.refresh(new_product)
 
     # Add category associations
     if category_ids:
         for cat_id in category_ids:
             assoc = ProductCategory(product_id=new_product.id, category_id=cat_id)
-            session.add(assoc)
-        session.commit()
-        session.refresh(new_product)
-
-    session.close()
+            db.add(assoc)
+        db.commit()
+        db.refresh(new_product)
 
     # 记录操作日志
     OperationLogger.log_product_create(
@@ -130,13 +124,11 @@ class ProductUpdate(BaseModel):
     category_ids: Optional[List[int]] = None
 
 @router.put("/{product_id}", response_model=ProductResponse)
-async def update_product(product_id: int, product: ProductUpdate):
+async def update_product(product_id: int, product: ProductUpdate, db: Session = Depends(get_db)):
     """更新产品"""
-    session = get_session()
-    db_product = session.query(Product).filter(Product.id == product_id).first()
+    db_product = db.query(Product).filter(Product.id == product_id).first()
 
     if not db_product:
-        session.close()
         raise HTTPException(status_code=404, detail="产品不存在")
 
     update_data = product.model_dump(exclude_unset=True)
@@ -145,21 +137,20 @@ async def update_product(product_id: int, product: ProductUpdate):
     if "category_ids" in update_data:
         category_ids = update_data.pop("category_ids")
         # Remove existing associations
-        session.query(ProductCategory).filter(ProductCategory.product_id == product_id).delete()
+        db.query(ProductCategory).filter(ProductCategory.product_id == product_id).delete()
         # Add new associations
         if category_ids:
             for cat_id in category_ids:
                 assoc = ProductCategory(product_id=product_id, category_id=cat_id)
-                session.add(assoc)
+                db.add(assoc)
 
     for field, value in update_data.items():
         setattr(db_product, field, value)
 
     from datetime import datetime
     db_product.updated_at = datetime.now()
-    session.commit()
-    session.refresh(db_product)
-    session.close()
+    db.commit()
+    db.refresh(db_product)
 
     # 记录操作日志
     OperationLogger.log_product_update(
@@ -170,18 +161,15 @@ async def update_product(product_id: int, product: ProductUpdate):
     return db_product
 
 @router.delete("/{product_id}")
-async def delete_product(product_id: int):
+async def delete_product(product_id: int, db: Session = Depends(get_db)):
     """删除产品（软删除）"""
-    session = get_session()
-    product = session.query(Product).filter(Product.id == product_id).first()
+    product = db.query(Product).filter(Product.id == product_id).first()
 
     if not product:
-        session.close()
         raise HTTPException(status_code=404, detail="产品不存在")
 
     product.is_active = False
-    session.commit()
-    session.close()
+    db.commit()
 
     # 记录操作日志
     OperationLogger.log_product_delete(
@@ -212,17 +200,16 @@ class BatchProductResponse(BaseModel):
 
 
 @router.post("/batch", response_model=BatchProductResponse)
-async def batch_import_products(batch: BatchProductRequest):
+async def batch_import_products(batch: BatchProductRequest, db: Session = Depends(get_db)):
     """批量导入产品（支持按 product_name + source_url 查重，已存在则跳过）"""
     import hashlib
-    session = get_session()
     created_count = 0
     skipped_count = 0
     results = []
 
     for item in batch.products:
         # 按 product_name + source_url 查重
-        existing = session.query(Product).filter(
+        existing = db.query(Product).filter(
             Product.product_name == item.product_name,
             Product.source_url == item.source_url
         ).first()
@@ -249,7 +236,7 @@ async def batch_import_products(batch: BatchProductRequest):
             source=item.source,
             source_url=item.source_url
         )
-        session.add(new_product)
+        db.add(new_product)
         created_count += 1
         results.append({
             "product_name": item.product_name,
@@ -257,8 +244,7 @@ async def batch_import_products(batch: BatchProductRequest):
             "product_code": product_code
         })
 
-    session.commit()
-    session.close()
+    db.commit()
 
     return BatchProductResponse(
         total=len(batch.products),
