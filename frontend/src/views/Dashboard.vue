@@ -276,22 +276,32 @@
             <el-table-column type="expand" width="48">
               <template #default="{ row }">
                 <div class="expand-content">
+                  <!-- 基准价信息 -->
+                  <div class="benchmark-info" v-if="row.specification || row.brand || row.region || row.market">
+                    <span class="benchmark-label">基准价</span>
+                    <span v-if="row.specification">规格: {{ row.specification }}</span>
+                    <span v-if="row.brand">品牌: {{ row.brand }}</span>
+                    <span v-if="row.market">市场: {{ row.market }}</span>
+                    <span>单价: ¥{{ row.price?.toLocaleString() }}/{{ row.unit || '吨' }}</span>
+                  </div>
+                  <!-- 详细报价列表 -->
                   <p class="expand-title" v-if="row.extra_data?.详细报价?.length">
-                    详细报价（{{ row.extra_data.详细报价.length }}家供应商）基准价: ¥{{ row.price?.toLocaleString() }}
+                    详细报价（{{ row.extra_data.详细报价.length }}家供应商）
                   </p>
-                  <p class="expand-title" v-else>暂无详细报价数据</p>
+                  <p class="expand-title" v-else-if="!row.extra_data?.详细报价?.length">暂无详细报价数据</p>
                   <template v-if="row.extra_data?.详细报价?.length">
-                    <el-table :data="paginatedHistoryData" size="small" class="detail-table">
-                      <el-table-column prop="brand" label="品牌/产地" width="120" />
-                      <el-table-column prop="spec_raw" label="规格" width="100" />
-                      <el-table-column prop="price" label="单价" width="120">
+                    <el-table :data="paginatedHistoryData" size="small" class="detail-table" style="table-layout: auto; width: 100%;">
+                      <el-table-column prop="publish_date" label="日期" min-width="90" />
+                      <el-table-column prop="spec_raw" label="规格" min-width="160" />
+                      <el-table-column prop="brand" label="品牌/产地" min-width="100" />
+                      <el-table-column prop="price" label="单价" min-width="100">
                         <template #default="{ row: detail }">
                           <span class="price-value">¥{{ Number(detail.price || 0).toLocaleString() }}</span>
                         </template>
                       </el-table-column>
-                      <el-table-column prop="price_type" label="报价类型" width="90" />
-                      <el-table-column prop="region" label="交货地" width="100" />
-                      <el-table-column prop="supplier" label="交易商" show-overflow-tooltip>
+                      <el-table-column prop="price_type" label="报价类型" min-width="90" />
+                      <el-table-column prop="region" label="交货地" min-width="110" />
+                      <el-table-column prop="supplier" label="交易商" min-width="150" show-overflow-tooltip>
                         <template #default="{ row: detail }">
                           <span>{{ detail.supplier || '-' }}</span>
                         </template>
@@ -369,7 +379,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
-import { priceApi } from '../api/price'
+import { priceApi } from '../api/price.js'
 import * as echarts from 'echarts'
 import CategorySelector from '../components/CategorySelector.vue'
 import SourceSelector from '../components/SourceSelector.vue'
@@ -1371,6 +1381,16 @@ onUnmounted(() => {
   padding: 12px 4px;
 }
 
+.expand-content .el-table__body-wrapper {
+  overflow: visible !important;
+  width: 100% !important;
+}
+
+.expand-content .el-table__body-wrapper table {
+  table-layout: auto !important;
+  width: 100% !important;
+}
+
 .price-value {
   font-family: 'Fira Code', monospace;
   font-weight: 600;
@@ -1399,6 +1419,8 @@ onUnmounted(() => {
   background: var(--bg-primary);
   border-radius: 12px;
   margin: 8px 0;
+  overflow: visible;
+  min-width: 0;
 }
 
 .history-sparkline {
@@ -1421,8 +1443,70 @@ onUnmounted(() => {
   letter-spacing: 0.5px;
 }
 
+.benchmark-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 12px 16px;
+  background: #f5f7fa;
+  border-radius: 6px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: #606266;
+}
+.benchmark-info .benchmark-label {
+  font-weight: 600;
+  color: #303133;
+}
+
 .detail-table {
   background: transparent !important;
+  width: 100% !important;
+  table-layout: auto !important;
+}
+.detail-table .el-table__header,
+.detail-table .el-table__body,
+.detail-table .el-table__footer {
+  table-layout: auto !important;
+  width: 100% !important;
+}
+.detail-table .el-table__body-wrapper {
+  width: 100% !important;
+  overflow: visible !important;
+}
+.detail-table .el-table__body-wrapper table {
+  width: 100% !important;
+  table-layout: auto !important;
+}
+.detail-table .el-table__header-wrapper {
+  width: 100% !important;
+}
+.detail-table .el-table__header-wrapper table {
+  width: 100% !important;
+  table-layout: auto !important;
+}
+.detail-table td.el-table__cell,
+.detail-table th.el-table__cell {
+  width: auto !important;
+}
+.detail-table .el-table__body {
+  width: 100% !important;
+}
+.detail-table .el-table__header {
+  width: 100% !important;
+}
+.detail-table.is-scrolling-none {
+  width: 100% !important;
+}
+.detail-table.el-table--layout-fixed {
+  table-layout: auto !important;
+  width: 100% !important;
+}
+.detail-table .el-table__header,
+.detail-table .el-table__body,
+.detail-table .el-table__footer {
+  table-layout: auto !important;
+  width: 100% !important;
 }
 
 .text-rise { color: var(--rise-color); font-weight: 500; }
@@ -1547,5 +1631,18 @@ onUnmounted(() => {
 
 .table-section :deep(.el-table__header-wrapper) {
   overflow: hidden !important;
+}
+
+.table-section :deep(.el-table__expanded-cell) {
+  overflow: visible !important;
+}
+
+.table-section :deep(.el-table__expanded-cell .el-table__body-wrapper) {
+  overflow: visible !important;
+}
+
+.table-section :deep(.el-table__expanded-cell .el-table__body-wrapper table) {
+  width: 100% !important;
+  table-layout: auto !important;
 }
 </style>

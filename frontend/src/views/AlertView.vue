@@ -218,7 +218,8 @@
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
-import { alertApi, productApi } from '../api/price'
+import { alertApi } from '../api/alert.js'
+import { productApi } from '../api/product.js'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import SourceSelector from '../components/SourceSelector.vue'
 import IndustrySelector from '../components/IndustrySelector.vue'

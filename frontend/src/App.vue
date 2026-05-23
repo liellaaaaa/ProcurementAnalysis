@@ -156,7 +156,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { scraperApi } from './api/price'
+import { scraperApi } from './api/scraper'
 import { ElMessage } from 'element-plus'
 
 const showFreshnessDialog = ref(false)
@@ -251,6 +251,7 @@ onMounted(() => {
   --text-primary: #1a1a2e;
   --text-secondary: #5a6178;
   --text-muted: #9ca3af;
+  --el-font-size-base: 16px;
 
   /* Border */
   --border-color: #e4e7ed;

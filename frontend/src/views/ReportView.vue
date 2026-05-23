@@ -120,7 +120,8 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { reportApi, priceApi } from '../api/price'
+import { reportApi } from '../api/report.js'
+import { priceApi } from '../api/price.js'
 import SourceSelector from '../components/SourceSelector.vue'
 import IndustrySelector from '../components/IndustrySelector.vue'
 import CategorySelector from '../components/CategorySelector.vue'

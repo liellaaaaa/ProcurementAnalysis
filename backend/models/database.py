@@ -38,7 +38,8 @@ class Product(Base):
     category = Column(String(50))
     unit = Column(String(20), default="元/吨")
     source = Column(String(50))
-    source_url = Column(String(500))
+    source_url = Column(String(500))     # detail 页 URL（基准价）
+    plist_url = Column(String(500))      # plist 页 URL（详细报价，可为空）
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
@@ -67,6 +68,58 @@ class PriceRecord(Base):
 
     __table_args__ = (
         UniqueConstraint("product_id", "record_date", "source", "region", "supplier", name="uq_price_date_source_region_supplier"),
+    )
+
+
+class BenchmarkPrice(Base):
+    """基准价表 - 每个产品每天一条记录（从 detail-xxx.html 解析）"""
+    __tablename__ = "benchmark_prices"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
+    product_name = Column(String(100), nullable=False)
+    spec = Column(String(200))       # 基准规格
+    brand = Column(String(100))      # 品牌
+    market = Column(String(50))      # 市场
+    price = Column(Float)
+    unit = Column(String(20), default="元/吨")
+    price_original = Column(String(100))  # 原始报价文本
+    trend = Column(String(10))        # 涨/跌/平
+    change_percent = Column(Float)    # 涨跌幅 %
+    change_reason = Column(String(200))  # 涨跌原因
+    source = Column(String(50))
+    record_date = Column(Date, nullable=False)
+    created_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (
+        UniqueConstraint("product_id", "record_date", name="uq_benchmark_product_date"),
+    )
+
+
+class DetailedQuote(Base):
+    """详细报价表 - 每个产品每天多条记录（从 plist-xxx.html 解析）"""
+    __tablename__ = "detailed_quotes"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
+    product_name = Column(String(100), nullable=False)
+    spec = Column(String(200))       # 规格
+    brand = Column(String(100))      # 品牌/产地
+    price = Column(Float)
+    unit = Column(String(20), default="元/吨")
+    price_original = Column(String(100))  # 原始报价文本
+    price_type = Column(String(20))  # 报价类型（现货/期货/市场价）
+    price_category = Column(String(20))  # 价格分类（现货/期货/锁价）
+    region = Column(String(50))      # 交货地/区域
+    supplier = Column(String(100))   # 供应商/交易商
+    source = Column(String(50))
+    publish_date = Column(Date, nullable=False)
+    extra_data = Column(JSON)        # 行业差异化字段
+    created_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (
+        UniqueConstraint("product_id", "publish_date", "region", "supplier", "price_type",
+                         name="uq_detailed_quote_key"),
     )
 
 class AlertConfig(Base):

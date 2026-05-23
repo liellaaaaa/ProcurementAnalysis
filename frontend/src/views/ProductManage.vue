@@ -218,7 +218,9 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { productApi, priceApi, categoryApi } from '../api/price'
+import { productApi } from '../api/product.js'
+import { priceApi } from '../api/price.js'
+import { categoryApi } from '../api/category.js'
 import CategorySelector from '../components/CategorySelector.vue'
 import IndustrySelector from '../components/IndustrySelector.vue'
 

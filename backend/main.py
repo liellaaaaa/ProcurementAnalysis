@@ -1,9 +1,14 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 import os
 
+from backend.api.exceptions import APIException, api_exception_handler
+
 app = FastAPI(title="ProcurementAnalysis API", version="1.0.0")
+
+# 注册全局异常处理器
+app.add_exception_handler(APIException, api_exception_handler)
 
 # CORS
 app.add_middleware(

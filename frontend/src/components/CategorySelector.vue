@@ -48,7 +48,7 @@
 
 <script setup>
 import { ref, watch, onMounted } from 'vue'
-import { categoryApi } from '../api/price'
+import { categoryApi } from '../api/category.js'
 
 const props = defineProps({
   modelValue: {

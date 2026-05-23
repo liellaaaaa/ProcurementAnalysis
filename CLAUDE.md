@@ -78,6 +78,11 @@ npm install
 npm run dev
 ```
 
+### 当日数据更新
+```bash
+python -m backend.scrapers.shengyishe
+```
+
 ## 依赖说明
 
 ### Python 依赖 (requirements.txt)

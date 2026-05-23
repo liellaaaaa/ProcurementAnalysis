@@ -102,7 +102,8 @@
 
 <script setup>
 import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
-import { priceApi, productApi } from '../api/price'
+import { priceApi } from '../api/price.js'
+import { productApi } from '../api/product.js'
 import SourceSelector from '../components/SourceSelector.vue'
 import IndustrySelector from '../components/IndustrySelector.vue'
 import CategorySelector from '../components/CategorySelector.vue'

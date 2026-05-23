@@ -97,7 +97,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { categoryApi } from '../api/price'
+import { categoryApi } from '../api/category.js'
 
 const loading = ref(false)
 const categoriesTree = ref([])
