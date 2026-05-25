@@ -284,6 +284,18 @@
                     <span v-if="row.market">市场: {{ row.market }}</span>
                     <span>单价: ¥{{ row.price?.toLocaleString() }}/{{ row.unit || '吨' }}</span>
                   </div>
+                  <!-- 品类历史基准价折线图 -->
+                  <div class="expand-chart-section">
+                    <div class="expand-chart-header">
+                      <span class="expand-chart-title">历史基准价走势</span>
+                      <el-select v-model="expandChartDays" size="small" style="width: 72px" @change="() => handleExpandChartDaysChange(row)">
+                        <el-option label="7天" :value="7" />
+                        <el-option label="30天" :value="30" />
+                        <el-option label="90天" :value="90" />
+                      </el-select>
+                    </div>
+                    <div :ref="el => expandChartRefs[row.product_id] = el" class="expand-chart-container" style="height: 200px; width: 100%;"></div>
+                  </div>
                   <!-- 详细报价列表 -->
                   <p class="expand-title" v-if="row.extra_data?.详细报价?.length">
                     详细报价（{{ row.extra_data.详细报价.length }}家供应商）
@@ -388,6 +400,7 @@ import IndustrySelector from '../components/IndustrySelector.vue'
 const lineChartRef = ref(null)
 const pieChartRef = ref(null)
 const barChartRef = ref(null)
+const expandChartRefs = ref({})
 
 const hoverChart = ref(null)
 const chartDetailVisible = ref(false)
@@ -435,6 +448,7 @@ watch(filter3Industry, () => { handleFilter3Change() })
 const pagination = ref({ page: 1, pageSize: 10, total: 0 })
 const historyPagination = ref({ page: 1, pageSize: 10 })
 const compareDays = ref(7)
+const expandChartDays = ref(7)
 
 const indicatorCards = ref([
   { metricType: 'yoy', metricLabel: '同比涨幅', productName: '-', changePercent: 0, trend: 'rise', price: 0, hasData: true },
@@ -587,7 +601,79 @@ async function handleExpandChange(row) {
   } else {
     expandedRows.value = [id]
     historyPagination.value.page = 1
+    await nextTick()
+    loadExpandChart(row)
   }
+}
+
+async function loadExpandChart(row) {
+  const el = expandChartRefs.value[row.product_id]
+  if (!el) return
+  const chart = echarts.init(el)
+  try {
+    const res = await priceApi.getDashboardHistoryCompare(
+      String(row.product_id),
+      expandChartDays.value,
+      null, null, null, null
+    )
+    if (!res.data || !res.data.dates || res.data.dates.length === 0) {
+      chart.setOption({ series: [] })
+      return
+    }
+    const { dates, series } = res.data
+    chart.setOption({
+      backgroundColor: 'transparent',
+      tooltip: {
+        trigger: 'axis',
+        backgroundColor: '#fff',
+        borderColor: '#E8E3F3',
+        borderWidth: 1,
+        textStyle: { color: '#1E293B', fontSize: 12 },
+        borderRadius: 8,
+        formatter: (params) => {
+          const date = params[0].axisValue
+          let html = `<strong>${date}</strong><br/>`
+          params.forEach(p => {
+            html += `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color};margin-right:6px;"></span>${p.seriesName}: <strong>¥${p.value?.toLocaleString() ?? '-'}</strong><br/>`
+          })
+          return html
+        }
+      },
+      grid: { left: 50, right: 20, bottom: 30, top: 10, containLabel: true },
+      xAxis: {
+        type: 'category',
+        data: dates,
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: { color: '#94A3B4', fontSize: 10 }
+      },
+      yAxis: {
+        type: 'value',
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: { color: '#94A3B4', fontSize: 10, formatter: val => `¥${val.toLocaleString()}` },
+        splitLine: { lineStyle: { color: '#E8E3F3', type: 'dashed' } }
+      },
+      series: series.map((s, i) => ({
+        name: s.name,
+        type: 'line',
+        data: s.data,
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 3,
+        lineStyle: { width: 2, color: '#E63946' },
+        itemStyle: { color: '#E63946' },
+        emphasis: { itemStyle: { borderColor: '#fff', borderWidth: 2 } },
+        connectNulls: true
+      }))
+    })
+  } catch (e) {
+    console.error('Failed to load expand chart', e)
+  }
+}
+
+function handleExpandChartDaysChange(row) {
+  loadExpandChart(row)
 }
 
 function handleHistoryPageChange(page) {
@@ -1072,6 +1158,12 @@ onUnmounted(() => {
   lineChart?.dispose()
   pieChart?.dispose()
   barChart?.dispose()
+  Object.values(expandChartRefs.value).forEach(el => {
+    if (el) {
+      const chart = echarts.getInstanceByDom(el)
+      chart?.dispose()
+    }
+  })
 })
 </script>
 
@@ -1457,6 +1549,32 @@ onUnmounted(() => {
 .benchmark-info .benchmark-label {
   font-weight: 600;
   color: #303133;
+}
+
+.expand-chart-section {
+  margin-bottom: 12px;
+  padding: 12px 16px;
+  background: #f5f7fa;
+  border-radius: 6px;
+}
+
+.expand-chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.expand-chart-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.expand-chart-container {
+  min-height: 200px;
 }
 
 .detail-table {

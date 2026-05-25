@@ -587,10 +587,9 @@ async def get_dashboard_ranking(
         BenchmarkPrice.product_id,
         BenchmarkPrice.price,
         BenchmarkPrice.record_date
-    ).join(
-        latest_subquery,
-        (BenchmarkPrice.product_id == latest_subquery.c.product_id) &
-        (BenchmarkPrice.record_date == latest_subquery.c.max_date)
+    ).filter(
+        BenchmarkPrice.product_id == latest_subquery.c.product_id,
+        BenchmarkPrice.record_date == latest_subquery.c.max_date
     )
 
     if source and source != '__all__':
