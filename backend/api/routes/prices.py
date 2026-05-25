@@ -214,20 +214,12 @@ async def get_latest_prices(
                 product_map[pid]["latest_date"] = r.record_date
                 product_map[pid]["price"] = r.price
 
-    # 补充 detailed_quotes 到 extra_data.详细报价
-    # 详细报价的日期可能和基准价日期不同步，取每个产品详细报价的最新日期
+    # 补充 detailed_quotes 到 extra_data.详细报价（返回完整历史）
     for pid in product_map:
-        # 取该产品详细报价的最新日期
-        latest_dq_date = db.query(func.max(DetailedQuote.publish_date)).filter(
+        # 取该产品所有详细报价（完整历史）
+        dq_query = db.query(DetailedQuote).filter(
             DetailedQuote.product_id == pid
-        ).scalar()
-        if latest_dq_date:
-            dq_query = db.query(DetailedQuote).filter(
-                DetailedQuote.product_id == pid,
-                DetailedQuote.publish_date == latest_dq_date
-            ).all()
-        else:
-            dq_query = []
+        ).order_by(DetailedQuote.publish_date.desc()).all()
         product_map[pid]["extra_data"]["详细报价"] = [
             {
                 "supplier": dq.supplier,

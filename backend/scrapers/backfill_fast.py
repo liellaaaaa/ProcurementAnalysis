@@ -1,33 +1,35 @@
 """
 生意社历史数据快速回填脚本
-- 使用 asyncio + aiohttp 并发请求（静态页面不需要 Playwright）
-- 静态列表页：直接请求 HTML 解析，不需要 JS 渲染
-- 全量并发，90天数据一次性回填
+- 使用 Playwright 绕过 Cloudflare 反爬
+- 支持两种页面格式：
+  1. 详细报价页面 (rawmex/detail-*.html) - 基准价
+  2. mprice/plist-*.html - 多产品详细报价
+
+用法:
+  # 回填基准价（detail 页，需要 Playwright）
+  python -m backend.scrapers.backfill_fast --mode detail --urls-file category_urls.json
+
+  # 回填详细报价（plist 页，需要 Playwright）
+  python -m backend.scrapers.backfill_fast --mode mprice --urls-file category_urls_mprice.json
+
+  # 两者都跑
+  python -m backend.scrapers.backfill_fast --mode both
 """
-import asyncio
-import aiohttp
 import re
 import sys
 import argparse
 import time
-from datetime import datetime, timedelta
+import json
+from datetime import datetime, date, timedelta
 from collections import defaultdict
-from typing import List, Dict, Optional, Tuple
-from urllib.parse import urljoin
+from typing import List, Dict, Optional
 
-import lxml.html
-from backend.models.database import get_session, Product, PriceRecord, ScraperLog
-import sqlalchemy as sa
+from playwright.sync_api import sync_playwright
+
+from backend.models.database import get_session, Product, PriceRecord, ScraperLog, BenchmarkPrice, DetailedQuote
 
 
-BASE_URL = "https://www.100ppi.com"
 SOURCE_KEY = "shengyishe"
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "zh-CN,zh;q=0.9",
-}
-TIMEOUT = aiohttp.ClientTimeout(total=30)
 
 
 def parse_price(price_str: str) -> Optional[float]:
@@ -42,364 +44,589 @@ def parse_price(price_str: str) -> Optional[float]:
     return None
 
 
-def parse_historical_date(date_str: str) -> Optional[str]:
-    """解析历史价格日期字符串，返回 YYYY-MM-DD"""
+def parse_date(date_str: str) -> Optional[date]:
     if not date_str:
         return None
     date_str = date_str.strip()
-    # YYYY-MM-DD
-    m = re.search(r'(\d{4})-(\d{1,2})-(\d{1,2})', date_str)
-    if m:
-        return f"{m.group(1)}-{m.group(2).zfill(2)}-{m.group(3).zfill(2)}"
-    # YYYY/MM/DD
-    m = re.search(r'(\d{4})/(\d{1,2})/(\d{1,2})', date_str)
-    if m:
-        return f"{m.group(1)}-{m.group(2).zfill(2)}-{m.group(3).zfill(2)}"
-    # MM-DD（补充当前年份）
-    m = re.search(r'(\d{1,2})-(\d{1,2})', date_str)
-    if m:
-        year = datetime.now().year
-        return f"{year}-{m.group(1).zfill(2)}-{m.group(2).zfill(2)}"
+    for fmt in ["%Y-%m-%d", "%Y/%m/%d", "%m/%d", "%m-%d"]:
+        try:
+            dt = datetime.strptime(date_str, fmt)
+            if dt.year == 1900:
+                dt = dt.replace(year=date.today().year)
+            return dt.date()
+        except:
+            continue
     return None
 
 
-def parse_list_page(html: str, industry: str) -> List[Dict]:
-    """解析列表页 HTML，返回所有报价行"""
+# ---------------------------------------------------------------------------
+# 解析 detail 页（基准价）
+# ---------------------------------------------------------------------------
+def parse_detail_page(page, product_name: str, industry: str) -> List[Dict]:
+    """解析 detail 页，提取基准价历史数据"""
+    results = []
+
+    try:
+        # 提取当前价格
+        price_el = page.query_selector('.price-fb01_1')
+        if price_el:
+            price_str = price_el.inner_text()
+            price = parse_price(price_str)
+
+        # 提取日期
+        date_el = page.query_selector('.post_date_li')
+        record_date = date.today()
+        if date_el:
+            date_text = date_el.inner_text()
+            date_match = re.search(r'(\d{2})-(\d{2})\s+(\d{2}):(\d{2})', date_text)
+            if date_match:
+                record_date = date(2026, int(date_match.group(1)), int(date_match.group(2)))
+
+        # 从价格表格提取规格/品牌/市场
+        table = page.query_selector('.price-newp table') or page.query_selector('table.price-newp, table.rmbpj')
+        spec, brand, market = '', '', ''
+        if table:
+            rows = table.query_selector_all('tr')
+            for row in rows:
+                cells = row.query_selector_all('td')
+                if len(cells) >= 5:
+                    cell_texts = [c.text_content().strip() for c in cells]
+                    if '商品名称' in cell_texts[0]:
+                        continue
+                    if len(cell_texts) >= 5 and cell_texts[0]:
+                        name_from_table = cell_texts[0]
+                        spec = cell_texts[1] if len(cell_texts) > 1 else ''
+                        brand = cell_texts[2] if len(cell_texts) > 2 else ''
+                        market = cell_texts[3] if len(cell_texts) > 3 else ''
+                        # 取第一条有效数据
+                        break
+
+        if price and price > 0:
+            results.append({
+                'date': record_date,
+                'price': price,
+                'price_str': f"{price}元/吨",
+                'price_type': '基准价',
+                'industry': industry,
+                'product_name': product_name,
+                'spec': spec,
+                'brand': brand,
+                'market': market,
+            })
+
+    except Exception as e:
+        print(f"    解析 detail 页失败: {e}")
+
+    return results
+
+
+# ---------------------------------------------------------------------------
+# 解析 plist 页（详细报价列表）
+# ---------------------------------------------------------------------------
+def parse_plist_page(page, industry: str) -> List[Dict]:
+    """解析 plist 页，提取所有报价行"""
     results = []
     try:
-        tree = lxml.html.fromstring(html)
-        table = tree.cssselect('table.lp-table.mb15')
-        if not table:
-            table = tree.cssselect('table.lp-table')
+        table = page.query_selector('table.lp-table.mb15') or page.query_selector('table.lp-table')
         if not table:
             return results
 
-        rows = table[0].cssselect('tr')
+        rows = table.query_selector_all('tr')
         for row in rows:
-            cells = row.cssselect('td')
+            cells = row.query_selector_all('td')
             if len(cells) < 8:
                 continue
 
-            product_name = (cells[0].text_content() or '').strip()
+            product_name = cells[0].text_content().strip()
             if not product_name or product_name == '商品名称':
                 continue
 
-            spec_text = (cells[1].text_content() or '').strip()
-            brand = (cells[2].text_content() or '').strip()
-            price_str = (cells[3].text_content() or '').strip()
-            price_type = (cells[4].text_content() or '').strip()
-            region = (cells[5].text_content() or '').strip()
-            supplier = (cells[6].text_content() or '').strip()
-            publish_date = (cells[7].text_content() or '').strip()
+            spec_text = cells[1].text_content().strip()
+            brand = cells[2].text_content().strip()
+            price_str = cells[3].text_content().strip()
+            price_type = cells[4].text_content().strip()
+            region = cells[5].text_content().strip()
+            supplier = cells[6].text_content().strip()
+            publish_date_str = cells[7].text_content().strip()
 
             price = parse_price(price_str)
             if price is None or price <= 0:
                 continue
 
+            parsed_date = parse_date(publish_date_str)
+            if not parsed_date:
+                continue
+
             results.append({
                 'product_name': product_name,
-                'spec_raw': spec_text,
+                'spec': spec_text,
                 'brand': brand,
                 'price': price,
                 'price_str': price_str,
                 'price_type': price_type,
                 'region': region,
                 'supplier': supplier,
-                'publish_date': publish_date,
+                'publish_date': parsed_date,
                 'industry': industry,
             })
     except Exception as e:
-        print(f"    解析页面失败: {e}")
+        print(f"    解析 plist 页失败: {e}")
     return results
 
 
-def group_by_date_and_calculate_benchmark(rows: List[Dict]) -> List[Dict]:
-    """按日期分组，计算每日的基准价（按产品分组）"""
-    by_date = defaultdict(list)
-    for row in rows:
-        by_date[row['publish_date']].append(row)
+# ---------------------------------------------------------------------------
+# 保存记录
+# ---------------------------------------------------------------------------
+def save_benchmark_records(product_id: int, records: List[Dict]) -> int:
+    """保存基准价到 benchmark_prices + price_records"""
+    if not records:
+        return 0
 
-    results = []
-    for date, day_rows in by_date.items():
-        by_product = defaultdict(list)
-        for row in day_rows:
-            by_product[row['product_name']].append(row)
+    session = get_session()
+    saved = 0
+    try:
+        for record in records:
+            record_date = record.get('date')
+            if isinstance(record_date, str):
+                record_date = parse_date(record_date) or date.today()
 
-        for product_name, product_rows in by_product.items():
-            prices = [r['price'] for r in product_rows]
-            benchmark = sum(prices) / len(prices) if prices else 0
+            # 检查是否已存在
+            existing = session.query(BenchmarkPrice).filter(
+                BenchmarkPrice.product_id == product_id,
+                BenchmarkPrice.record_date == record_date
+            ).first()
 
-            results.append({
-                'date': date,
-                'product_name': product_name,
-                'benchmark': round(benchmark, 2),
-                'quote_count': len(product_rows),
-                'details': product_rows,
-                'price_type': product_rows[0]['price_type'],
-            })
-    return results
-
-
-class FastBackfillScraper:
-    """快速历史回填爬虫 - asyncio 并发"""
-
-    def __init__(self, max_concurrency: int = 20):
-        self.max_concurrency = max_concurrency
-        self.semaphore = None
-        self.session = None
-        self._product_industry_map = {}
-
-    async def fetch_page(self, url: str, industry: str) -> Tuple[str, str, List[Dict]]:
-        """并发抓取单个页面，返回 (url, industry, rows)"""
-        async with self.semaphore:
-            try:
-                async with self.session.get(url, headers=HEADERS, timeout=TIMEOUT) as resp:
-                    if resp.status != 200:
-                        return (url, industry, [])
-                    html = await resp.text()
-                    rows = parse_list_page(html, industry)
-                    return (url, industry, rows)
-            except Exception as e:
-                return (url, industry, [])
-
-    async def scrape_product_pages(self, product: Product, max_pages: int) -> List[Dict]:
-        """并发抓取单个产品的所有历史页面"""
-        base_url = product.source_url
-        industry = product.industry or "化工"
-
-        # 构建所有页面 URL
-        page_urls = [base_url]
-        match = re.search(r'(plist-\d+-\d+-)(\d+)(\.html)', base_url)
-        if match:
-            for page_num in range(2, max_pages + 1):
-                page_url = re.sub(
-                    r'(plist-\d+-\d+-)(\d+)(\.html)',
-                    lambda m: f"{m.group(1)}{page_num}{m.group(3)}",
-                    base_url
-                )
-                page_urls.append(page_url)
-
-        # 并发抓取所有页面
-        tasks = [self.fetch_page(url, industry) for url in page_urls]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        all_rows = []
-        for result in results:
-            if isinstance(result, Exception):
-                continue
-            url, ind, rows = result
-            all_rows.extend(rows)
-
-        if not all_rows:
-            return []
-
-        # 按日期+产品分组计算基准价
-        grouped = group_by_date_and_calculate_benchmark(all_rows)
-
-        items = []
-        unit = '元/吨' if industry in ['化工', '农副'] else ('元/立方米' if industry == '能源' else '元/克')
-        for g in grouped:
-            items.append({
-                'date': g['date'],
-                'product_name': g['product_name'],
-                'price': g['benchmark'],
-                'price_str': f"{g['benchmark']}元/吨",
-                'price_type': g['price_type'],
-                'industry': industry,
-                'unit': unit,
-                'source_url': base_url,
-            })
-        return items
-
-    def save_records(self, product_id: int, records: List[Dict]) -> int:
-        """批量保存历史记录"""
-        if not records:
-            return 0
-
-        session = get_session()
-        saved_count = 0
-
-        try:
-            for record in records:
-                date_str = record.get('date', '')
-                if not date_str:
-                    continue
-
-                record_date = None
-                for fmt in ["%Y-%m-%d", "%m/%d", "%Y/%m/%d"]:
-                    try:
-                        record_date = datetime.strptime(date_str, fmt).date()
-                        break
-                    except:
-                        continue
-
-                if not record_date:
-                    continue
-
-                # 检查是否已存在
-                existing = session.query(PriceRecord).filter(
-                    PriceRecord.product_id == product_id,
-                    PriceRecord.record_date == record_date,
-                    PriceRecord.source == SOURCE_KEY
-                ).first()
-
-                if existing:
-                    existing.price = record['price']
-                    # 计算涨跌幅
-                    prev_record = session.query(PriceRecord).filter(
-                        PriceRecord.product_id == product_id,
-                        PriceRecord.record_date < record_date,
-                        PriceRecord.source == SOURCE_KEY
-                    ).order_by(PriceRecord.record_date.desc()).first()
-                    if prev_record and prev_record.price > 0:
-                        change_pct = round(((record['price'] - prev_record.price) / prev_record.price) * 100, 2)
-                        existing.change_percent = change_pct
-                        existing.trend = "涨" if change_pct > 0 else "跌" if change_pct < 0 else "平"
-                else:
-                    # 查上一条计算涨跌幅
-                    prev_record = session.query(PriceRecord).filter(
-                        PriceRecord.product_id == product_id,
-                        PriceRecord.record_date < record_date,
-                        PriceRecord.source == SOURCE_KEY
-                    ).order_by(PriceRecord.record_date.desc()).first()
-
-                    if prev_record and prev_record.price > 0:
-                        change_pct = round(((record['price'] - prev_record.price) / prev_record.price) * 100, 2)
-                        trend = "涨" if change_pct > 0 else "跌" if change_pct < 0 else "平"
-                    else:
-                        change_pct = 0.0
-                        trend = "平"
-
-                    price_record = PriceRecord(
-                        product_id=product_id,
-                        price=record['price'],
-                        unit=record.get('unit', '元/吨'),
-                        price_original=record.get('price_str', ''),
-                        price_category='现货',
-                        price_type=record.get('price_type', '市场价'),
-                        trend=trend,
-                        change_percent=change_pct,
-                        source=SOURCE_KEY,
-                        region='',
-                        supplier='',
-                        brand='',
-                        specification='',
-                        extra_data={'报价类型': record.get('price_type', '市场价')},
-                        record_date=record_date
-                    )
-                    session.add(price_record)
-                saved_count += 1
-
-            session.commit()
-        except Exception as e:
-            print(f"    数据库保存失败: {e}")
-            session.rollback()
-        finally:
-            session.close()
-
-        return saved_count
-
-    async def run(self, product_ids: List[int] = None, days: int = 90, dry_run: bool = False):
-        """主入口"""
-        session = get_session()
-        try:
-            if product_ids:
-                products = session.query(Product).filter(
-                    Product.id.in_(product_ids),
-                    Product.is_active == True,
-                    Product.source_url.isnot(None)
-                ).all()
+            if existing:
+                existing.price = record['price']
+                existing.spec = record.get('spec', '')
+                existing.brand = record.get('brand', '')
+                existing.market = record.get('market', '')
             else:
-                products = session.query(Product).filter(
-                    Product.source == SOURCE_KEY,
-                    Product.is_active == True,
-                    Product.source_url.isnot(None)
-                ).all()
-        finally:
-            session.close()
+                bp = BenchmarkPrice(
+                    product_id=product_id,
+                    product_name=record.get('product_name', ''),
+                    spec=record.get('spec', ''),
+                    brand=record.get('brand', ''),
+                    market=record.get('market', ''),
+                    price=record['price'],
+                    unit=record.get('unit', '元/吨'),
+                    price_original=record.get('price_str', ''),
+                    source=SOURCE_KEY,
+                    record_date=record_date,
+                )
+                session.add(bp)
 
-        if not products:
-            print("没有找到待回填的产品")
-            return
+            # 同步写入 price_records
+            existing_pr = session.query(PriceRecord).filter(
+                PriceRecord.product_id == product_id,
+                PriceRecord.record_date == record_date,
+                PriceRecord.source == SOURCE_KEY
+            ).first()
 
-        max_pages = max(1, days // 2)
+            if not existing_pr:
+                pr = PriceRecord(
+                    product_id=product_id,
+                    price=record['price'],
+                    unit=record.get('unit', '元/吨'),
+                    price_type='基准价',
+                    trend='平',
+                    change_percent=0.0,
+                    source=SOURCE_KEY,
+                    region=record.get('market', ''),
+                    brand=record.get('brand', ''),
+                    specification=record.get('spec', ''),
+                    extra_data={
+                        'spec': record.get('spec', ''),
+                        'brand': record.get('brand', ''),
+                        'market': record.get('market', ''),
+                    },
+                    record_date=record_date,
+                )
+                session.add(pr)
+                saved += 1
+
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        print(f"    保存 benchmark 失败: {e}")
+    finally:
+        session.close()
+
+    return saved
+
+
+def save_plist_records(product_id: int, product_name: str, records: List[Dict]) -> int:
+    """保存详细报价到 detailed_quotes + price_records"""
+    if not records:
+        return 0
+
+    session = get_session()
+    saved = 0
+    try:
+        for record in records:
+            publish_date = record.get('publish_date')
+            if isinstance(publish_date, str):
+                publish_date = parse_date(publish_date) or date.today()
+
+            # 检查是否已存在
+            existing = session.query(DetailedQuote).filter(
+                DetailedQuote.product_id == product_id,
+                DetailedQuote.publish_date == publish_date,
+                DetailedQuote.region == record.get('region', ''),
+                DetailedQuote.supplier == record.get('supplier', ''),
+            ).first()
+
+            if existing:
+                existing.price = record['price']
+            else:
+                dq = DetailedQuote(
+                    product_id=product_id,
+                    product_name=record.get('product_name', product_name),
+                    spec=record.get('spec', ''),
+                    brand=record.get('brand', ''),
+                    price=record['price'],
+                    unit='元/吨',
+                    price_type=record.get('price_type', '市场价'),
+                    region=record.get('region', ''),
+                    supplier=record.get('supplier', ''),
+                    source=SOURCE_KEY,
+                    publish_date=publish_date,
+                )
+                session.add(dq)
+                saved += 1
+
+            # 同步写入 price_records（按日期取平均价作为基准）
+            existing_pr = session.query(PriceRecord).filter(
+                PriceRecord.product_id == product_id,
+                PriceRecord.record_date == publish_date,
+                PriceRecord.source == SOURCE_KEY
+            ).first()
+
+            if not existing_pr:
+                pr = PriceRecord(
+                    product_id=product_id,
+                    price=record['price'],
+                    unit='元/吨',
+                    price_type=record.get('price_type', '市场价'),
+                    trend='平',
+                    change_percent=0.0,
+                    source=SOURCE_KEY,
+                    region=record.get('region', ''),
+                    brand=record.get('brand', ''),
+                    specification=record.get('spec', ''),
+                    record_date=publish_date,
+                )
+                session.add(pr)
+
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        print(f"    保存 plist 失败: {e}")
+    finally:
+        session.close()
+
+    return saved
+
+
+# ---------------------------------------------------------------------------
+# 获取或创建产品
+# ---------------------------------------------------------------------------
+def get_or_create_product(product_name: str, industry: str, source_url: str, plist_url: str = None) -> Optional[int]:
+    """返回 product_id，不返回 detached 对象"""
+    session = get_session()
+    try:
+        product = session.query(Product).filter(
+            Product.product_name == product_name,
+            Product.source == SOURCE_KEY
+        ).first()
+
+        pid = None
+        if not product:
+            product = Product(
+                product_name=product_name,
+                industry=industry,
+                source=SOURCE_KEY,
+                source_url=source_url,
+                plist_url=plist_url,
+                unit='元/吨',
+                is_active=True,
+            )
+            session.add(product)
+            session.commit()
+            pid = product.id
+        else:
+            if source_url:
+                product.source_url = source_url
+            if plist_url:
+                product.plist_url = plist_url
+            session.commit()
+            pid = product.id
+
+        return pid
+    except Exception as e:
+        session.rollback()
+        return None
+    finally:
+        session.close()
+
+
+# ---------------------------------------------------------------------------
+# Playwright 浏览器配置
+# ---------------------------------------------------------------------------
+def make_browser_context():
+    """创建反反爬浏览器上下文"""
+    return {
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+        'viewport': {'width': 1920, 'height': 1080},
+        'java_script_enabled': True,
+    }
+
+
+# ---------------------------------------------------------------------------
+# 爬取基准价（detail 页）
+# ---------------------------------------------------------------------------
+def scrape_benchmark_page(url: str, product_name: str, industry: str) -> List[Dict]:
+    """使用 Playwright 抓取 detail 页"""
+    results = []
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            context = browser.new_context(**make_browser_context())
+            page = context.new_page()
+            try:
+                page.goto(url, timeout=30000, wait_until='networkidle')
+                page.wait_for_timeout(1500)
+                results = parse_detail_page(page, product_name, industry)
+            finally:
+                browser.close()
+    except Exception as e:
+        print(f"    Playwright 失败: {e}")
+    return results
+
+
+# ---------------------------------------------------------------------------
+# 爬取详细报价（plist 页 + 多页）
+# ---------------------------------------------------------------------------
+def scrape_plist_pages(base_url: str, product_name: str, industry: str, max_pages: int = 10) -> List[Dict]:
+    """使用 Playwright 抓取 plist 页（多页历史）"""
+    all_rows = []
+
+    page_urls = [base_url]
+    match = re.search(r'(plist-\d+-\d+-)(\d+)(\.html)', base_url)
+    if match:
+        for page_num in range(2, max_pages + 1):
+            page_urls.append(re.sub(
+                r'(plist-\d+-\d+-)(\d+)(\.html)',
+                lambda m: f"{m.group(1)}{page_num}{m.group(3)}",
+                base_url
+            ))
+
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            context = browser.new_context(**make_browser_context())
+            page = context.new_page()
+
+            for page_url in page_urls:
+                try:
+                    page.goto(page_url, timeout=30000, wait_until='networkidle')
+                    page.wait_for_timeout(1000)
+                    rows = parse_plist_page(page, industry)
+                    all_rows.extend(rows)
+                    print(f"      第 {page_urls.index(page_url) + 1} 页: {len(rows)} 条")
+                except Exception as e:
+                    print(f"      页面 {page_url} 失败: {e}")
+                    continue
+
+            browser.close()
+    except Exception as e:
+        print(f"    Playwright plist 失败: {e}")
+
+    return all_rows
+
+
+# ---------------------------------------------------------------------------
+# 主爬虫类
+# ---------------------------------------------------------------------------
+class FastBackfillScraper:
+    """快速历史回填爬虫 - Playwright 驱动"""
+
+    def __init__(self, headless: bool = True):
+        self.headless = headless
+
+    def run_detail(self, urls_file: str, dry_run: bool = False) -> tuple:
+        """回填基准价（detail 页）"""
+        import json
+        try:
+            with open(urls_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        except Exception as e:
+            print(f"读取 URLs 文件失败: {e}")
+            return 0, 0
+
+        categories = data.get('categories', [])
+        if not categories:
+            print("未找到 categories")
+            return 0, 0
+
         print(f"\n{'='*60}")
-        print(f"快速历史数据回填（asyncio 并发）")
+        print(f"基准价模式回填（rawmex/detail 页面）")
         print(f"{'='*60}")
-        print(f"产品数: {len(products)}")
-        print(f"回填天数: {days}（翻 {max_pages} 页）")
-        print(f"并发数: {self.max_concurrency}")
-        print(f"模式: {'模拟运行' if dry_run else '实际回填'}")
-        print(f"{'='*60}\n")
+        print(f"产品数: {len(categories)}")
 
-        self.semaphore = asyncio.Semaphore(self.max_concurrency)
-        self.session = aiohttp.ClientSession(headers=HEADERS)
-
-        total_saved = 0
-        total_failed = 0
-        done = 0
-
+        total_saved, total_failed, done = 0, 0, 0
         start_time = time.time()
 
-        for product in products:
+        for cat in categories:
             done += 1
-            elapsed = time.time() - start_time
-            speed = done / elapsed if elapsed > 0 else 0
-            eta = (len(products) - done) / speed if speed > 0 else 0
+            name = cat['name']
+            industry = cat.get('category', '化工')
+            url = cat['url']
 
-            print(f"[{done}/{len(products)}] {product.product_name} ({product.industry}) ", end='', flush=True)
+            print(f"\n[{done}/{len(categories)}] {name} ({industry})")
+            print(f"  URL: {url}")
 
-            try:
-                items = await self.scrape_product_pages(product, max_pages=max_pages)
-
-                if not items:
-                    print("无数据")
-                    continue
-
-                if dry_run:
-                    print(f"模拟: 可保存 {len(items)} 条")
-                    total_saved += len(items)
-                else:
-                    saved = self.save_records(product.id, items)
-                    print(f"已保存 {saved} 条")
-                    total_saved += saved
-
-            except Exception as e:
-                print(f"失败: {e}")
+            # 获取或创建产品
+            product_id = get_or_create_product(name, industry, url, None)
+            if not product_id:
+                print(f"  -> 产品创建失败")
                 total_failed += 1
+                continue
 
-            # 小延迟避免对服务器压力太大
-            await asyncio.sleep(0.2)
+            # 抓取详情页
+            records = scrape_benchmark_page(url, name, industry)
 
-        await self.session.close()
+            if not records:
+                print(f"  -> 无数据")
+                continue
+
+            print(f"  -> 获取到 {len(records)} 条基准价")
+
+            if not dry_run:
+                saved = save_benchmark_records(product_id, records)
+                print(f"  -> 已保存 {saved} 条")
+                total_saved += saved
+
+            time.sleep(0.5)
 
         elapsed = time.time() - start_time
+        print(f"\n基准价模式完成: 耗时 {elapsed:.1f}s, 总记录 {total_saved} 条, 失败 {total_failed} 个")
+        return total_saved, total_failed
+
+    def run_mprice(self, urls_file: str, dry_run: bool = False, max_pages: int = 10) -> tuple:
+        """回填详细报价（mprice/plist 页）"""
+        import json
+        try:
+            with open(urls_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        except Exception as e:
+            print(f"读取 URLs 文件失败: {e}")
+            return 0, 0
+
+        categories = data.get('categories', [])
+        if not categories:
+            print("未找到 categories")
+            return 0, 0
+
         print(f"\n{'='*60}")
-        print(f"回填完成")
+        print(f"详细报价模式回填（mprice/plist 页面）")
         print(f"{'='*60}")
-        print(f"耗时: {elapsed:.1f}s")
-        print(f"总记录: {total_saved} 条")
-        print(f"失败产品: {total_failed} 个")
-        print(f"平均速度: {total_saved / elapsed:.1f} 条/秒")
+        print(f"产品数: {len(categories)}, 每产品翻 {max_pages} 页")
+
+        total_saved, total_failed, done = 0, 0, 0
+        start_time = time.time()
+
+        for cat in categories:
+            done += 1
+            name = cat['name']
+            industry = cat.get('category', '化工')
+            url = cat['url']
+
+            print(f"\n[{done}/{len(categories)}] {name} ({industry})")
+            print(f"  URL: {url}")
+
+            # 获取或创建产品
+            product_id = get_or_create_product(name, industry, url, url)
+            if not product_id:
+                print(f"  -> 产品创建失败")
+                total_failed += 1
+                continue
+
+            # 抓取多页历史数据
+            all_rows = scrape_plist_pages(url, name, industry, max_pages)
+
+            if not all_rows:
+                print(f"  -> 无数据")
+                continue
+
+            print(f"  -> 共获取 {len(all_rows)} 条报价")
+
+            if not dry_run:
+                saved = save_plist_records(product_id, name, all_rows)
+                print(f"  -> 已保存 {saved} 条")
+                total_saved += saved
+
+            time.sleep(0.5)
+
+        elapsed = time.time() - start_time
+        print(f"\n详细报价模式完成: 耗时 {elapsed:.1f}s, 总记录 {total_saved} 条, 失败 {total_failed} 个")
+        return total_saved, total_failed
+
+    def run(self, mode: str = 'both', urls_file_detail: str = 'category_urls.json',
+            urls_file_mprice: str = 'category_urls_mprice.json',
+            dry_run: bool = False, max_pages: int = 10):
+        """主入口"""
+        print(f"\n{'='*60}")
+        print(f"生意社历史数据快速回填")
+        print(f"{'='*60}")
+        print(f"模式: {mode}")
+        print(f"详细报价文件: {urls_file_mprice}")
+        print(f"基准价文件: {urls_file_detail}")
+        print(f"模式: {'模拟运行' if dry_run else '实际回填'}")
+        print(f"{'='*60}")
+
+        total_saved, total_failed = 0, 0
+
+        if mode in ('detail', 'both'):
+            saved, failed = self.run_detail(urls_file_detail, dry_run)
+            total_saved += saved
+            total_failed += failed
+
+        if mode in ('mprice', 'both'):
+            saved, failed = self.run_mprice(urls_file_mprice, dry_run, max_pages)
+            total_saved += saved
+            total_failed += failed
+
+        print(f"\n{'='*60}")
+        print(f"全部完成!")
+        print(f"总记录: {total_saved} 条, 失败: {total_failed} 个")
+        print(f"{'='*60}")
 
 
-async def main():
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+def main():
     parser = argparse.ArgumentParser(description="生意社历史数据快速回填")
-    parser.add_argument('--days', type=int, default=90, help='回填天数')
-    parser.add_argument('--product-ids', type=int, nargs='+', help='指定产品ID')
+    parser.add_argument('--mode', type=str, choices=['detail', 'mprice', 'both'],
+                        default='both', help='回填模式')
+    parser.add_argument('--urls-file-detail', type=str, default='category_urls.json',
+                        help='基准价 URLs 文件（rawmex/detail）')
+    parser.add_argument('--urls-file-mprice', type=str, default='category_urls_mprice.json',
+                        help='详细报价 URLs 文件（mprice/plist）')
     parser.add_argument('--dry-run', action='store_true', help='仅模拟不写入')
-    parser.add_argument('--concurrency', type=int, default=20, help='并发数')
-    parser.add_argument('--industry', type=str, choices=['化工', '农副', '能源'], help='只回填指定行业')
+    parser.add_argument('--max-pages', type=int, default=10, help='每产品最大翻页数')
     args = parser.parse_args()
 
-    scraper = FastBackfillScraper(max_concurrency=args.concurrency)
-
-    await scraper.run(
-        product_ids=args.product_ids,
-        days=args.days,
-        dry_run=args.dry_run
+    scraper = FastBackfillScraper()
+    scraper.run(
+        mode=args.mode,
+        urls_file_detail=args.urls_file_detail,
+        urls_file_mprice=args.urls_file_mprice,
+        dry_run=args.dry_run,
+        max_pages=args.max_pages
     )
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
