@@ -59,6 +59,58 @@ def parse_date(date_str: str) -> Optional[date]:
     return None
 
 
+def parse_benchmark_history_from_chart(page) -> List[Dict]:
+    """从图表 iframe 页面提取历史基准价数据"""
+    try:
+        chart_option = page.evaluate("""
+            () => {
+                // Method 1: Try window.myChart (most common)
+                if (window.myChart && typeof window.myChart.getOption === 'function') {
+                    return window.myChart.getOption();
+                }
+                // Method 2: Try container.__echarts__
+                const container = document.querySelector('#container');
+                if (container && container.__echarts__) {
+                    return container.__echarts__.getOption();
+                }
+                // Method 3: Search for any ECharts instance
+                for (let key in window) {
+                    const val = window[key];
+                    if (val && typeof val.getOption === 'function' && key.includes('Chart')) {
+                        return val.getOption();
+                    }
+                }
+                return null;
+            }
+        """)
+
+        if not chart_option:
+            return []
+
+        x_axis_data = chart_option.get('xAxis', [{}])[0].get('data', [])
+        series_data = chart_option.get('series', [{}])[0].get('data', [])
+
+        if not x_axis_data or not series_data:
+            return []
+
+        results = []
+        for date_str, price in zip(x_axis_data, series_data):
+            if date_str and price is not None:
+                try:
+                    parsed_date = datetime.strptime(str(date_str), '%Y-%m-%d').date()
+                    results.append({
+                        'date': parsed_date,
+                        'price': float(price),
+                    })
+                except (ValueError, TypeError):
+                    continue
+
+        return results
+    except Exception as e:
+        print(f"    解析图表数据失败: {e}")
+        return []
+
+
 # ---------------------------------------------------------------------------
 # 解析 detail 页（基准价）
 # ---------------------------------------------------------------------------
@@ -386,7 +438,7 @@ def make_browser_context():
 # 爬取基准价（detail 页）
 # ---------------------------------------------------------------------------
 def scrape_benchmark_page(url: str, product_name: str, industry: str) -> List[Dict]:
-    """使用 Playwright 抓取 detail 页"""
+    """使用 Playwright 抓取 detail 页及历史图表数据"""
     results = []
     try:
         with sync_playwright() as p:
@@ -397,11 +449,44 @@ def scrape_benchmark_page(url: str, product_name: str, industry: str) -> List[Di
                 page.goto(url, timeout=30000, wait_until='networkidle')
                 page.wait_for_timeout(1500)
                 results = parse_detail_page(page, product_name, industry)
+
+                # 从图表 iframe 获取历史基准价数据
+                chart_url = build_chart_iframe_url(url)
+                if chart_url:
+                    chart_page = context.new_page()
+                    try:
+                        chart_page.goto(chart_url, timeout=30000, wait_until='networkidle')
+                        chart_page.wait_for_timeout(2000)  # 等待 ECharts 渲染
+                        history_records = parse_benchmark_history_from_chart(chart_page)
+                        if history_records:
+                            print(f"      历史图表数据: {len(history_records)} 条")
+                            # 为历史记录补充产品信息
+                            for record in history_records:
+                                record['product_name'] = product_name
+                                record['industry'] = industry
+                                record['price_str'] = f"{record['price']}元/吨"
+                                record['price_type'] = '基准价'
+                            results.extend(history_records)
+                    except Exception as e:
+                        print(f"      图表页面加载失败: {e}")
+                    finally:
+                        chart_page.close()
             finally:
                 browser.close()
     except Exception as e:
         print(f"    Playwright 失败: {e}")
     return results
+
+
+def build_chart_iframe_url(detail_url: str) -> str:
+    """从 detail 页 URL 构建图表 iframe URL"""
+    # detail URL 格式: https://www.100ppi.com/rawmex/detail-{ppid}.html
+    # chart URL 格式: https://www.100ppi.com/graph/cindex.php?f=graph_ppid_ave&ppid={ppid}
+    match = re.search(r'detail-(\d+)\.html', detail_url)
+    if match:
+        ppid = match.group(1)
+        return f"https://www.100ppi.com/graph/cindex.php?f=graph_ppid_ave&ppid={ppid}"
+    return None
 
 
 # ---------------------------------------------------------------------------

@@ -572,68 +572,83 @@ async def get_dashboard_ranking(
         } for i in falling]
         return {"rising": rising, "falling": falling}
 
-    # 原有的日变化计算逻辑
-    start_date = (date.today() - timedelta(days=days)).isoformat()
+    # 从 BenchmarkPrice 计算日变化涨跌幅
+    today_date = date.today()
+    yesterday_date = today_date - timedelta(days=1)
+    start_date = (today_date - timedelta(days=days)).isoformat()
 
-    # 获取每个产品的最新价格和变化率
-    subquery = db.query(
-        PriceRecord.product_id,
-        func.max(PriceRecord.record_date).label('max_date')
-    ).group_by(PriceRecord.product_id).subquery()
+    # 获取每个产品的最新基准价
+    latest_subquery = db.query(
+        BenchmarkPrice.product_id,
+        func.max(BenchmarkPrice.record_date).label('max_date')
+    ).group_by(BenchmarkPrice.product_id).subquery()
 
-    query = db.query(
-        PriceRecord.product_id,
-        PriceRecord.price,
-        PriceRecord.change_percent,
-        PriceRecord.record_date
+    latest_prices_query = db.query(
+        BenchmarkPrice.product_id,
+        BenchmarkPrice.price,
+        BenchmarkPrice.record_date
     ).join(
-        subquery,
-        (PriceRecord.product_id == subquery.c.product_id) &
-        (PriceRecord.record_date == subquery.c.max_date)
+        latest_subquery,
+        (BenchmarkPrice.product_id == latest_subquery.c.product_id) &
+        (BenchmarkPrice.record_date == latest_subquery.c.max_date)
     )
 
     if source and source != '__all__':
-        query = query.filter(PriceRecord.source == source)
+        latest_prices_query = latest_prices_query.filter(BenchmarkPrice.source == source)
 
     if industry:
         product_ids_query = db.query(Product.id).filter(Product.industry == industry)
-        query = query.filter(PriceRecord.product_id.in_(product_ids_query))
+        latest_prices_query = latest_prices_query.filter(BenchmarkPrice.product_id.in_(product_ids_query))
 
-    # Filter by category
     if category_id:
         subcat_ids = [c.id for c in db.query(Category).filter(Category.parent_id == category_id).all()]
         pc_query = db.query(ProductCategory.product_id).filter(ProductCategory.category_id.in_(subcat_ids + [category_id]))
-        query = query.filter(PriceRecord.product_id.in_(pc_query))
+        latest_prices_query = latest_prices_query.filter(BenchmarkPrice.product_id.in_(pc_query))
 
     if subcategory_id:
-        # Get product IDs via explicit join query
         matched_products = db.query(Product.id).join(
             ProductCategory, Product.id == ProductCategory.product_id
         ).filter(ProductCategory.category_id.in_(subcategory_id)).distinct().all()
         pc_ids = [p[0] for p in matched_products]
         if pc_ids:
-            query = query.filter(PriceRecord.product_id.in_(pc_ids))
+            latest_prices_query = latest_prices_query.filter(BenchmarkPrice.product_id.in_(pc_ids))
 
-    latest_prices = query.all()
+    latest_prices = latest_prices_query.all()
 
     product_ids = [lp.product_id for lp in latest_prices]
     products = {p.id: p.product_name for p in db.query(Product).filter(Product.id.in_(product_ids)).all()}
 
+    # 获取昨日基准价用于计算涨跌幅
+    yesterday_prices_query = db.query(
+        BenchmarkPrice.product_id,
+        BenchmarkPrice.price
+    ).filter(BenchmarkPrice.record_date == yesterday_date)
+
+    yesterday_prices = {bp.product_id: bp.price for bp in yesterday_prices_query.all()}
+
     ranking = []
     for lp in latest_prices:
-        # 计算该产品历史平均价格
-        hist_query = db.query(func.avg(PriceRecord.price)).filter(
-            PriceRecord.product_id == lp.product_id,
-            PriceRecord.record_date >= start_date
+        # 计算历史平均价格
+        hist_query = db.query(func.avg(BenchmarkPrice.price)).filter(
+            BenchmarkPrice.product_id == lp.product_id,
+            BenchmarkPrice.record_date >= start_date
         )
         if source and source != '__all__':
-            hist_query = hist_query.filter(PriceRecord.source == source)
+            hist_query = hist_query.filter(BenchmarkPrice.source == source)
         hist = hist_query.scalar() or 0
+
+        # 计算涨跌幅：从基准价计算
+        yesterday_price = yesterday_prices.get(lp.product_id)
+        if yesterday_price and yesterday_price != 0:
+            change_percent = round((lp.price - yesterday_price) / yesterday_price * 100, 2)
+        else:
+            change_percent = 0.0
+
         ranking.append({
             "product_id": lp.product_id,
             "product_name": products.get(lp.product_id, "未知"),
             "latest_price": lp.price,
-            "change_percent": lp.change_percent or 0,
+            "change_percent": change_percent,
             "avg_price": round(hist, 2)
         })
 
