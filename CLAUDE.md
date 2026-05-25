@@ -19,9 +19,11 @@ backend/
 ├── scrapers/            # 爬虫模块
 │   ├── base.py          # 爬虫基类
 │   ├── registry.py      # 爬虫注册中心
-│   └── shengyishe.py    # 生意社爬虫
+│   ├── shengyishe.py    # 生意社爬虫（增量更新）
+│   └── backfill_fast.py # 历史数据快速回填脚本（Playwright 版）
 ├── scripts/            # 工具脚本
-│   └── seed_categories.py  # 品类初始化与匹配
+│   ├── init_products.py     # 从 category_urls.json 导入产品数据
+│   └── seed_categories.py   # 品类初始化与匹配
 ├── api/routes/          # API 路由
 │   ├── products.py      # 产品 API
 │   ├── prices.py        # 价格 API (含 Dashboard API)
@@ -78,10 +80,69 @@ npm install
 npm run dev
 ```
 
-### 当日数据更新
+### 数据更新流程
+
+系统支持两种方式触发爬虫更新数据：
+
+#### 方式一：API 触发（推荐，后端服务需先启动）
 ```bash
-python -m backend.scrapers.shengyishe
+# 检查数据新鲜度（查看哪些数据源需要更新）
+curl http://localhost:8000/api/v1/check-freshness
+
+# 触发爬虫更新数据
+curl -X POST http://localhost:8000/api/v1/scrapers/shengyishe/run
 ```
+
+#### 方式二：直接运行爬虫脚本（无需启动后端）
+```bash
+# 激活虚拟环境
+venv\Scripts\activate
+
+# 运行爬虫（增量更新最新一天数据）
+python -m backend.scrapers.shengyishe
+
+# 试运行（不写入数据库，仅显示将要抓取的内容）
+python -m backend.scrapers.shengyishe --dry-run
+```
+
+**前提条件**：
+- 数据库必须已初始化：`python -m backend.models.database`
+- 产品数据必须已导入数据库（运行过一次 `python -m backend.scripts.init_products`）
+- 爬虫依赖数据库中的 `products.source_url` 和 `products.plist_url` 字段定位页面
+
+**防重复机制**：两次爬取间隔需大于 30 分钟
+
+## 历史数据回填
+
+快速回填脚本（Playwright 版，绕过 Cloudflare）：
+
+```bash
+# 激活虚拟环境
+venv\Scripts\activate
+
+# 回填基准价（rawmex/detail-*.html 页面）
+python -m backend.scrapers.backfill_fast --mode detail --urls-file category_urls.json
+
+# 回填详细报价（mprice/plist-*.html 页面，翻10页历史）
+python -m backend.scrapers.backfill_fast --mode mprice --urls-file category_urls_mprice.json --max-pages 10
+
+# 两者都跑
+python -m backend.scrapers.backfill_fast --mode both
+
+# 模拟运行（不写入数据库）
+python -m backend.scrapers.backfill_fast --mode both --dry-run
+```
+
+**参数说明**：
+- `--mode`: `detail` | `mprice` | `both`
+- `--urls-file-detail`: 基准价 URLs 文件（默认 `category_urls.json`）
+- `--urls-file-mprice`: 详细报价 URLs 文件（默认 `category_urls_mprice.json`）
+- `--max-pages`: 每产品最大翻页数（默认 10）
+- `--dry-run`: 模拟运行，不写入数据库
+
+**数据说明**：
+- `detail` 模式 → 写入 `benchmark_prices` 表（基准价，每天 1 条）
+- `mprice` 模式 → 写入 `detailed_quotes` 表（详细报价，每天多条）
 
 ## 依赖说明
 

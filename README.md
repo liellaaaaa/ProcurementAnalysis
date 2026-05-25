@@ -56,6 +56,42 @@ npm run dev
 - 后端 API: http://localhost:8000
 - API 文档: http://localhost:8000/docs
 
+### 数据更新
+
+#### 方式一：API 触发（推荐）
+```bash
+# 检查数据新鲜度
+curl http://localhost:8000/api/v1/check-freshness
+
+# 触发爬虫
+curl -X POST http://localhost:8000/api/v1/scrapers/shengyishe/run
+```
+
+#### 方式二：直接运行爬虫
+```bash
+python -m backend.scrapers.shengyishe
+```
+
+**前提**：首次使用需先运行 `python -m backend.scripts.init_products` 导入产品数据
+
+## 历史数据回填
+
+```bash
+# 回填基准价（rawmex/detail-*.html）
+python -m backend.scrapers.backfill_fast --mode detail --urls-file category_urls.json
+
+# 回填详细报价（mprice/plist-*.html，翻10页历史）
+python -m backend.scrapers.backfill_fast --mode mprice --urls-file category_urls_mprice.json --max-pages 10
+
+# 两者都跑
+python -m backend.scrapers.backfill_fast --mode both
+
+# 模拟运行（不写入）
+python -m backend.scrapers.backfill_fast --mode both --dry-run
+```
+
+参数：`--mode` (detail/mprice/both)、`--max-pages`、`--dry-run`
+
 ## 项目结构
 
 ```
@@ -66,7 +102,8 @@ ProcurementAnalysis/
 │   ├── scrapers/            # 爬虫模块
 │   │   ├── base.py          # 爬虫基类
 │   │   ├── registry.py      # 爬虫注册中心
-│   │   └── shengyishe.py    # 生意社爬虫
+│   │   ├── shengyishe.py    # 生意社爬虫（增量更新）
+│   │   └── backfill_fast.py # 历史数据快速回填脚本（Playwright 版）
 │   ├── scripts/             # 工具脚本
 │   │   └── seed_categories.py  # 品类初始化与匹配
 │   ├── api/routes/          # API 路由
