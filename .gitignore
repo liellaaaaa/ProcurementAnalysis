@@ -39,8 +39,8 @@ frontend/node_modules/
 Thumbs.db
 .DS_Store
 
-# Database
-data/database/*.db
+# Database (now private repo, track db files)
+# data/database/*.db
 
 # Environment files
 .env
