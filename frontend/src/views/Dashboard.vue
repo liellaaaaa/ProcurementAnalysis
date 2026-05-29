@@ -181,6 +181,9 @@
       </el-card>
 
       <div class="ranking-row" v-if="rankingData.rising.length || rankingData.falling.length">
+        <!-- DEBUG: {{ rankingData.rising.length }} {{ rankingData.falling.length }} -->
+        <!-- DEBUG rising: {{ rankingData.rising.map(x=>x.change_percent).join(',') }} -->
+        <!-- DEBUG falling: {{ rankingData.falling.map(x=>x.change_percent).join(',') }} -->
         <el-card class="ranking-card animate-in" style="animation-delay: 0.2s">
           <template #header>
             <div class="card-header">
@@ -196,9 +199,9 @@
           <div class="ranking-list">
             <div v-for="(item, index) in rankingData.rising" :key="index" class="ranking-item rising">
               <span class="rank-num">{{ index + 1 }}</span>
-              <span class="rank-name">{{ item.product_name }}</span>
-              <span class="rank-price">¥{{ item.latest_price?.toLocaleString() }}</span>
-              <span class="rank-change rise">+{{ item.change_percent }}%</span>
+              <span class="rank-name">{{ item.product_name || '空' }}</span>
+              <span class="rank-price">¥{{ item.latest_price?.toLocaleString() || '-' }}</span>
+              <span class="rank-change rise">+{{ item.change_percent ?? '-' }}%</span>
             </div>
           </div>
         </el-card>
@@ -216,7 +219,8 @@
             </div>
           </template>
           <div class="ranking-list">
-            <div v-for="(item, index) in rankingData.falling" :key="index" class="ranking-item falling">
+            <!-- FALLING LIST START: {{ rankingData.falling.length }} items -->
+          <div v-for="(item, index) in rankingData.falling" :key="index" class="ranking-item falling">
               <span class="rank-num">{{ index + 1 }}</span>
               <span class="rank-name">{{ item.product_name }}</span>
               <span class="rank-price">¥{{ item.latest_price?.toLocaleString() }}</span>
@@ -911,8 +915,13 @@ async function loadLineChartData() {
 }
 
 async function loadRankingData() {
-  if (!barChart) return
+  console.log('[Ranking] loadRankingData called, barChart:', !!barChart)
+  if (!barChart) {
+    console.log('[Ranking] barChart not initialized, skipping')
+    return
+  }
   try {
+    console.log('[Ranking] Fetching ranking data...')
     let days = compareDays.value
     if (filter1DateRange.value && filter1DateRange.value.length === 2) {
       const start = new Date(filter1DateRange.value[0])
@@ -928,25 +937,34 @@ async function loadRankingData() {
       source: filter1Source.value || null,
       industry: filter1Industry.value || null
     }
+    console.log('[Ranking] Params:', params)
     const res = await priceApi.getDashboardRanking(params)
+    console.log('[Ranking] Response data:', JSON.stringify(res.data))
     const rising = res.data.rising || []
     const falling = res.data.falling || []
+    console.log('[Ranking] Rising:', rising.map(x => `${x.product_name}:${x.change_percent}`))
+    console.log('[Ranking] Falling:', falling.map(x => `${x.product_name}:${x.change_percent}`))
+    console.log('[Ranking] Rising:', rising.length, 'Falling:', falling.length)
     rankingData.value = { rising, falling }
+    // 合并涨跌数据：涨幅取前5，跌幅取前5（按绝对值排序）
+    const topRising = rising.filter(r => r.change_percent > 0).slice(0, 5)
+    const topFalling = falling.filter(f => f.change_percent < 0).slice(0, 5)
+    const combined = [...topRising, ...topFalling]
+    const categories = combined.map(r => r.product_name.substring(0, 8))
+    const values = combined.map(r => r.change_percent)
     barChartRawData.value = {
-      categories: rising.map(r => r.product_name),
-      values: rising.map(r => r.change_percent),
-      fullData: rising
+      categories,
+      values,
+      fullData: combined
     }
-    if (rising.length > 0) {
-      const categories = rising.map(r => r.product_name.substring(0, 8))
-      const values = rising.map(r => r.change_percent)
+    if (combined.length > 0) {
       barChart.setOption({
         yAxis: { data: categories },
         series: [{ data: values }]
       })
     }
   } catch (e) {
-    console.error('Failed to load ranking data', e)
+    console.error('[Ranking] Failed to load ranking data', e)
   }
 }
 
@@ -1639,12 +1657,18 @@ onUnmounted(() => {
 
 .ranking-card {
   border-radius: 16px !important;
+  border: 1px solid #E8E3F3;
 }
 
 .ranking-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-height: 50px;
+}
+
+:deep(.el-card__body) {
+  padding: 16px;
 }
 
 .header-title.rising {
@@ -1662,6 +1686,7 @@ onUnmounted(() => {
   padding: 10px 12px;
   background: var(--bg-primary);
   border-radius: 8px;
+  border: 1px dashed #ccc;
   transition: transform 0.2s ease;
 }
 

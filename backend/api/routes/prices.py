@@ -617,11 +617,15 @@ async def get_dashboard_ranking(
     product_ids = [lp.product_id for lp in latest_prices]
     products = {p.id: p.product_name for p in db.query(Product).filter(Product.id.in_(product_ids)).all()}
 
-    # 获取昨日基准价用于计算涨跌幅
+    # 获取昨日基准价用于计算涨跌幅（注意：最新数据日期可能不是今天，需要用实际最新日期的前一天）
+    latest_dates = {lp.product_id: lp.record_date for lp in latest_prices}
+    actual_latest_date = max(latest_dates.values()) if latest_dates else today_date
+    actual_yesterday_date = actual_latest_date - timedelta(days=1)
+
     yesterday_prices_query = db.query(
         BenchmarkPrice.product_id,
         BenchmarkPrice.price
-    ).filter(BenchmarkPrice.record_date == yesterday_date)
+    ).filter(BenchmarkPrice.record_date == actual_yesterday_date)
 
     yesterday_prices = {bp.product_id: bp.price for bp in yesterday_prices_query.all()}
 
