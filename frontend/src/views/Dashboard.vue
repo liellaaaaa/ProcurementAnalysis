@@ -16,12 +16,7 @@
             <div class="controls">
               <SourceSelector v-model="filter1Source" />
               <IndustrySelector v-model="filter1Industry" />
-              <CategorySelector
-                v-model="filter1CategoryId"
-                v-model:subcategoryValue="filter1SubcategoryId"
-                :industry="filter1Industry"
-                @change="handleFilter1Change"
-              />
+
               <el-date-picker
                 v-model="filter1DateRange"
                 type="daterange"
@@ -30,7 +25,7 @@
                 end-placeholder="结束"
                 size="small"
                 style="width: 180px"
-                @change="handleFilter1Change"
+                
               />
               <el-select v-model="compareDays" placeholder="时间范围" size="small" style="width: 72px" @change="loadFilter1Charts">
                 <el-option label="7天" :value="7" />
@@ -113,12 +108,7 @@
             <div class="controls">
               <SourceSelector v-model="filter2Source" />
               <IndustrySelector v-model="filter2Industry" />
-              <CategorySelector
-                v-model="filter2CategoryId"
-                v-model:subcategoryValue="filter2SubcategoryId"
-                :industry="filter2Industry"
-                @change="handleFilter2Change"
-              />
+
               <el-date-picker
                 v-model="filter2DateRange"
                 type="daterange"
@@ -127,7 +117,7 @@
                 end-placeholder="结束"
                 size="small"
                 style="width: 180px"
-                @change="handleFilter2Change"
+                
               />
             </div>
           </div>
@@ -200,12 +190,7 @@
             <div class="controls">
               <SourceSelector v-model="filter3Source" />
               <IndustrySelector v-model="filter3Industry" />
-              <CategorySelector
-                v-model="filter3CategoryId"
-                v-model:subcategoryValue="filter3SubcategoryId"
-                :industry="filter3Industry"
-                @change="handleFilter3Change"
-              />
+
               <el-input
                 v-model="searchKeyword"
                 placeholder="搜索产品/数据源"
@@ -349,7 +334,7 @@
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { priceApi } from '../api/price.js'
 import * as echarts from 'echarts'
-import CategorySelector from '../components/CategorySelector.vue'
+
 import SourceSelector from '../components/SourceSelector.vue'
 import IndustrySelector from '../components/IndustrySelector.vue'
 
@@ -372,36 +357,28 @@ const latestPrices = ref([])
 const expandedRows = ref([])
 const rankingData = ref({ rising: [], falling: [] })
 
-const filter1CategoryId = ref(null)
-const filter1SubcategoryId = ref(null)
+
 const filter1DateRange = ref([])
 const filter1Source = ref(null)
 const filter1Industry = ref(null)
 
 watch(filter1Source, () => { loadFilter1Charts() })
 watch(filter1Industry, () => { loadFilter1Charts() })
-watch(filter1CategoryId, () => { loadFilter1Charts() })
-watch(filter1SubcategoryId, () => { loadFilter1Charts() })
 
-const filter2CategoryId = ref(null)
-const filter2SubcategoryId = ref(null)
+
 const filter2DateRange = ref([])
 const filter2Source = ref(null)
 const filter2Industry = ref(null)
 
 watch(filter2Source, () => { loadFilter2Charts() })
 watch(filter2Industry, () => { loadFilter2Charts() })
-watch(filter2CategoryId, () => { loadFilter2Charts() })
-watch(filter2SubcategoryId, () => { loadFilter2Charts() })
 
-const filter3CategoryId = ref(null)
-const filter3SubcategoryId = ref(null)
+
 const filter3Source = ref(null)
 const filter3Industry = ref(null)
 const searchKeyword = ref('')
 
-watch(filter3Source, () => { handleFilter3Change() })
-watch(filter3Industry, () => { handleFilter3Change() })
+
 
 const pagination = ref({ page: 1, pageSize: 10, total: 0 })
 const historyPagination = ref({ page: 1, pageSize: 10 })
@@ -503,8 +480,8 @@ let searchTimer = null
 async function loadLatestPrices() {
   try {
     const params = {
-      category_id: filter3CategoryId.value || null,
-      subcategory_id: filter3SubcategoryId.value || null,
+      category_id: null,
+      subcategory_id: null,
       source: filter3Source.value || null,
       industry: filter3Industry.value || null
     }
@@ -647,18 +624,6 @@ function handleHistorySizeChange(size) {
   historyPagination.value.page = 1
 }
 
-function handleFilter1Change() {
-  loadFilter1Charts()
-}
-
-function handleFilter2Change() {
-  loadFilter2Charts()
-}
-
-function handleFilter3Change() {
-  pagination.value.page = 1
-  loadLatestPrices()
-}
 
 async function loadFilter1Charts() {
   await Promise.all([
@@ -677,9 +642,9 @@ async function loadFilter2Charts() {
 async function loadIndicatorCards() {
   try {
     const params = {
-      category_id: filter2CategoryId.value || null,
-      subcategory_id: filter2SubcategoryId.value || null,
       source: filter2Source.value || null,
+      category_id: null,
+      subcategory_id: null,
       industry: filter2Industry.value || null
     }
 
@@ -741,9 +706,9 @@ async function onMetricTypeChange(idx) {
     const card = indicatorCards.value[idx]
     const params = {
       period_type: card.metricType,
-      category_id: filter2CategoryId.value || null,
-      subcategory_id: filter2SubcategoryId.value || null,
       source: filter2Source.value || null,
+      category_id: null,
+      subcategory_id: null,
       industry: filter2Industry.value || null
     }
     const res = await priceApi.getDashboardIndicatorCards(params)
@@ -794,8 +759,7 @@ async function loadLineChartData() {
     // 使用基准价历史数据（与表格数据源一致）
     const res = await priceApi.getBenchmarkHistoryMulti({
       days,
-      category_id: filter1CategoryId.value || null,
-      subcategory_id: filter1SubcategoryId.value || null,
+      
       source: filter1Source.value || null,
       industry: filter1Industry.value || null
     })
@@ -890,8 +854,7 @@ async function loadRankingData() {
     const params = {
       limit: 10,
       days: days,
-      category_id: filter1CategoryId.value || null,
-      subcategory_id: filter1SubcategoryId.value || null,
+      
       source: filter1Source.value || null,
       industry: filter1Industry.value || null
     }
@@ -937,9 +900,9 @@ async function loadDistributionData() {
   try {
     const params = {
       days: 30,
-      category_id: filter2CategoryId.value || null,
-      subcategory_id: filter2SubcategoryId.value || null,
       source: filter2Source.value || null,
+      category_id: null,
+      subcategory_id: null,
       industry: filter2Industry.value || null
     }
     const res = await priceApi.getDashboardDistribution(params)
