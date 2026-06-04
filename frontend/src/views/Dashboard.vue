@@ -952,10 +952,16 @@ async function loadRankingData() {
     console.log('[Ranking] Falling:', falling.map(x => `${x.product_name}:${x.change_percent}`))
     console.log('[Ranking] Rising:', rising.length, 'Falling:', falling.length)
     rankingData.value = { rising, falling }
-    // 合并涨跌数据：涨幅取前5，跌幅取前5（按绝对值排序）
-    const topRising = rising.filter(r => r.change_percent > 0).slice(0, 5)
-    const topFalling = falling.filter(f => f.change_percent < 0).slice(0, 5)
-    const combined = [...topRising, ...topFalling]
+    // 合并涨跌数据：涨幅取前5，跌幅取前5，0%产品保留在对应位置（后端已返回全部产品）
+    const topRising = rising.slice(0, 5)
+    const topFalling = falling.slice(0, 5)
+    // 去重（0%产品可能在两个列表中都出现）
+    const seen = new Set()
+    const combined = [...topRising, ...topFalling].filter(x => {
+      if (seen.has(x.product_id)) return false
+      seen.add(x.product_id)
+      return true
+    })
     const categories = combined.map(r => r.product_name.substring(0, 8))
     const values = combined.map(r => r.change_percent)
     barChartRawData.value = {
@@ -1148,7 +1154,7 @@ function initBarChart() {
     yAxis: { type: 'category', data: [], axisLine: { lineStyle: { color: '#E8E3F3' } }, axisLabel: { color: '#64748B', fontSize: 10 } },
     series: [{
       type: 'bar',
-      itemStyle: { color: (params) => params.value >= 0 ? '#E63946' : '#2A9D5C', borderRadius: [0, 4, 4, 0] },
+      itemStyle: { color: (params) => params.value > 0 ? '#E63946' : params.value < 0 ? '#2A9D5C' : '#909399', borderRadius: [0, 4, 4, 0] },
       barWidth: '60%'
     }]
   })

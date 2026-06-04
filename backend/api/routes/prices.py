@@ -756,7 +756,8 @@ async def get_dashboard_ranking(
         if yesterday_price and yesterday_price != 0:
             change_percent = round((lp.price - yesterday_price) / yesterday_price * 100, 2)
         else:
-            change_percent = 0.0
+            # 没有昨日数据时跳过该产品，不设置虚假的0%涨跌幅
+            continue
 
         ranking.append({
             "product_id": lp.product_id,
@@ -766,10 +767,10 @@ async def get_dashboard_ranking(
             "avg_price": round(hist, 2)
         })
 
-    # 按涨跌排序
-    ranking.sort(key=lambda x: x["change_percent"], reverse=True)
-    rising = ranking[:limit]
-    falling = ranking[-limit:][::-1]
+    # 按涨跌排序：返回所有产品，0% 产品排在 rising 末尾/ falling 开头
+    sorted_ranking = sorted(ranking, key=lambda x: x["change_percent"], reverse=True)
+    rising = sorted_ranking[:limit]
+    falling = sorted_ranking[-limit:][::-1] if len(sorted_ranking) > limit else sorted_ranking[::-1]
 
     return {"rising": rising, "falling": falling}
 
