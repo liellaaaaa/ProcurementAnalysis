@@ -34,6 +34,15 @@ export const priceApi = {
     if (source) params.source = source
     if (industry) params.industry = industry
     return api.get('/prices/dashboard/history/compare', { params })
+  },
+  getBenchmarkHistory(productId, days = 30, source) {
+    return api.get(`/prices/benchmark/history/${productId}`, {
+      params: source ? { days, source } : { days }
+    })
+  },
+  getBenchmarkHistoryMulti(params) {
+    // params: { productIds, days, categoryId, subcategoryId, source, industry }
+    return api.get('/prices/benchmark/history', { params })
   }
 }
 

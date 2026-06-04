@@ -371,6 +371,117 @@ async def get_price_history(
     )
     return response
 
+
+@router.get("/benchmark/history/{product_id}", response_model=List[dict])
+async def get_benchmark_history(
+    product_id: int,
+    days: int = Query(30, ge=1, le=365),
+    source: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """获取产品基准价历史趋势（从 benchmark_prices 读取）"""
+    start_date = (date.today() - timedelta(days=days)).isoformat()
+
+    query = db.query(BenchmarkPrice).filter(
+        BenchmarkPrice.product_id == product_id,
+        BenchmarkPrice.record_date >= start_date
+    )
+
+    if source and source != '__all__':
+        query = query.filter(BenchmarkPrice.source == source)
+
+    results = query.order_by(BenchmarkPrice.record_date.asc()).all()
+
+    return [
+        {
+            "product_id": r.product_id,
+            "product_name": r.product_name,
+            "price": r.price,
+            "unit": r.unit or "元/吨",
+            "record_date": r.record_date.strftime('%Y/%m/%d') if r.record_date else "",
+            "brand": r.brand or "",
+            "spec": r.spec or "",
+            "market": r.market or ""
+        }
+        for r in results
+    ]
+
+
+@router.get("/benchmark/history", response_model=dict)
+async def get_benchmark_history_multi(
+    product_ids: Optional[str] = Query(None, description="逗号分隔的产品ID"),
+    days: int = Query(30, ge=1, le=365),
+    category_id: Optional[int] = None,
+    subcategory_id: Optional[List[int]] = Query(None),
+    source: Optional[str] = None,
+    industry: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """获取多个产品基准价历史对比（折线图用）"""
+    start_date = (date.today() - timedelta(days=days)).isoformat()
+
+    results = []
+    id_list = []
+    if product_ids and product_ids.strip():
+        id_list = [int(pid.strip()) for pid in product_ids.split(",") if pid.strip().isdigit()]
+
+    if id_list:
+        query = db.query(BenchmarkPrice, Product.product_name).join(
+            Product, BenchmarkPrice.product_id == Product.id
+        ).filter(
+            BenchmarkPrice.product_id.in_(id_list),
+            BenchmarkPrice.record_date >= start_date
+        )
+        if source and source != '__all__':
+            query = query.filter(BenchmarkPrice.source == source)
+        results = query.order_by(BenchmarkPrice.record_date.asc()).all()
+    else:
+        # 按分类获取产品
+        query = db.query(Product).filter(Product.is_active == True)
+        if industry:
+            query = query.filter(Product.industry == industry)
+
+        # 如果 ProductCategory 为空，则忽略 subcategory_id 过滤（返回该行业所有产品）
+        pc_count = db.query(ProductCategory).count()
+        if subcategory_id and pc_count > 0:
+            pc_query = db.query(ProductCategory.product_id).filter(
+                ProductCategory.category_id.in_(subcategory_id)
+            )
+            query = query.filter(Product.id.in_(pc_query))
+        elif subcategory_id and pc_count == 0:
+            pass  # ProductCategory 为空，忽略 subcategory_id
+        elif category_id:
+            subcat_ids = [c.id for c in db.query(Category).filter(Category.parent_id == category_id).all()]
+            pc_query = db.query(ProductCategory.product_id).filter(
+                ProductCategory.category_id.in_(subcat_ids + [category_id])
+            )
+            query = query.filter(Product.id.in_(pc_query))
+
+        products = query.limit(10).all()
+        if products:
+            pids = [p.id for p in products]
+            bp_query = db.query(BenchmarkPrice, Product.product_name).join(
+                Product, BenchmarkPrice.product_id == Product.id
+            ).filter(
+                BenchmarkPrice.product_id.in_(pids),
+                BenchmarkPrice.record_date >= start_date
+            )
+            if source and source != '__all__':
+                bp_query = bp_query.filter(BenchmarkPrice.source == source)
+            results = bp_query.order_by(BenchmarkPrice.record_date.asc()).all()
+
+    # 按产品分组
+    product_data = {}
+    for bp, pname in results:
+        if bp.product_id not in product_data:
+            product_data[bp.product_id] = {"name": pname, "data": []}
+        product_data[bp.product_id]["data"].append(bp.price)
+
+    all_dates = sorted(set(bp.record_date.strftime('%Y/%m/%d') for bp, _ in results))
+
+    return {"dates": all_dates, "series": list(product_data.values())}
+
+
 @router.get("/stats/summary")
 async def get_stats_summary(db: Session = Depends(get_db)):
     """获取统计摘要"""

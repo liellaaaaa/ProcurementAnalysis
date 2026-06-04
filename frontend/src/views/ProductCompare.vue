@@ -183,11 +183,11 @@ async function loadComparison() {
     }
 
     const allData = await Promise.all(
-      selectedProducts.value.map(id => priceApi.getPriceHistory(id, days, selectedSource.value))
+      selectedProducts.value.map(id => priceApi.getBenchmarkHistory(id, days, selectedSource.value))
     )
 
     updateChart(allData.map((res, i) => ({
-      name: products.value.find(p => p.id === selectedProducts.value[i])?.product_name || '',
+      name: res.data[0]?.product_name || products.value.find(p => p.id === selectedProducts.value[i])?.product_name || '',
       data: res.data
     })))
   } catch (e) {
@@ -200,6 +200,7 @@ function updateChart(seriesData) {
     chartInstance = echarts.init(chartRef.value)
   }
 
+  // getBenchmarkHistory returns items with record_date at top level
   const allDates = [...new Set(seriesData.flatMap(s => s.data.map(d => d.record_date)))].sort()
 
   const series = seriesData.map((s, i) => ({

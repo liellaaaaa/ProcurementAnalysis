@@ -428,6 +428,8 @@ const filter1Industry = ref(null)
 
 watch(filter1Source, () => { loadFilter1Charts() })
 watch(filter1Industry, () => { loadFilter1Charts() })
+watch(filter1CategoryId, () => { loadFilter1Charts() })
+watch(filter1SubcategoryId, () => { loadFilter1Charts() })
 
 const filter2CategoryId = ref(null)
 const filter2SubcategoryId = ref(null)
@@ -615,16 +617,20 @@ async function loadExpandChart(row) {
   if (!el) return
   const chart = echarts.init(el)
   try {
-    const res = await priceApi.getDashboardHistoryCompare(
-      String(row.product_id),
+    // 使用基准价历史数据（与表格数据源一致）
+    const res = await priceApi.getBenchmarkHistory(
+      row.product_id,
       expandChartDays.value,
-      null, null, null, null
+      null
     )
-    if (!res.data || !res.data.dates || res.data.dates.length === 0) {
+    if (!res.data || res.data.length === 0) {
       chart.setOption({ series: [] })
       return
     }
-    const { dates, series } = res.data
+    const data = res.data
+    const dates = data.map(d => d.record_date)
+    const prices = data.map(d => d.price)
+    const productName = data[0]?.product_name || row.product_name || '基准价'
     chart.setOption({
       backgroundColor: 'transparent',
       tooltip: {
@@ -658,10 +664,10 @@ async function loadExpandChart(row) {
         axisLabel: { color: '#94A3B4', fontSize: 10, formatter: val => `¥${val.toLocaleString()}` },
         splitLine: { lineStyle: { color: '#E8E3F3', type: 'dashed' } }
       },
-      series: series.map((s, i) => ({
-        name: s.name,
+      series: [{
+        name: productName,
         type: 'line',
-        data: s.data,
+        data: prices,
         smooth: true,
         symbol: 'circle',
         symbolSize: 3,
@@ -669,7 +675,7 @@ async function loadExpandChart(row) {
         itemStyle: { color: '#E63946' },
         emphasis: { itemStyle: { borderColor: '#fff', borderWidth: 2 } },
         connectNulls: true
-      }))
+      }]
     })
   } catch (e) {
     console.error('Failed to load expand chart', e)
@@ -833,14 +839,14 @@ async function loadLineChartData() {
       days = Math.max(7, Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1)
     }
 
-    const res = await priceApi.getDashboardHistoryCompare(
-      null,
+    // 使用基准价历史数据（与表格数据源一致）
+    const res = await priceApi.getBenchmarkHistoryMulti({
       days,
-      filter1CategoryId.value || null,
-      filter1SubcategoryId.value || null,
-      filter1Source.value || null,
-      filter1Industry.value || null
-    )
+      category_id: filter1CategoryId.value || null,
+      subcategory_id: filter1SubcategoryId.value || null,
+      source: filter1Source.value || null,
+      industry: filter1Industry.value || null
+    })
 
     if (!res.data || !res.data.dates || res.data.dates.length === 0) {
       lineChart.setOption({ series: [] })
