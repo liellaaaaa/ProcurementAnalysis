@@ -560,6 +560,8 @@ async function loadExpandChart(row) {
     const dates = data.map(d => d.record_date)
     const prices = data.map(d => d.price)
     const productName = data[0]?.product_name || row.product_name || '基准价'
+    // 计算Y轴范围（自适应数据）
+    const axisRange = getNiceAxisRange(prices)
     chart.setOption({
       backgroundColor: 'transparent',
       tooltip: {
@@ -591,7 +593,9 @@ async function loadExpandChart(row) {
         axisLine: { show: false },
         axisTick: { show: false },
         axisLabel: { color: '#94A3B4', fontSize: 10, formatter: val => `¥${val.toLocaleString()}` },
-        splitLine: { lineStyle: { color: '#E8E3F3', type: 'dashed' } }
+        splitLine: { lineStyle: { color: '#E8E3F3', type: 'dashed' } },
+        ...(axisRange ? { min: axisRange.min, max: axisRange.max } : {}),
+        scale: true
       },
       series: [{
         name: productName,
@@ -774,6 +778,10 @@ async function loadLineChartData() {
     lineChartRawData.value = { dates, series }
     const lineColors = ['#E63946', '#2A9D5C', '#E9C46A', '#264653', '#F4A261', '#8E44AD', '#1ABC9C', '#E74C3C', '#3498DB', '#9B59B6']
 
+    // 计算Y轴范围（自适应数据）
+    const allPrices = series.flatMap(s => s.data.filter(v => v != null))
+    const axisRange = getNiceAxisRange(allPrices)
+
     lineChart.setOption({
       backgroundColor: 'transparent',
       tooltip: {
@@ -813,7 +821,9 @@ async function loadLineChartData() {
         axisLine: { show: false },
         axisTick: { show: false },
         axisLabel: { color: '#94A3B4', fontSize: 11, formatter: val => `¥${val.toLocaleString()}` },
-        splitLine: { lineStyle: { color: '#F0EBF9', type: 'dashed' } }
+        splitLine: { lineStyle: { color: '#F0EBF9', type: 'dashed' } },
+        ...(axisRange ? { min: axisRange.min, max: axisRange.max } : {}),
+        scale: true
       },
       series: series.map((s, i) => ({
         name: s.name,
@@ -1018,6 +1028,32 @@ function downloadChart(type) {
   link.click()
 }
 
+function getNiceAxisRange(prices) {
+  if (!prices || prices.length === 0) return null
+  const min = Math.min(...prices)
+  const max = Math.max(...prices)
+  if (min === max) {
+    // 单点数据，往上下各扩展10%
+    const padding = min * 0.1 || 100
+    return { min: min - padding, max: max + padding }
+  }
+  // 计算合适的刻度间隔
+  const range = max - min
+  // 根据数据大小选择合适的"根"值
+  const magnitude = Math.pow(10, Math.floor(Math.log10(range)))
+  const normalized = range / magnitude
+  // 选择合适的步长（1, 2, 5, 10的倍数）
+  let step
+  if (normalized <= 1) step = magnitude / 10
+  else if (normalized <= 2) step = magnitude / 5
+  else if (normalized <= 5) step = magnitude / 2
+  else step = magnitude
+  // 计算nice的min和max（向下取整到step的整数倍，向上取整到step的整数倍）
+  const niceMin = Math.floor(min / step) * step
+  const niceMax = Math.ceil(max / step) * step
+  return { min: niceMin, max: niceMax }
+}
+
 function initLineChart() {
   if (!lineChartRef.value) return
   if (lineChart) {
@@ -1030,7 +1066,7 @@ function initLineChart() {
     legend: { show: true, bottom: 0, textStyle: { color: '#64748B', fontSize: 11 }, type: 'scroll', pageTextStyle: { color: '#64748B' } },
     grid: { left: 60, right: 30, bottom: 40, top: 20, containLabel: true },
     xAxis: { type: 'category', data: [], axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: '#94A3B4', fontSize: 11 } },
-    yAxis: { type: 'value', axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: '#94A3B4', fontSize: 11, formatter: val => `¥${val.toLocaleString()}` }, splitLine: { lineStyle: { color: '#F0EBF9', type: 'dashed' } } },
+    yAxis: { type: 'value', axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: '#94A3B4', fontSize: 11, formatter: val => `¥${val.toLocaleString()}` }, splitLine: { lineStyle: { color: '#F0EBF9', type: 'dashed' } }, scale: true },
     series: []
   })
 }

@@ -169,6 +169,27 @@ function handleCategoryChange({ categoryId, subcategoryId }) {
   loadProducts()
 }
 
+function getNiceAxisRange(prices) {
+  if (!prices || prices.length === 0) return null
+  const min = Math.min(...prices)
+  const max = Math.max(...prices)
+  if (min === max) {
+    const padding = min * 0.1 || 100
+    return { min: min - padding, max: max + padding }
+  }
+  const range = max - min
+  const magnitude = Math.pow(10, Math.floor(Math.log10(range)))
+  const normalized = range / magnitude
+  let step
+  if (normalized <= 1) step = magnitude / 10
+  else if (normalized <= 2) step = magnitude / 5
+  else if (normalized <= 5) step = magnitude / 2
+  else step = magnitude
+  const niceMin = Math.floor(min / step) * step
+  const niceMax = Math.ceil(max / step) * step
+  return { min: niceMin, max: niceMax }
+}
+
 async function loadComparison() {
   if (selectedProducts.value.length < 2) return
 
@@ -203,7 +224,7 @@ function updateChart(seriesData) {
   // getBenchmarkHistory returns items with record_date at top level
   const allDates = [...new Set(seriesData.flatMap(s => s.data.map(d => d.record_date)))].sort()
 
-  const series = seriesData.map((s, i) => ({
+   const series = seriesData.map((s, i) => ({
     name: s.name,
     type: 'line',
     smooth: true,
@@ -217,6 +238,10 @@ function updateChart(seriesData) {
     itemStyle: { color: colors[i % colors.length] },
     lineStyle: { width: 2.5 }
   }))
+
+  // 计算Y轴范围（自适应数据）
+  const allPrices = seriesData.flatMap(s => s.data.map(d => d.price)).filter(v => v != null)
+  const axisRange = getNiceAxisRange(allPrices)
 
   const option = {
     backgroundColor: 'transparent',
@@ -256,7 +281,9 @@ function updateChart(seriesData) {
       nameTextStyle: { color: '#64748B', fontSize: 11 },
       axisLine: { show: false },
       axisLabel: { color: '#94A3B4', fontSize: 11 },
-      splitLine: { lineStyle: { color: '#F0EBF9', type: 'dashed' } }
+      splitLine: { lineStyle: { color: '#F0EBF9', type: 'dashed' } },
+      ...(axisRange ? { min: axisRange.min, max: axisRange.max } : {}),
+      scale: true
     },
     series
   }
