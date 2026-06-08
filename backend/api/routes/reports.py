@@ -42,12 +42,77 @@ except ImportError:
     HAS_CHART_GENERATOR = False
 
 
+def _compute_record_trend_and_change(product_id, curr_price, prev_avg):
+    """根据当期价格和上期均价，计算单条记录的 trend 和 change_percent"""
+    if not prev_avg or prev_avg <= 0:
+        return "-", 0
+    change = (curr_price - prev_avg) / prev_avg * 100
+    if change > 0.5:
+        trend = "涨"
+    elif change < -0.5:
+        trend = "跌"
+    else:
+        trend = "平"
+    return trend, round(change, 2)
+
+
+def _compute_trend_stats(db, start_date, end_date, prev_start, prev_end, industry=None, source=None):
+    """根据实际价格变化计算涨/跌/平统计，不再依赖数据库存储的 trend字段"""
+    from sqlalchemy import func
+
+    # 本期平均价 per product
+    curr_q = db.query(
+        PriceRecord.product_id,
+        func.avg(PriceRecord.price).label('avg_price')
+    ).join(Product).filter(
+        PriceRecord.record_date >= start_date,
+        PriceRecord.record_date <= end_date
+    )
+    if industry:
+        curr_q = curr_q.filter(Product.industry == industry)
+    if source and source != '__all__':
+        curr_q = curr_q.filter(PriceRecord.source == source)
+    curr_prices = dict(curr_q.group_by(PriceRecord.product_id).all())
+
+    # 上期平均价 per product
+    prev_q = db.query(
+        PriceRecord.product_id,
+        func.avg(PriceRecord.price).label('avg_price')
+    ).join(Product).filter(
+        PriceRecord.record_date >= prev_start,
+        PriceRecord.record_date <= prev_end
+    )
+    if industry:
+        prev_q = prev_q.filter(Product.industry == industry)
+    if source and source != '__all__':
+        prev_q = prev_q.filter(PriceRecord.source == source)
+    prev_prices = dict(prev_q.group_by(PriceRecord.product_id).all())
+
+    rising = falling = stable = 0
+    for pid, curr_avg in curr_prices.items():
+        prev_avg = prev_prices.get(pid)
+        if prev_avg and prev_avg > 0:
+            change = (curr_avg - prev_avg) / prev_avg * 100
+            if change > 0.5:
+                rising += 1
+            elif change < -0.5:
+                falling += 1
+            else:
+                stable += 1
+        else:
+            stable += 1
+
+    return {'涨': rising, '跌': falling, '平': stable}
+
+
 @router.get("/pdf")
 async def generate_pdf_report(
     db: Session = Depends(get_db),
     report_type: str = Query("weekly", enum=["weekly", "monthly"]),
     start_date: str = Query(None, description="开始日期 yyyy/mm/dd"),
-    end_date: str = Query(None, description="结束日期 yyyy/mm/dd")
+    end_date: str = Query(None, description="结束日期 yyyy/mm/dd"),
+    industry: str = Query(None),
+    source: str = Query(None)
 ):
     """生成 PDF 报表"""
 
@@ -109,16 +174,21 @@ async def generate_pdf_report(
     elements.append(Spacer(1, 0.5 * cm))
 
     # 统计数据
-    stats = db.query(
+    stats_query = db.query(
         func.count(func.distinct(PriceRecord.product_id)).label('product_count'),
         func.count(PriceRecord.id).label('record_count'),
         func.max(PriceRecord.price).label('max_price'),
         func.min(PriceRecord.price).label('min_price'),
         func.avg(PriceRecord.price).label('avg_price')
-    ).filter(
+    ).join(Product).filter(
         PriceRecord.record_date >= start_date,
         PriceRecord.record_date <= end_date
-    ).first()
+    )
+    if industry:
+        stats_query = stats_query.filter(Product.industry == industry)
+    if source and source != '__all__':
+        stats_query = stats_query.filter(PriceRecord.source == source)
+    stats = stats_query.first()
 
     overview_data = [
         ["指标", "数值"],
@@ -154,50 +224,61 @@ async def generate_pdf_report(
     prev_start, prev_end = get_previous_period_range(report_type, start_date, end_date)
 
     # 统计上期数据
-    prev_stats = db.query(
+    prev_stats_query = db.query(
         func.count(func.distinct(PriceRecord.product_id)).label('product_count'),
         func.count(PriceRecord.id).label('record_count'),
         func.avg(PriceRecord.price).label('avg_price')
-    ).filter(
+    ).join(Product).filter(
         PriceRecord.record_date >= prev_start,
         PriceRecord.record_date <= prev_end
-    ).first()
+    )
+    if industry:
+        prev_stats_query = prev_stats_query.filter(Product.industry == industry)
+    if source and source != '__all__':
+        prev_stats_query = prev_stats_query.filter(PriceRecord.source == source)
+    prev_stats = prev_stats_query.first()
 
     if report_type == "weekly":
         # 周报：新增数据汇总 + 价格变动汇总
-        new_products = db.query(
+        new_products_query = db.query(
             func.count(func.distinct(Product.id)).label('new_count')
         ).join(PriceRecord).filter(
             PriceRecord.record_date >= start_date,
             PriceRecord.record_date <= end_date,
             Product.created_at >= start_date
-        ).scalar() or 0
+        )
+        if industry:
+            new_products_query = new_products_query.filter(Product.industry == industry)
+        if source and source != '__all__':
+            new_products_query = new_products_query.filter(PriceRecord.source == source)
+        new_products = new_products_query.scalar() or 0
 
-        new_records = db.query(func.count(PriceRecord.id)).filter(
+        new_records_query = db.query(func.count(PriceRecord.id)).join(Product).filter(
             PriceRecord.record_date >= start_date,
             PriceRecord.record_date <= end_date
-        ).scalar() or 0
+        )
+        if industry:
+            new_records_query = new_records_query.filter(Product.industry == industry)
+        if source and source != '__all__':
+            new_records_query = new_records_query.filter(PriceRecord.source == source)
+        new_records = new_records_query.scalar() or 0
 
-        # 价格变动统计
-        trend_stats = db.query(
-            PriceRecord.trend,
-            func.count(PriceRecord.id).label('count')
-        ).filter(
-            PriceRecord.record_date >= start_date,
-            PriceRecord.record_date <= end_date,
-            PriceRecord.trend.in_(['涨', '跌', '平'])
-        ).group_by(PriceRecord.trend).all()
-
-        trend_dict = {t.trend: t.count for t in trend_stats}
+        # 价格变动统计（通过计算上期/本期均价对比得出，不再依赖数据库 trend字段）
+        trend_dict = _compute_trend_stats(db, start_date, end_date, prev_start, prev_end, industry, source)
 
         # 异常告警统计（通过 AlertConfig 获取 alert_type）
-        alert_stats = db.query(
+        alert_stats_query = db.query(
             AlertConfig.alert_type,
             func.count(AlertRecord.id).label('count')
         ).join(AlertConfig, AlertRecord.alert_config_id == AlertConfig.id).filter(
             AlertRecord.triggered_at >= start_date,
             AlertRecord.triggered_at <= end_date
-        ).group_by(AlertConfig.alert_type).all()
+        )
+        if industry:
+            alert_stats_query = alert_stats_query.join(Product, AlertRecord.product_id == Product.id).filter(Product.industry == industry)
+        if source and source != '__all__':
+            alert_stats_query = alert_stats_query.filter(AlertRecord.source == source)
+        alert_stats = alert_stats_query.group_by(AlertConfig.alert_type).all()
 
         # 新增数据汇总区块
         summary_data = [
@@ -322,14 +403,19 @@ async def generate_pdf_report(
                 func.max(PriceRecord.record_date).label('max_date')
             ).group_by(PriceRecord.product_id).subquery()
 
-            latest_prices = db.query(
+            latest_prices_query = db.query(
                 PriceRecord.product_id,
                 PriceRecord.change_percent
             ).join(
                 subquery,
                 (PriceRecord.product_id == subquery.c.product_id) &
                 (PriceRecord.record_date == subquery.c.max_date)
-            ).all()
+            )
+            if industry:
+                latest_prices_query = latest_prices_query.join(Product).filter(Product.industry == industry)
+            if source and source != '__all__':
+                latest_prices_query = latest_prices_query.filter(PriceRecord.source == source)
+            latest_prices = latest_prices_query.all()
 
             product_ids = [lp.product_id for lp in latest_prices]
             products = {p.id: p.product_name for p in db.query(Product).filter(Product.id.in_(product_ids)).all()}
@@ -350,13 +436,18 @@ async def generate_pdf_report(
 
         try:
             # 价格占比饼图
-            distribution = db.query(
+            distribution_query = db.query(
                 Product.product_name,
                 func.count(PriceRecord.id).label('count')
             ).join(PriceRecord).filter(
                 PriceRecord.record_date >= start_date,
                 PriceRecord.record_date <= end_date
-            ).group_by(Product.id).order_by(func.count(PriceRecord.id).desc()).limit(8).all()
+            )
+            if industry:
+                distribution_query = distribution_query.filter(Product.industry == industry)
+            if source and source != '__all__':
+                distribution_query = distribution_query.filter(PriceRecord.source == source)
+            distribution = distribution_query.group_by(Product.id).order_by(func.count(PriceRecord.id).desc()).limit(8).all()
 
             if distribution:
                 sizes = [float(d.count) for d in distribution]
@@ -370,7 +461,7 @@ async def generate_pdf_report(
     elements.append(PageBreak())
 
     # 产品明细表 (扩展到 100 条)
-    products_data = db.query(
+    products_data_query = db.query(
         Product.product_name,
         func.max(PriceRecord.price).label('max_price'),
         func.min(PriceRecord.price).label('min_price'),
@@ -379,7 +470,12 @@ async def generate_pdf_report(
     ).join(PriceRecord).filter(
         PriceRecord.record_date >= start_date,
         PriceRecord.record_date <= end_date
-    ).group_by(Product.id).order_by(func.avg(PriceRecord.price).desc()).limit(100).all()
+    )
+    if industry:
+        products_data_query = products_data_query.filter(Product.industry == industry)
+    if source and source != '__all__':
+        products_data_query = products_data_query.filter(PriceRecord.source == source)
+    products_data = products_data_query.group_by(Product.id).order_by(func.avg(PriceRecord.price).desc()).limit(100).all()
 
     detail_header = [["产品名称", "最高价", "最低价", "均价", "记录数"]]
     detail_data = [[
@@ -427,7 +523,9 @@ async def generate_html_report(
     db: Session = Depends(get_db),
     report_type: str = Query("weekly", enum=["weekly", "monthly"]),
     start_date: str = Query(None, description="开始日期 yyyy/mm/dd"),
-    end_date: str = Query(None, description="结束日期 yyyy/mm/dd")
+    end_date: str = Query(None, description="结束日期 yyyy/mm/dd"),
+    industry: str = Query(None),
+    source: str = Query(None)
 ):
     """生成 HTML 报表"""
 
@@ -446,16 +544,21 @@ async def generate_html_report(
     title = "周报" if report_type == "weekly" else "月报"
 
     # 统计数据
-    stats = db.query(
+    stats_query = db.query(
         func.count(func.distinct(PriceRecord.product_id)).label('product_count'),
         func.count(PriceRecord.id).label('record_count'),
         func.max(PriceRecord.price).label('max_price'),
         func.min(PriceRecord.price).label('min_price'),
         func.avg(PriceRecord.price).label('avg_price')
-    ).filter(
+    ).join(Product).filter(
         PriceRecord.record_date >= start_date,
         PriceRecord.record_date <= end_date
-    ).first()
+    )
+    if industry:
+        stats_query = stats_query.filter(Product.industry == industry)
+    if source and source != '__all__':
+        stats_query = stats_query.filter(PriceRecord.source == source)
+    stats = stats_query.first()
 
     # 涨跌排行数据
     subquery = db.query(
@@ -463,7 +566,7 @@ async def generate_html_report(
         func.max(PriceRecord.record_date).label('max_date')
     ).group_by(PriceRecord.product_id).subquery()
 
-    latest_prices = db.query(
+    latest_prices_query = db.query(
         PriceRecord.product_id,
         PriceRecord.change_percent,
         PriceRecord.price
@@ -471,7 +574,12 @@ async def generate_html_report(
         subquery,
         (PriceRecord.product_id == subquery.c.product_id) &
         (PriceRecord.record_date == subquery.c.max_date)
-    ).all()
+    )
+    if industry:
+        latest_prices_query = latest_prices_query.join(Product).filter(Product.industry == industry)
+    if source and source != '__all__':
+        latest_prices_query = latest_prices_query.filter(PriceRecord.source == source)
+    latest_prices = latest_prices_query.all()
 
     product_ids = [lp.product_id for lp in latest_prices]
     products_map = {p.id: p.product_name for p in db.query(Product).filter(Product.id.in_(product_ids)).all()}
@@ -483,19 +591,24 @@ async def generate_html_report(
     top_falling = ranking[:10]
 
     # 价格占比数据
-    distribution = db.query(
+    distribution_query = db.query(
         Product.product_name,
         func.count(PriceRecord.id).label('count')
     ).join(PriceRecord).filter(
         PriceRecord.record_date >= start_date,
         PriceRecord.record_date <= end_date
-    ).group_by(Product.id).order_by(func.count(PriceRecord.id).desc()).limit(8).all()
+    )
+    if industry:
+        distribution_query = distribution_query.filter(Product.industry == industry)
+    if source and source != '__all__':
+        distribution_query = distribution_query.filter(PriceRecord.source == source)
+    distribution = distribution_query.group_by(Product.id).order_by(func.count(PriceRecord.id).desc()).limit(8).all()
 
     total_count = sum(d.count for d in distribution)
     pie_data = [(d.product_name, d.count, round(d.count / total_count * 100, 1) if total_count else 0) for d in distribution]
 
     # 产品明细
-    products_data = db.query(
+    products_data_query = db.query(
         Product.product_name,
         func.max(PriceRecord.price).label('max_price'),
         func.min(PriceRecord.price).label('min_price'),
@@ -504,18 +617,16 @@ async def generate_html_report(
     ).join(PriceRecord).filter(
         PriceRecord.record_date >= start_date,
         PriceRecord.record_date <= end_date
-    ).group_by(Product.id).order_by(func.avg(PriceRecord.price).desc()).limit(50).all()
+    )
+    if industry:
+        products_data_query = products_data_query.filter(Product.industry == industry)
+    if source and source != '__all__':
+        products_data_query = products_data_query.filter(PriceRecord.source == source)
+    products_data = products_data_query.group_by(Product.id).order_by(func.avg(PriceRecord.price).desc()).limit(50).all()
 
-    # 趋势统计
-    trend_stats = db.query(
-        PriceRecord.trend,
-        func.count(PriceRecord.id).label('count')
-    ).filter(
-        PriceRecord.record_date >= start_date,
-        PriceRecord.record_date <= end_date,
-        PriceRecord.trend.in_(['涨', '跌', '平'])
-    ).group_by(PriceRecord.trend).all()
-    trend_dict = {t.trend: t.count for t in trend_stats}
+    # 趋势统计（通过计算上期/本期均价对比得出，不再依赖数据库 trend字段）
+    prev_start, prev_end = get_previous_period_range(report_type, start_date, end_date)
+    trend_dict = _compute_trend_stats(db, start_date, end_date, prev_start, prev_end, industry, source)
 
     # 生成 HTML
     html_content = f"""<!DOCTYPE html>
@@ -709,7 +820,9 @@ async def generate_excel_report(
     db: Session = Depends(get_db),
     report_type: str = Query("weekly", enum=["weekly", "monthly"]),
     start_date: str = Query(None, description="开始日期 yyyy/mm/dd"),
-    end_date: str = Query(None, description="结束日期 yyyy/mm/dd")
+    end_date: str = Query(None, description="结束日期 yyyy/mm/dd"),
+    industry: str = Query(None),
+    source: str = Query(None)
 ):
     """生成 Excel 报表（带图表）"""
 
@@ -728,6 +841,21 @@ async def generate_excel_report(
         return {"error": "openpyxl 未安装，请运行: pip install openpyxl"}
 
     start_date, end_date = get_date_range(report_type, parsed_start, parsed_end)
+    prev_start, prev_end = get_previous_period_range(report_type, start_date, end_date)
+
+    # 预计算上期每产品均价（用于动态计算趋势和涨跌幅）
+    prev_q = db.query(
+        PriceRecord.product_id,
+        func.avg(PriceRecord.price).label('avg_price')
+    ).join(Product).filter(
+        PriceRecord.record_date >= prev_start,
+        PriceRecord.record_date <= prev_end
+    )
+    if industry:
+        prev_q = prev_q.filter(Product.industry == industry)
+    if source and source != '__all__':
+        prev_q = prev_q.filter(PriceRecord.source == source)
+    prev_prices = dict(prev_q.group_by(PriceRecord.product_id).all())
 
     wb = Workbook()
     buffer = BytesIO()
@@ -745,16 +873,21 @@ async def generate_excel_report(
     overview_ws.row_dimensions[1].height = 30
 
     # 统计数据
-    stats = db.query(
+    stats_query = db.query(
         func.count(func.distinct(PriceRecord.product_id)).label('product_count'),
         func.count(PriceRecord.id).label('record_count'),
         func.max(PriceRecord.price).label('max_price'),
         func.min(PriceRecord.price).label('min_price'),
         func.avg(PriceRecord.price).label('avg_price')
-    ).filter(
+    ).join(Product).filter(
         PriceRecord.record_date >= start_date,
         PriceRecord.record_date <= end_date
-    ).first()
+    )
+    if industry:
+        stats_query = stats_query.filter(Product.industry == industry)
+    if source and source != '__all__':
+        stats_query = stats_query.filter(PriceRecord.source == source)
+    stats = stats_query.first()
 
     overview_ws['A3'] = "统计指标"
     overview_ws['B3'] = "数值"
@@ -783,10 +916,15 @@ async def generate_excel_report(
     summary_ws = wb.create_sheet("价格总表")
 
     # 完整的价格记录数据
-    summary_records = db.query(PriceRecord, Product.product_name).join(Product).filter(
+    summary_records_query = db.query(PriceRecord, Product.product_name).join(Product).filter(
         PriceRecord.record_date >= start_date,
         PriceRecord.record_date <= end_date
-    ).order_by(PriceRecord.record_date.desc()).all()
+    )
+    if industry:
+        summary_records_query = summary_records_query.filter(Product.industry == industry)
+    if source and source != '__all__':
+        summary_records_query = summary_records_query.filter(PriceRecord.source == source)
+    summary_records = summary_records_query.order_by(PriceRecord.record_date.desc()).all()
 
     # 表头
     summary_headers = ["日期", "产品名称", "规格", "品牌", "地区", "供应商", "价格", "趋势", "较上期涨跌幅(%)", "数据来源"]
@@ -801,6 +939,9 @@ async def generate_excel_report(
 
     # 数据行
     for i, (record, pname) in enumerate(summary_records, start=2):
+        trend, change = _compute_record_trend_and_change(
+            record.product_id, record.price, prev_prices.get(record.product_id)
+        )
         row_data = [
             format_date(record.record_date),
             pname,
@@ -809,8 +950,8 @@ async def generate_excel_report(
             record.region or "-",
             record.supplier or "-",
             record.price,
-            record.trend or "-",
-            record.change_percent if record.change_percent else 0,
+            trend,
+            change,
             record.source or "-"
         ]
         summary_ws.append(row_data)
@@ -830,32 +971,39 @@ async def generate_excel_report(
     # ========== 工作表1: 产品列表 ==========
     products_ws = wb.create_sheet("产品列表")
     products = db.query(Product).filter(Product.is_active == True).all()
-    products_ws.append(["ID", "产品编码", "产品名称", "行业", "分类", "单位", "数据源"])
+    products_ws.append(["ID", "产品编码", "产品名称", "行业", "单位", "数据源"])
     for p in products:
-        products_ws.append([p.id, p.product_code, p.product_name, p.industry, p.category, p.unit, p.source])
+        products_ws.append([p.id, p.product_code, p.product_name, p.industry, p.unit, p.source])
 
     products_ws.column_dimensions['A'].width = 8
     products_ws.column_dimensions['B'].width = 15
     products_ws.column_dimensions['C'].width = 25
     products_ws.column_dimensions['D'].width = 10
-    products_ws.column_dimensions['E'].width = 15
-    products_ws.column_dimensions['F'].width = 10
-    products_ws.column_dimensions['G'].width = 15
+    products_ws.column_dimensions['E'].width = 10
+    products_ws.column_dimensions['F'].width = 15
 
     # ========== 工作表2: 价格历史（简化版） ==========
     history_ws = wb.create_sheet("价格历史")
-    history_records = db.query(PriceRecord, Product.product_name).join(Product).filter(
+    history_records_query = db.query(PriceRecord, Product.product_name).join(Product).filter(
         PriceRecord.record_date >= start_date,
         PriceRecord.record_date <= end_date
-    ).order_by(PriceRecord.record_date.desc()).all()
+    )
+    if industry:
+        history_records_query = history_records_query.filter(Product.industry == industry)
+    if source and source != '__all__':
+        history_records_query = history_records_query.filter(PriceRecord.source == source)
+    history_records = history_records_query.order_by(PriceRecord.record_date.desc()).all()
     history_ws.append(["日期", "产品", "价格", "趋势", "涨跌%", "来源"])
     for record, pname in history_records:
+        trend, change = _compute_record_trend_and_change(
+            record.product_id, record.price, prev_prices.get(record.product_id)
+        )
         history_ws.append([
             format_date(record.record_date),
             pname,
             record.price,
-            record.trend,
-            record.change_percent if record.change_percent else 0,
+            trend,
+            change,
             record.source
         ])
 
@@ -868,7 +1016,7 @@ async def generate_excel_report(
 
     # ========== 工作表3: 统计汇总 ==========
     summary_stats_ws = wb.create_sheet("统计汇总")
-    stats_list = db.query(
+    stats_list_query = db.query(
         Product.product_name,
         func.max(PriceRecord.price).label('max_price'),
         func.min(PriceRecord.price).label('min_price'),
@@ -877,7 +1025,12 @@ async def generate_excel_report(
     ).join(PriceRecord).filter(
         PriceRecord.record_date >= start_date,
         PriceRecord.record_date <= end_date
-    ).group_by(Product.id).order_by(func.avg(PriceRecord.price).desc()).all()
+    )
+    if industry:
+        stats_list_query = stats_list_query.filter(Product.industry == industry)
+    if source and source != '__all__':
+        stats_list_query = stats_list_query.filter(PriceRecord.source == source)
+    stats_list = stats_list_query.group_by(Product.id).order_by(func.avg(PriceRecord.price).desc()).all()
 
     summary_stats_ws.append(["产品名称", "最高价", "最低价", "均价", "记录数"])
     for s in stats_list:
@@ -898,27 +1051,27 @@ async def generate_excel_report(
     # ========== 工作表4: 涨跌排行图表 ==========
     if stats_list:
         chart_ws = wb.create_sheet("涨跌排行")
-        chart_ws.append(["产品名称", "较昨日涨跌幅(%)"])
+        chart_ws.append(["产品名称", "较上期涨跌幅(%)"])
 
-        # 获取最新价格变化率
-        subquery = db.query(
+        # 本期每产品均价
+        curr_prices_map = dict(db.query(
             PriceRecord.product_id,
-            func.max(PriceRecord.record_date).label('max_date')
-        ).group_by(PriceRecord.product_id).subquery()
+            func.avg(PriceRecord.price).label('avg_price')
+        ).join(Product).filter(
+            PriceRecord.record_date >= start_date,
+            PriceRecord.record_date <= end_date
+        ).filter(
+            Product.industry == industry if industry else True
+        ).group_by(PriceRecord.product_id).all())
 
-        latest_prices = db.query(
-            PriceRecord.product_id,
-            PriceRecord.change_percent
-        ).join(
-            subquery,
-            (PriceRecord.product_id == subquery.c.product_id) &
-            (PriceRecord.record_date == subquery.c.max_date)
-        ).all()
-
-        product_ids = [lp.product_id for lp in latest_prices]
-        products_map = {p.id: p.product_name for p in db.query(Product).filter(Product.id.in_(product_ids)).all()}
-
-        ranking = [(products_map.get(lp.product_id, "未知"), float(lp.change_percent) if lp.change_percent else 0.0) for lp in latest_prices]
+        # 计算每产品较上期变化率
+        ranking = []
+        for pid, prev_avg in prev_prices.items():
+            curr_avg = curr_prices_map.get(pid)
+            if curr_avg and prev_avg and prev_avg > 0:
+                change = (curr_avg - prev_avg) / prev_avg * 100
+                pname_map = {p.id: p.product_name for p in db.query(Product).filter(Product.id == pid).all()}
+                ranking.append((pname_map.get(pid, "未知"), round(change, 2)))
         ranking.sort(key=lambda x: x[1], reverse=True)
         ranking = ranking[:15]
 
@@ -944,13 +1097,18 @@ async def generate_excel_report(
 
         # ========== 工作表5: 价格占比饼图 ==========
         pie_ws = wb.create_sheet("价格占比")
-        distribution = db.query(
+        distribution_query = db.query(
             Product.product_name,
             func.count(PriceRecord.id).label('count')
         ).join(PriceRecord).filter(
             PriceRecord.record_date >= start_date,
             PriceRecord.record_date <= end_date
-        ).group_by(Product.id).order_by(func.count(PriceRecord.id).desc()).limit(8).all()
+        )
+        if industry:
+            distribution_query = distribution_query.filter(Product.industry == industry)
+        if source and source != '__all__':
+            distribution_query = distribution_query.filter(PriceRecord.source == source)
+        distribution = distribution_query.group_by(Product.id).order_by(func.count(PriceRecord.id).desc()).limit(8).all()
 
         pie_ws.append(["产品名称", "记录数"])
         for d in distribution:
@@ -989,7 +1147,7 @@ async def generate_excel_report(
         cell.alignment = Alignment(horizontal='center', vertical='center')
 
     # 获取上期和本期每个产品的数据
-    curr_data = db.query(
+    curr_data_query = db.query(
         Product.id,
         Product.product_name,
         func.avg(PriceRecord.price).label('avg_price'),
@@ -997,18 +1155,28 @@ async def generate_excel_report(
     ).join(PriceRecord).filter(
         PriceRecord.record_date >= start_date,
         PriceRecord.record_date <= end_date
-    ).group_by(Product.id).all()
+    )
+    if industry:
+        curr_data_query = curr_data_query.filter(Product.industry == industry)
+    if source and source != '__all__':
+        curr_data_query = curr_data_query.filter(PriceRecord.source == source)
+    curr_data = curr_data_query.group_by(Product.id).all()
 
     curr_map = {p.id: (p.avg_price, p.record_count) for p in curr_data}
 
-    prev_data = db.query(
+    prev_data_query = db.query(
         Product.id,
         func.avg(PriceRecord.price).label('avg_price'),
         func.count(PriceRecord.id).label('record_count')
     ).join(PriceRecord).filter(
         PriceRecord.record_date >= prev_start,
         PriceRecord.record_date <= prev_end
-    ).group_by(Product.id).all()
+    )
+    if industry:
+        prev_data_query = prev_data_query.filter(Product.industry == industry)
+    if source and source != '__all__':
+        prev_data_query = prev_data_query.filter(PriceRecord.source == source)
+    prev_data = prev_data_query.group_by(Product.id).all()
 
     prev_map = {p.id: (p.avg_price, p.record_count) for p in prev_data}
 
@@ -1067,13 +1235,18 @@ async def generate_excel_report(
     alert_ws.row_dimensions[1].height = 25
 
     # 告警汇总统计（通过 AlertConfig 获取 alert_type）
-    alert_summary = db.query(
+    alert_summary_query = db.query(
         AlertConfig.alert_type,
         func.count(AlertRecord.id).label('count')
     ).join(AlertConfig, AlertRecord.alert_config_id == AlertConfig.id).filter(
         AlertRecord.triggered_at >= start_date,
         AlertRecord.triggered_at <= end_date
-    ).group_by(AlertConfig.alert_type).all()
+    )
+    if industry:
+        alert_summary_query = alert_summary_query.join(Product, AlertRecord.product_id == Product.id).filter(Product.industry == industry)
+    if source and source != '__all__':
+        alert_summary_query = alert_summary_query.filter(AlertRecord.source == source)
+    alert_summary = alert_summary_query.group_by(AlertConfig.alert_type).all()
 
     alert_ws.append(["告警类型", "触发次数"])
     for a in alert_summary:
@@ -1097,13 +1270,18 @@ async def generate_excel_report(
         cell.fill = PatternFill(start_color='F56C6C', end_color='F56C6C', fill_type='solid')
         cell.alignment = Alignment(horizontal='center', vertical='center')
 
-    alert_records = db.query(
+    alert_records_query = db.query(
         AlertRecord, Product.product_name, AlertConfig.alert_type
     ).join(Product, AlertRecord.product_id == Product.id
     ).join(AlertConfig, AlertRecord.alert_config_id == AlertConfig.id).filter(
         AlertRecord.triggered_at >= start_date,
         AlertRecord.triggered_at <= end_date
-    ).order_by(AlertRecord.triggered_at.desc()).limit(100).all()
+    )
+    if industry:
+        alert_records_query = alert_records_query.filter(Product.industry == industry)
+    if source and source != '__all__':
+        alert_records_query = alert_records_query.filter(AlertRecord.source == source)
+    alert_records = alert_records_query.order_by(AlertRecord.triggered_at.desc()).limit(100).all()
 
     for record, pname, alert_type in alert_records:
         alert_ws.append([

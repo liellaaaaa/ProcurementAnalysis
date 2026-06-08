@@ -16,22 +16,28 @@ export const reportApi = {
   compareProducts(ids) {
     return api.get('/prices/compare', { params: { product_ids: ids } })
   },
-  downloadPdf(type = 'weekly', startDate = null, endDate = null) {
+  downloadPdf(type = 'weekly', startDate = null, endDate = null, industry = null, source = null) {
     const params = { report_type: type }
     if (startDate) params.start_date = startDate
     if (endDate) params.end_date = endDate
+    if (industry) params.industry = industry
+    if (source) params.source = source
     return api.get('/reports/pdf', { params, responseType: 'blob' })
   },
-  downloadExcel(type = 'weekly', startDate = null, endDate = null) {
+  downloadExcel(type = 'weekly', startDate = null, endDate = null, industry = null, source = null) {
     const params = { report_type: type }
     if (startDate) params.start_date = startDate
     if (endDate) params.end_date = endDate
+    if (industry) params.industry = industry
+    if (source) params.source = source
     return api.get('/reports/excel', { params, responseType: 'blob' })
   },
-  downloadHtml(type = 'weekly', startDate = null, endDate = null) {
+  downloadHtml(type = 'weekly', startDate = null, endDate = null, industry = null, source = null) {
     const params = { report_type: type }
     if (startDate) params.start_date = startDate
     if (endDate) params.end_date = endDate
+    if (industry) params.industry = industry
+    if (source) params.source = source
     return api.get('/reports/html', { params, responseType: 'blob' })
   }
 }

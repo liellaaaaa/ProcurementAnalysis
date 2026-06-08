@@ -9,12 +9,6 @@
           <div class="filter-row">
             <SourceSelector v-model="selectedSource" />
             <IndustrySelector v-model="selectedIndustry" />
-            <CategorySelector
-              v-model="selectedCategoryId"
-              v-model:subcategoryValue="selectedSubcategoryId"
-              :industry="selectedIndustry"
-              @change="handleFilterChange"
-            />
             <el-button type="primary" @click="loadStats" class="query-btn">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="11" cy="11" r="8"/>
@@ -124,7 +118,6 @@ import { reportApi } from '../api/report.js'
 import { priceApi } from '../api/price.js'
 import SourceSelector from '../components/SourceSelector.vue'
 import IndustrySelector from '../components/IndustrySelector.vue'
-import CategorySelector from '../components/CategorySelector.vue'
 
 const reportType = ref('weekly')
 const month = ref('')
@@ -132,8 +125,6 @@ const startDate = ref('')
 const endDate = ref('')
 const selectedSource = ref(null)
 const selectedIndustry = ref(null)
-const selectedCategoryId = ref(null)
-const selectedSubcategoryId = ref(null)
 const stats = ref({})
 const rankingData = ref({ rising: [], falling: [] })
 
@@ -159,6 +150,11 @@ watch(reportType, (type) => {
   }
 }, { immediate: true })
 
+// 行业或数据源变化时自动刷新统计
+watch([selectedSource, selectedIndustry], () => {
+  loadStats()
+})
+
 onMounted(() => {
   loadStats()
 })
@@ -175,11 +171,6 @@ function getEffectiveDates() {
   return { startDate: s || null, endDate: e || null }
 }
 
-function handleFilterChange({ categoryId, subcategoryId }) {
-  selectedCategoryId.value = categoryId
-  selectedSubcategoryId.value = subcategoryId
-}
-
 async function loadStats() {
   try {
     const { startDate: s, endDate: e } = getEffectiveDates()
@@ -192,8 +183,6 @@ async function loadStats() {
     const params = { start_date: s, end_date: e, limit: 1000 }
     if (selectedSource.value) params.source = selectedSource.value
     if (selectedIndustry.value) params.industry = selectedIndustry.value
-    if (selectedCategoryId.value) params.category_id = selectedCategoryId.value
-    if (selectedSubcategoryId.value) params.subcategory_id = selectedSubcategoryId.value
     const pricesRes = await priceApi.getPrices(params)
     const records = pricesRes.data || []
 
@@ -253,7 +242,7 @@ async function loadStats() {
 async function downloadPdf() {
   try {
     const { startDate: s, endDate: e } = getEffectiveDates()
-    const res = await reportApi.downloadPdf(reportType.value, s, e)
+    const res = await reportApi.downloadPdf(reportType.value, s, e, selectedIndustry.value, selectedSource.value)
     const blob = new Blob([res.data], { type: 'application/pdf' })
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -270,7 +259,7 @@ async function downloadPdf() {
 async function downloadExcel() {
   try {
     const { startDate: s, endDate: e } = getEffectiveDates()
-    const res = await reportApi.downloadExcel(reportType.value, s, e)
+    const res = await reportApi.downloadExcel(reportType.value, s, e, selectedIndustry.value, selectedSource.value)
     const blob = new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -287,7 +276,7 @@ async function downloadExcel() {
 async function downloadHtml() {
   try {
     const { startDate: s, endDate: e } = getEffectiveDates()
-    const res = await reportApi.downloadHtml(reportType.value, s, e)
+    const res = await reportApi.downloadHtml(reportType.value, s, e, selectedIndustry.value, selectedSource.value)
     const blob = new Blob([res.data], { type: 'text/html' })
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement('a')

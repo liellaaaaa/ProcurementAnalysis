@@ -1,10 +1,9 @@
 from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import List, Optional
 from pydantic import BaseModel
-from datetime import date
 from sqlalchemy.orm import Session
 from backend.api.deps import get_db
-from backend.models.database import Product, ProductCategory, Category
+from backend.models.database import Product, ProductCategory
 from backend.services.operation_logger import OperationLogger
 
 router = APIRouter(prefix="/api/v1/products", tags=["产品管理"])
@@ -37,12 +36,10 @@ async def get_products(
     db: Session = Depends(get_db),
     industry: Optional[str] = None,
     category: Optional[str] = None,
-    category_id: Optional[int] = None,
-    subcategory_id: Optional[int] = None,
     is_active: Optional[bool] = True,
     limit: int = Query(100, le=500)
 ):
-    """获取产品列表（支持行业、品类筛选）"""
+    """获取产品列表（支持行业筛选）"""
     query = db.query(Product)
 
     if industry:
@@ -52,22 +49,11 @@ async def get_products(
     if is_active is not None:
         query = query.filter(Product.is_active == is_active)
 
-    # Filter by category (一级品类)
-    if category_id:
-        subcat_ids = [c.id for c in db.query(Category).filter(Category.parent_id == category_id).all()]
-        pc_query = db.query(ProductCategory.product_id).filter(ProductCategory.category_id.in_(subcat_ids + [category_id]))
-        query = query.filter(Product.id.in_(pc_query))
-
-    # Filter by subcategory (二级品类)
-    if subcategory_id:
-        pc_query = db.query(ProductCategory.product_id).filter(ProductCategory.category_id == subcategory_id)
-        query = query.filter(Product.id.in_(pc_query))
-
     products = query.limit(limit).all()
 
     # 记录查询日志
     OperationLogger.log_product_query(
-        filters={"category": category, "category_id": category_id, "is_active": is_active},
+        filters={"category": category, "is_active": is_active},
         count=len(products)
     )
     return products

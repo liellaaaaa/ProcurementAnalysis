@@ -21,31 +21,15 @@
         </template>
 
         <div class="selector-row">
-          <IndustrySelector v-model="selectedIndustry" />
-          <CategorySelector
-            v-model="selectedCategoryId"
-            v-model:subcategoryValue="selectedSubcategoryId"
-            :industry="selectedIndustry"
-            @change="handleCategoryChange"
-          />
           <SourceSelector @update:source="val => { selectedSource = val; loadComparison() }" />
-          <el-date-picker
-            v-model="dateRange"
-            type="daterange"
-            range-separator="至"
-            start-placeholder="开始"
-            end-placeholder="结束"
-            size="default"
-            style="width: 200px"
-            @change="loadComparison"
-          />
+          <IndustrySelector v-model="selectedIndustry" />
         </div>
 
         <el-select
           v-model="selectedProducts"
           multiple
           placeholder="选择至少2个产品进行对比"
-          style="width: 100%; margin-top: 16px"
+          style="width: 100%; margin-top: 12px"
           @change="loadComparison"
           class="product-select"
         >
@@ -61,6 +45,31 @@
             </span>
           </el-option>
         </el-select>
+
+        <div class="date-row">
+          <span class="date-label">时间范围</span>
+          <div class="date-buttons">
+            <el-button
+              v-for="d in datePresets"
+              :key="d"
+              :type="selectedDays === d ? 'primary' : 'default'"
+              size="small"
+              @click="setDateDays(d)"
+            >{{ d }}天</el-button>
+            <el-button size="small" @click="showCustomDate = true">自定义</el-button>
+          </div>
+          <el-date-picker
+            v-if="showCustomDate"
+            v-model="dateRange"
+            type="daterange"
+            range-separator="至"
+            start-placeholder="开始"
+            end-placeholder="结束"
+            size="small"
+            style="width: 220px; margin-left: 8px"
+            @change="loadComparison"
+          />
+        </div>
 
         <div v-if="selectedProducts.length < 2" class="hint-box">
           <div class="hint-icon">
@@ -106,7 +115,6 @@ import { priceApi } from '../api/price.js'
 import { productApi } from '../api/product.js'
 import SourceSelector from '../components/SourceSelector.vue'
 import IndustrySelector from '../components/IndustrySelector.vue'
-import CategorySelector from '../components/CategorySelector.vue'
 import * as echarts from 'echarts'
 
 const chartRef = ref(null)
@@ -114,24 +122,21 @@ const products = ref([])
 const selectedProducts = ref([])
 const selectedSource = ref(null)
 const selectedIndustry = ref(null)
-const selectedCategoryId = ref(null)
-const selectedSubcategoryId = ref(null)
 const dateRange = ref(null)
+const datePresets = [7, 30, 60, 90]
+const selectedDays = ref(30)
+const showCustomDate = ref(false)
 let chartInstance = null
 
 const colors = ['#0077cc', '#00a8e8', '#4db8e8', '#005fa3', '#003d6b', '#006594']
 
 const filteredProducts = computed(() => {
-  // 产品列表已在 loadProducts 时按分类筛选，这里直接返回
-  console.log('filteredProducts computed:', products.value.length, 'products')
   return products.value
 })
 
 // 监听行业变化，重新加载产品列表
 watch(selectedIndustry, (newIndustry) => {
   selectedProducts.value = []
-  selectedCategoryId.value = null
-  selectedSubcategoryId.value = null
   loadProducts()
 })
 
@@ -146,27 +151,20 @@ async function loadProducts() {
     if (selectedIndustry.value) {
       params.industry = selectedIndustry.value
     }
-    if (selectedCategoryId.value) {
-      params.category_id = selectedCategoryId.value
-    }
-    if (selectedSubcategoryId.value) {
-      params.subcategory_id = selectedSubcategoryId.value
-    }
-    console.log('Loading products with params:', params)
+    console.log('loadProducts params:', params)
     const res = await productApi.getProducts(params)
-    console.log('Products loaded:', res.data.length)
-    products.value = res.data
+    console.log('loadProducts result count:', res.data?.length)
+    products.value = res.data || []
   } catch (e) {
     console.error('Failed to load products', e)
   }
 }
 
-function handleCategoryChange({ categoryId, subcategoryId }) {
-  console.log('Category changed:', categoryId, subcategoryId)
-  selectedCategoryId.value = categoryId
-  selectedSubcategoryId.value = subcategoryId
-  selectedProducts.value = []
-  loadProducts()
+function setDateDays(days) {
+  selectedDays.value = days
+  showCustomDate.value = false
+  dateRange.value = null
+  loadComparison()
 }
 
 function getNiceAxisRange(prices) {
@@ -194,8 +192,7 @@ async function loadComparison() {
   if (selectedProducts.value.length < 2) return
 
   try {
-    // Calculate days from date range, default to 30 if not set
-    let days = 30
+    let days = selectedDays.value
     if (dateRange.value && dateRange.value.length === 2) {
       const start = new Date(dateRange.value[0])
       const end = new Date(dateRange.value[1])
@@ -221,10 +218,9 @@ function updateChart(seriesData) {
     chartInstance = echarts.init(chartRef.value)
   }
 
-  // getBenchmarkHistory returns items with record_date at top level
   const allDates = [...new Set(seriesData.flatMap(s => s.data.map(d => d.record_date)))].sort()
 
-   const series = seriesData.map((s, i) => ({
+  const series = seriesData.map((s, i) => ({
     name: s.name,
     type: 'line',
     smooth: true,
@@ -239,7 +235,6 @@ function updateChart(seriesData) {
     lineStyle: { width: 2.5 }
   }))
 
-  // 计算Y轴范围（自适应数据）
   const allPrices = seriesData.flatMap(s => s.data.map(d => d.price)).filter(v => v != null)
   const axisRange = getNiceAxisRange(allPrices)
 
@@ -273,14 +268,14 @@ function updateChart(seriesData) {
       data: allDates,
       boundaryGap: false,
       axisLine: { lineStyle: { color: '#E8E3F3' } },
-      axisLabel: { color: '#94A3B4', fontSize: 11 }
+      axisLabel: { color: '#94A3B8', fontSize: 11 }
     },
     yAxis: {
       type: 'value',
       name: '价格 (元/吨)',
       nameTextStyle: { color: '#64748B', fontSize: 11 },
       axisLine: { show: false },
-      axisLabel: { color: '#94A3B4', fontSize: 11 },
+      axisLabel: { color: '#94A3B8', fontSize: 11 },
       splitLine: { lineStyle: { color: '#F0EBF9', type: 'dashed' } },
       ...(axisRange ? { min: axisRange.min, max: axisRange.max } : {}),
       scale: true
@@ -395,6 +390,27 @@ onUnmounted(() => {
   height: 6px;
   border-radius: 50%;
   background: var(--color-primary);
+}
+
+.date-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: var(--bg-primary);
+  border-radius: 8px;
+}
+
+.date-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.date-buttons {
+  display: flex;
+  gap: 6px;
 }
 
 .hint-box {

@@ -79,6 +79,7 @@ async def get_prices(
     source: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    industry: Optional[str] = None,
     limit: int = Query(100, le=1000),
     db: Session = Depends(get_db)
 ):
@@ -86,22 +87,25 @@ async def get_prices(
     results = []
 
     # 从 benchmark_prices 读取
-    bp_query = db.query(BenchmarkPrice).filter(BenchmarkPrice.record_date >= start_date) if start_date else db.query(BenchmarkPrice)
+    bp_query = db.query(BenchmarkPrice, Product.product_code).join(Product, BenchmarkPrice.product_id == Product.id)
+    if start_date:
+        bp_query = bp_query.filter(BenchmarkPrice.record_date >= start_date)
     if product_id:
         bp_query = bp_query.filter(BenchmarkPrice.product_id == product_id)
     if source and source != '__all__':
         bp_query = bp_query.filter(BenchmarkPrice.source == source)
     if end_date:
         bp_query = bp_query.filter(BenchmarkPrice.record_date <= end_date)
+    if industry:
+        bp_query = bp_query.filter(Product.industry == industry)
 
     bp_results = bp_query.order_by(BenchmarkPrice.record_date.desc()).limit(limit).all()
-    for bp in bp_results:
-        product = db.query(Product).filter(Product.id == bp.product_id).first()
+    for bp, product_code in bp_results:
         results.append({
             "id": bp.id,
             "product_id": bp.product_id,
             "product_name": bp.product_name,
-            "product_code": product.product_code if product else None,
+            "product_code": product_code,
             "price": bp.price,
             "trend": None,
             "change_percent": None,
@@ -125,6 +129,8 @@ async def get_prices(
             pr_query = pr_query.filter(PriceRecord.record_date >= start_date)
         if end_date:
             pr_query = pr_query.filter(PriceRecord.record_date <= end_date)
+        if industry:
+            pr_query = pr_query.filter(Product.industry == industry)
 
         pr_results = pr_query.order_by(PriceRecord.record_date.desc()).limit(limit).all()
         for pr, product_name, product_code in pr_results:
