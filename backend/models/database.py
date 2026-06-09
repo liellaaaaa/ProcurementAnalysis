@@ -77,7 +77,6 @@ class BenchmarkPrice(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
-    product_name = Column(String(100), nullable=False)
     spec = Column(String(200))       # 基准规格
     brand = Column(String(100))      # 品牌
     market = Column(String(50))      # 市场

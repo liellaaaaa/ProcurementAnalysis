@@ -87,7 +87,7 @@ async def get_prices(
     results = []
 
     # 从 benchmark_prices 读取
-    bp_query = db.query(BenchmarkPrice, Product.product_code).join(Product, BenchmarkPrice.product_id == Product.id)
+    bp_query = db.query(BenchmarkPrice, Product.product_name, Product.product_code).join(Product, BenchmarkPrice.product_id == Product.id)
     if start_date:
         bp_query = bp_query.filter(BenchmarkPrice.record_date >= start_date)
     if product_id:
@@ -100,21 +100,21 @@ async def get_prices(
         bp_query = bp_query.filter(Product.industry == industry)
 
     bp_results = bp_query.order_by(BenchmarkPrice.record_date.desc()).limit(limit).all()
-    for bp, product_code in bp_results:
+    for bp, product_name, product_code in bp_results:
         results.append({
             "id": bp.id,
             "product_id": bp.product_id,
-            "product_name": bp.product_name,
+            "product_name": product_name,
             "product_code": product_code,
             "price": bp.price,
             "trend": None,
             "change_percent": None,
-            "source": bp.source,
+            "source": bp.source or source or "shengyishe",
             "region": "",
             "supplier": "",
             "brand": bp.brand or "",
             "specification": bp.spec or "",
-            "unit": bp.unit,
+            "unit": bp.unit or "元/吨",
             "price_type": "基准价",
             "record_date": bp.record_date.strftime('%Y/%m/%d') if bp.record_date else "",
             "extra_data": {}
@@ -161,7 +161,7 @@ async def get_latest_prices(
     # 先从 benchmark_prices 获取最新基准价
     bp_query = db.query(
         BenchmarkPrice.product_id,
-        BenchmarkPrice.product_name,
+        Product.product_name,
         Product.product_code,
         Product.industry,
         BenchmarkPrice.record_date,
@@ -612,9 +612,9 @@ async def get_dashboard_distribution(
 
     # 优先从 benchmark_prices 读取
     query = db.query(
-        BenchmarkPrice.product_name,
+        Product.product_name,
         func.avg(BenchmarkPrice.price).label('avg_price')
-    ).filter(
+    ).join(Product, BenchmarkPrice.product_id == Product.id).filter(
         BenchmarkPrice.record_date >= start_date
     )
 
@@ -622,9 +622,9 @@ async def get_dashboard_distribution(
         query = query.filter(BenchmarkPrice.source == source)
 
     if industry:
-        query = query.join(Product, BenchmarkPrice.product_id == Product.id).filter(Product.industry == industry)
+        query = query.filter(Product.industry == industry)
 
-    results = query.group_by(BenchmarkPrice.product_id).order_by(func.avg(BenchmarkPrice.price).desc()).limit(10).all()
+    results = query.group_by(Product.id).order_by(func.avg(BenchmarkPrice.price).desc()).limit(10).all()
 
     # 如果 benchmark_prices 没有数据，fallback 到 price_records
     if not results:

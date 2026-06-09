@@ -325,7 +325,6 @@ class ShengyisheScraper:
 
             bp = BenchmarkPrice(
                 product_id=product_id,
-                product_name=data['product_name'],
                 spec=data.get('spec', ''),
                 brand=data.get('brand', ''),
                 market=data.get('market', ''),
