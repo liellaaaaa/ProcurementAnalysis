@@ -994,7 +994,7 @@ async def get_supplier_comparison(
         benchmark_price = benchmark_map.get(q.product_id)
         if benchmark_price and benchmark_price > 0:
             dev = (q.price - benchmark_price) / benchmark_price
-                       supplier_stats[supplier]["_deviations"].append(dev)
+            supplier_stats[supplier]["_deviations"].append(dev)
             supplier_stats[supplier]["_price_sum"] += q.price
 
     supplier_counts = []
