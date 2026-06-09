@@ -973,7 +973,7 @@ async def get_supplier_comparison(
             supplier_stats[supplier] = {"supplier": supplier, "count": 0, "product_count": 0}
         supplier_stats[supplier]["count"] += 1
         # 用 set 记录该供应商供应了哪些 product_id
-        if not hasattr(supplier_stats[supplier], "_product_ids"):
+        if "_product_ids" not in supplier_stats[supplier]:
             supplier_stats[supplier]["_product_ids"] = set()
         supplier_stats[supplier]["_product_ids"].add(q.product_id)
 
@@ -984,10 +984,6 @@ async def get_supplier_comparison(
             "count": stats["count"],
             "product_count": len(stats["_product_ids"])
         })
-    # 清理临时字段
-    for s in supplier_counts:
-        if "_product_ids" in s:
-            del s["_product_ids"]
 
     # 2. product_supplier_prices: 同一产品多供应商的价格对比（取最新价格）
     # 按 product_id + supplier 聚合，取每个组合的最新报价
@@ -1038,7 +1034,7 @@ async def get_supplier_comparison(
             }
         else:
             supplier_products_map[supplier][pid]["count"] += 1
-            if q.publish_date > supplier_products_map[supplier][pid].get("_latest_date") or date.min:
+            if q.publish_date > (supplier_products_map[supplier][pid].get("_latest_date") or date.min):
                 supplier_products_map[supplier][pid]["price"] = q.price
                 supplier_products_map[supplier][pid]["_latest_date"] = q.publish_date
 
