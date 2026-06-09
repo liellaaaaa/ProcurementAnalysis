@@ -1331,9 +1331,9 @@ function initSupplierTreemap() {
     },
     visualMap: {
       show: false,
+      type: 'piecewise',
       min: -0.3,
       max: 0.3,
-      inRange: { color: ['#008000', '#90EE90', '#D3D3D3', '#FFB6C1', '#DC143C'] },
       pieces: [
         { lte: -0.15, color: '#008000' },
         { gt: -0.15, lte: 0.15, color: '#D3D3D3' },
