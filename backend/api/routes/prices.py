@@ -965,24 +965,61 @@ async def get_supplier_comparison(
 
     quotes = base_query.all()
 
+    # 获取所有产品的最新基准价
+    benchmark_map = {}
+    benchmark_subquery = db.query(
+        BenchmarkPrice.product_id,
+        func.max(BenchmarkPrice.record_date).label('max_date')
+    ).group_by(BenchmarkPrice.product_id).subquery()
+
+    benchmark_rows = db.query(BenchmarkPrice).join(
+        benchmark_subquery,
+        (BenchmarkPrice.product_id == benchmark_subquery.c.product_id) &
+        (BenchmarkPrice.record_date == benchmark_subquery.c.max_date)
+    ).all()
+
+    for bp in benchmark_rows:
+        benchmark_map[bp.product_id] = bp.price
+
     # 1. supplier_counts: 每个供应商的报价条数和产品数
     supplier_stats = {}
     for q in quotes:
         supplier = q.supplier or "未知供应商"
         if supplier not in supplier_stats:
-            supplier_stats[supplier] = {"supplier": supplier, "count": 0, "product_count": 0}
+            supplier_stats[supplier] = {"supplier": supplier, "count": 0, "product_count": 0, "_deviations": [], "_product_ids": set(), "_price_sum": 0}
         supplier_stats[supplier]["count"] += 1
         # 用 set 记录该供应商供应了哪些 product_id
-        if "_product_ids" not in supplier_stats[supplier]:
-            supplier_stats[supplier]["_product_ids"] = set()
         supplier_stats[supplier]["_product_ids"].add(q.product_id)
+        # 计算偏离度
+        benchmark_price = benchmark_map.get(q.product_id)
+        if benchmark_price and benchmark_price > 0:
+            dev = (q.price - benchmark_price) / benchmark_price
+                       supplier_stats[supplier]["_deviations"].append(dev)
+            supplier_stats[supplier]["_price_sum"] += q.price
 
     supplier_counts = []
     for supplier, stats in supplier_stats.items():
+        deviations = stats["_deviations"]
+        avg_dev = sum(deviations) / len(deviations) if deviations else 0
+        max_dev = max(deviations) if deviations else 0
+
+        if avg_dev <= -0.15:
+            status_label = "优"
+        elif avg_dev >= 0.15:
+            status_label = "风险"
+        else:
+            status_label = "正常"
+
+        avg_price = round(stats["_price_sum"] / stats["count"], 2) if stats["count"] else 0
+
         supplier_counts.append({
             "supplier": supplier,
             "count": stats["count"],
-            "product_count": len(stats["_product_ids"])
+            "product_count": len(stats["_product_ids"]),
+            "avg_price": avg_price,
+            "avg_deviation": round(avg_dev, 4),
+            "max_deviation": round(max_dev, 4),
+            "status_label": status_label
         })
 
     # 2. product_supplier_prices: 同一产品多供应商的价格对比（取最新价格）
@@ -1008,12 +1045,16 @@ async def get_supplier_comparison(
     # 清理临时字段并转列表
     product_supplier_prices = []
     for key, item in product_supplier_map.items():
+        benchmark_price = benchmark_map.get(item["product_id"])
+        deviation = round((item["price"] - benchmark_price) / benchmark_price, 4) if benchmark_price and benchmark_price > 0 else 0
         product_supplier_prices.append({
             "product_id": item["product_id"],
             "product": item["product"],
             "supplier": item["supplier"],
             "price": item["price"],
-            "quote_count": item["quote_count"]
+            "quote_count": item["quote_count"],
+            "benchmark_price": benchmark_price or 0,
+            "deviation": deviation
         })
 
     # 3. supplier_products: 每个供应商供应的产品列表
@@ -1042,11 +1083,15 @@ async def get_supplier_comparison(
     for supplier, products in supplier_products_map.items():
         product_list = []
         for pid, pdata in products.items():
+            bp = benchmark_map.get(pid)
+            dev = round((pdata["price"] - bp) / bp, 4) if bp and bp > 0 else 0
             product_list.append({
                 "product_id": pdata["product_id"],
                 "product": pdata["product"],
                 "price": pdata["price"],
-                "count": pdata["count"]
+                "count": pdata["count"],
+                "benchmark_price": bp or 0,
+                "deviation": dev
             })
         supplier_products.append({
             "supplier": supplier,
