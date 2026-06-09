@@ -1,10 +1,45 @@
 """
 预警服务 - 价格预警触发逻辑
 """
-from typing import Optional, List
+from typing import Optional, List, Tuple
 from datetime import datetime
 from sqlalchemy.orm import Session
-from backend.models.database import AlertConfig, AlertRecord, PriceRecord, Product
+from backend.models.database import AlertConfig, AlertRecord, PriceRecord, BenchmarkPrice, Product
+
+
+def get_latest_price_record(session: Session, product_id: int):
+    """获取最新价格记录，优先从 BenchmarkPrice 获取，其次 PriceRecord"""
+    # 优先从 BenchmarkPrice 获取（主数据源）
+    latest_bp = session.query(BenchmarkPrice).filter(
+        BenchmarkPrice.product_id == product_id
+    ).order_by(BenchmarkPrice.record_date.desc()).first()
+
+    if latest_bp:
+        return latest_bp, 'benchmark'
+
+    # fallback 到 PriceRecord
+    latest_pr = session.query(PriceRecord).filter(
+        PriceRecord.product_id == product_id
+    ).order_by(PriceRecord.record_date.desc()).first()
+
+    if latest_pr:
+        return latest_pr, 'price_record'
+
+    return None, None
+
+
+def get_previous_price_record(session: Session, product_id: int, latest_record_date, source: str):
+    """获取上一个周期的价格记录，source 参数决定从哪个表获取"""
+    if source == 'benchmark':
+        return session.query(BenchmarkPrice).filter(
+            BenchmarkPrice.product_id == product_id,
+            BenchmarkPrice.record_date < latest_record_date
+        ).order_by(BenchmarkPrice.record_date.desc()).first()
+    else:
+        return session.query(PriceRecord).filter(
+            PriceRecord.product_id == product_id,
+            PriceRecord.record_date < latest_record_date
+        ).order_by(PriceRecord.record_date.desc()).first()
 
 
 def check_and_trigger_alerts(session: Session, product_id: int, triggered_price: float = None) -> List[AlertRecord]:
@@ -31,16 +66,12 @@ def check_and_trigger_alerts(session: Session, product_id: int, triggered_price:
     if not configs:
         return []
 
-    # 获取最新价格记录
+    # 获取最新价格记录（优先从 BenchmarkPrice，其次 PriceRecord）
     if triggered_price is not None:
-        latest_record = session.query(PriceRecord).filter(
-            PriceRecord.product_id == product_id
-        ).order_by(PriceRecord.record_date.desc()).first()
+        latest_record, source = get_latest_price_record(session, product_id)
         current_price = triggered_price
     else:
-        latest_record = session.query(PriceRecord).filter(
-            PriceRecord.product_id == product_id
-        ).order_by(PriceRecord.record_date.desc()).first()
+        latest_record, source = get_latest_price_record(session, product_id)
         current_price = latest_record.price if latest_record else None
 
     if current_price is None:
@@ -58,10 +89,14 @@ def check_and_trigger_alerts(session: Session, product_id: int, triggered_price:
 
         elif config.alert_type == "change_rate":
             # 价格变化率：需要对比上次价格
-            prev_record = session.query(PriceRecord).filter(
-                PriceRecord.product_id == product_id,
-                PriceRecord.record_date < (latest_record.record_date if latest_record else datetime.now().date())
-            ).order_by(PriceRecord.record_date.desc()).first()
+            if latest_record:
+                prev_record = get_previous_price_record(
+                    session, product_id,
+                    latest_record.record_date if hasattr(latest_record, 'record_date') else datetime.now().date(),
+                    source
+                )
+            else:
+                prev_record = None
 
             if prev_record and prev_record.price > 0:
                 change_rate = ((current_price - prev_record.price) / prev_record.price) * 100
@@ -73,10 +108,11 @@ def check_and_trigger_alerts(session: Session, product_id: int, triggered_price:
             # 趋势预警：价格涨跌时触发（需要至少两条记录）
             if not latest_record:
                 continue
-            prev_record = session.query(PriceRecord).filter(
-                PriceRecord.product_id == product_id,
-                PriceRecord.id != latest_record.id
-            ).order_by(PriceRecord.record_date.desc()).first()
+            prev_record = get_previous_price_record(
+                session, product_id,
+                latest_record.record_date if hasattr(latest_record, 'record_date') else datetime.now().date(),
+                source
+            )
 
             if prev_record:
                 if current_price > prev_record.price:
