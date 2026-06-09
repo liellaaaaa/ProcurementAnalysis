@@ -562,6 +562,8 @@ let pieChart = null
 let barChart = null
 let searchTimer = null
 
+const pieColors = ['#0077cc', '#00a8e8', '#4db8e8', '#005fa3', '#003d6b', '#006594', '#0077cc', '#00a8e8', '#e91e63', '#6739b6']
+
 async function loadLatestPrices() {
   try {
     const params = {
@@ -1007,7 +1009,6 @@ async function loadDistributionData() {
         labels: res.data.labels,
         sizes: res.data.sizes
       }
-      const pieColors = ['#0077cc', '#00a8e8', '#4db8e8', '#005fa3', '#003d6b', '#006594', '#0077cc', '#00a8e8', '#e91e63', '#6739b6']
       pieChart.setOption({
         tooltip: {
           trigger: 'item',
@@ -1042,8 +1043,8 @@ async function loadSupplierComparison() {
     if (selectedSupplierProduct.value) {
       params.product_id = selectedSupplierProduct.value
     }
-    const res = await priceApi.getSupplierComparison(params)
-    const data = res.data
+       const res = await priceApi.getSupplierComparison(params)
+    const data = res.data || {}
 
     // Update pie chart: supplier quote counts
     if (supplierPieChart && data.supplier_counts?.length > 0) {
@@ -1307,6 +1308,8 @@ onUnmounted(() => {
   lineChart?.dispose()
   pieChart?.dispose()
   barChart?.dispose()
+  supplierPieChart?.dispose()
+  supplierBarChart?.dispose()
   Object.values(expandChartRefs.value).forEach(el => {
     if (el) {
       const chart = echarts.getInstanceByDom(el)
