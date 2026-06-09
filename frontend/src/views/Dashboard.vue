@@ -186,6 +186,7 @@
               <span>供应商智能分析看板</span>
             </div>
             <div class="controls">
+              <IndustrySelector v-model="filter2Industry" />
               <el-select
                 v-model="selectedSupplierProduct"
                 clearable
