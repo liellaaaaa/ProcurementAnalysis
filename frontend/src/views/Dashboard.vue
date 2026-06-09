@@ -170,7 +170,7 @@
         </div>
       </el-card>
 
-      <!-- 第三张卡片：供应商对比 -->
+      <!-- 第三张卡片：供应商智能分析看板 -->
       <el-card class="chart-card animate-in" style="animation-delay: 0.2s">
         <template #header>
           <div class="card-header">
@@ -183,7 +183,7 @@
                   <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
                 </svg>
               </div>
-              <span>供应商对比</span>
+              <span>供应商智能分析看板</span>
             </div>
             <div class="controls">
               <el-select
@@ -209,42 +209,68 @@
             </div>
           </div>
         </template>
-        <div class="charts-grid-46">
-          <div class="chart-4">
-            <div class="chart-wrapper" style="width:100%;height:100%;min-height:220px;position:relative;">
-              <div ref="supplierChartRef" class="pie-chart" style="width:100%;height:100%;min-height:220px;"></div>
+
+        <div class="supplier-treemap-panel">
+          <!-- 左侧 Treemap (80%) -->
+          <div class="treemap-container" ref="supplierTreemapRef"></div>
+
+          <!-- 右侧详情面板 (20%) -->
+          <div class="supplier-detail-panel">
+            <!-- 空闲态 -->
+            <div v-if="!selectedSupplier" class="detail-idle">
+              <div class="idle-summary">
+                <p class="idle-title">供应商总览</p>
+                <p class="idle-num">{{ supplierSummary?.total || 0 }} 个供应商</p>
+                <p class="idle-num">{{ supplierSummary?.totalCount || 0 }} 条报价</p>
+                <p class="idle-dev" :class="getDevClass(supplierSummary?.avgDeviation)">
+                  平均偏离: {{ supplierSummary ? (supplierSummary.avgDeviation * 100).toFixed(1) : 0 }}%
+                </p>
+              </div>
+              <p class="idle-hint">点击方块查看供应商详情</p>
+            </div>
+
+            <!-- 选中态 -->
+            <div v-else class="detail-active">
+              <div class="detail-header">
+                <h3 class="supplier-name">{{ selectedSupplier.name }}</h3>
+                <el-tag :type="getTagType(selectedSupplier.status_label)" size="small">
+                  {{ selectedSupplier.status_label }}
+                </el-tag>
+              </div>
+              <div class="detail-cards">
+                <div class="detail-card">
+                  <span class="card-label">报价条数</span>
+                  <span class="card-value">{{ selectedSupplier.count }}条</span>
+                </div>
+                <div class="detail-card">
+                  <span class="card-label">涉及产品</span>
+                  <span class="card-value">{{ selectedSupplier.product_count }}个</span>
+                </div>
+                <div class="detail-card">
+                  <span class="card-label">平均偏离</span>
+                  <span class="card-value" :class="getDevClass(selectedSupplier.avg_deviation)">
+                    {{ selectedSupplier.avg_deviation != null ? (selectedSupplier.avg_deviation * 100).toFixed(1) : 0 }}%
+                  </span>
+                </div>
+                <div class="detail-card">
+                  <span class="card-label">最大偏离</span>
+                  <span class="card-value" :class="getDevClass(selectedSupplier.max_deviation)">
+                    {{ selectedSupplier.max_deviation != null ? (selectedSupplier.max_deviation * 100).toFixed(1) : 0 }}%
+                  </span>
+                </div>
+              </div>
+              <div class="product-list">
+                <p class="list-title">供应产品</p>
+                <div v-for="sp in getSupplierProducts(selectedSupplier.name)" :key="sp.product_id" class="product-item">
+                  <span class="product-name">{{ sp.product }}</span>
+                  <span class="product-price">¥{{ sp.price?.toLocaleString() }}</span>
+                  <span class="product-dev" :class="getDevClass(sp.deviation)">
+                    {{ sp.deviation != null ? (sp.deviation * 100).toFixed(1) : 0 }}%
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
-          <div class="chart-6">
-            <div class="chart-wrapper" style="width:100%;height:100%;min-height:220px;position:relative;">
-              <div ref="supplierBarChartRef" style="width:100%;height:100%;min-height:220px;"></div>
-            </div>
-          </div>
-        </div>
-        <div class="supplier-table" v-if="supplierProducts.length > 0">
-          <p class="expand-title" style="margin-top: 12px;">供应商-产品明细</p>
-          <el-table :data="supplierProducts" size="small" style="width: 100%;" row-key="supplier">
-            <el-table-column prop="supplier" label="供应商" min-width="120" />
-            <el-table-column label="产品数" min-width="80">
-              <template #default="{ row }">{{ row.products.length }}个</template>
-            </el-table-column>
-            <el-table-column label="报价条数" min-width="100">
-              <template #default="{ row }">{{ row.products.reduce((s, p) => s + p.count, 0) }}条</template>
-            </el-table-column>
-            <el-table-column label="最高报价" min-width="120">
-              <template #default="{ row }">
-                <span class="price-value">¥{{ row.products.length > 0 ? Math.max(...row.products.map(p => p.price)).toLocaleString() : '-' }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column label="最低报价" min-width="120">
-              <template #default="{ row }">
-                <span class="price-value">¥{{ row.products.length > 0 ? Math.min(...row.products.map(p => p.price)).toLocaleString() : '-' }}</span>
-              </template>
-            </el-table-column>
-          </el-table>
-        </div>
-        <div v-else class="no-detail-data" style="padding: 24px; text-align: center; color: #999;">
-          暂无供应商数据
         </div>
       </el-card>
 
@@ -462,13 +488,14 @@ const compareDays = ref(7)
 const expandChartDays = ref(7)
 
 // Supplier comparison card
-const supplierChartRef = ref(null)
-const supplierBarChartRef = ref(null)
+const supplierTreemapRef = ref(null)
+const selectedSupplier = ref(null)
+const supplierSummary = ref(null)
+let supplierTreemap = null
+const TOP_N = 12
 const supplierProducts = ref([])
 const selectedSupplierProduct = ref(null)
 const supplierComparisonDays = ref(30)
-let supplierPieChart = null
-let supplierBarChart = null
 
 const indicatorCards = ref([
   { metricType: 'yoy', metricLabel: '同比涨幅', productName: '-', changePercent: 0, trend: 'rise', price: 0, hasData: true },
@@ -1043,45 +1070,74 @@ async function loadSupplierComparison() {
     if (selectedSupplierProduct.value) {
       params.product_id = selectedSupplierProduct.value
     }
-       const res = await priceApi.getSupplierComparison(params)
+    const res = await priceApi.getSupplierComparison(params)
     const data = res.data || {}
 
-    // Update pie chart: supplier quote counts
-    if (supplierPieChart && data.supplier_counts?.length > 0) {
-      supplierPieChart.setOption({
-        series: [{
-          data: data.supplier_counts.map((s, i) => ({
-            name: s.supplier,
-            value: s.count,
-            itemStyle: { color: pieColors[i % pieColors.length] }
-          }))
-        }]
+    const counts = data.supplier_counts || []
+    const sorted = [...counts].sort((a, b) => b.count - a.count)
+    const top = sorted.slice(0, TOP_N)
+    const others = sorted.slice(TOP_N)
+
+    const treemapData = top.map(s => ({
+      name: s.supplier,
+      value: s.count,
+      id: s.supplier,
+      avg_deviation: s.avg_deviation,
+      max_deviation: s.max_deviation,
+      status_label: s.status_label,
+      count: s.count,
+      product_count: s.product_count,
+      itemStyle: { color: s.avg_deviation != null ? undefined : '#D3D3D3' }
+    }))
+
+    if (others.length > 0) {
+      treemapData.push({
+        name: `其他供应商 (${others.length}家)`,
+        value: others.reduce((sum, s) => sum + s.count, 0),
+        id: 'others',
+        avg_deviation: null,
+        status_label: '未分析',
+        count: others.reduce((sum, s) => sum + s.count, 0),
+        product_count: others.reduce((sum, s) => sum + s.product_count, 0),
+        itemStyle: { color: '#E8E3F3' }
       })
     }
 
-    // Update bar chart: same product multi-supplier price comparison
-    if (supplierBarChart && data.product_supplier_prices?.length > 0) {
-      const sorted = [...data.product_supplier_prices].sort((a, b) => b.price - a.price)
-      const categories = sorted.map(s => s.supplier.substring(0, 10))
-      const values = sorted.map(s => s.price)
-      const barColors = values.map(v => {
-        const min = Math.min(...values)
-        const max = Math.max(...values)
-        const ratio = max > min ? (v - min) / (max - min) : 0
-        return ratio > 0.6 ? '#E63946' : ratio > 0.3 ? '#E9C46A' : '#2A9D5C'
+    if (supplierTreemap) {
+      supplierTreemap.setOption({
+        series: [{ data: treemapData }]
       })
-      supplierBarChart.setOption({
-        yAxis: { data: categories },
-        series: [{
-          data: values.map((v, i) => ({ value: v, itemStyle: { color: barColors[i] } }))
-        }]
-      })
+    }
+
+    const totalCount = counts.reduce((s, c) => s + c.count, 0)
+    const totalDev = counts.reduce((s, c) => s + (c.avg_deviation || 0), 0)
+    supplierSummary.value = {
+      total: counts.length,
+      totalCount,
+      avgDeviation: totalDev / counts.length || 0
     }
 
     supplierProducts.value = data.supplier_products || []
   } catch (e) {
     console.error('Failed to load supplier comparison', e)
   }
+}
+
+function getDevClass(dev) {
+  if (dev == null) return ''
+  if (dev <= -0.15) return 'dev-good'
+  if (dev >= 0.15) return 'dev-bad'
+  return 'dev-normal'
+}
+
+function getTagType(status) {
+  const map = { '优': 'success', '正常': 'info', '风险': 'danger' }
+  return map[status] || 'info'
+}
+
+function getSupplierProducts(supplierName) {
+  const supplier = supplierProducts.value.find(s => s.supplier === supplierName)
+  return supplier?.products || []
 }
 
 function showChartDetail(type) {
@@ -1249,43 +1305,67 @@ function initBarChart() {
   })
 }
 
-function initSupplierCharts() {
-  if (supplierChartRef.value) {
-    if (supplierPieChart) supplierPieChart.dispose()
-    supplierPieChart = echarts.init(supplierChartRef.value)
-    supplierPieChart.setOption({
-      backgroundColor: 'transparent',
-      tooltip: { trigger: 'item', formatter: '{b}: {c}条报价 ({d}%)', backgroundColor: '#fff', borderColor: '#E8E3F3', textStyle: { color: '#1E293B' }, borderRadius: 8 },
-      legend: { orient: 'vertical', left: 'left', top: 'center', textStyle: { color: '#64748B', fontSize: 10 }, itemGap: 6, width: 70 },
-      series: [{ type: 'pie', radius: ['28%', '60%'], center: ['55%', '50%'], label: { show: false }, emphasis: { label: { show: false } } }]
-    })
-  }
+function initSupplierTreemap() {
+  if (!supplierTreemapRef.value) return
+  if (supplierTreemap) supplierTreemap.dispose()
+  supplierTreemap = echarts.init(supplierTreemapRef.value)
 
-  if (supplierBarChartRef.value) {
-    if (supplierBarChart) supplierBarChart.dispose()
-    supplierBarChart = echarts.init(supplierBarChartRef.value)
-    supplierBarChart.setOption({
-      backgroundColor: 'transparent',
-      tooltip: { trigger: 'axis', backgroundColor: '#fff', borderColor: '#E8E3F3', textStyle: { color: '#1E293B' }, axisPointer: { type: 'shadow' }, borderRadius: 8, formatter: (params) => `<strong>${params[0].name}</strong><br/>价格: ¥${params[0].value?.toLocaleString() ?? '-'}` },
-      grid: { left: '3%', right: '8%', bottom: '3%', top: '3%', containLabel: true },
-      xAxis: { type: 'value', axisLine: { show: false }, axisLabel: { color: '#94A3B4' }, splitLine: { lineStyle: { color: '#F0EBF9', type: 'dashed' } } },
-      yAxis: { type: 'category', data: [], axisLine: { lineStyle: { color: '#E8E3F3' } }, axisLabel: { color: '#64748B', fontSize: 10 } },
-      series: [{ type: 'bar', barWidth: '60%' }]
-    })
-  }
+  supplierTreemap.setOption({
+    backgroundColor: 'transparent',
+    tooltip: {
+      trigger: 'item',
+      backgroundColor: '#fff',
+      borderColor: '#E8E3F3',
+      textStyle: { color: '#1E293B' },
+      borderRadius: 8,
+      formatter: (params) => {
+        if (params.data.id === 'others') {
+          return `<strong>${params.name}</strong><br/>点击查看全部供应商`
+        }
+        const dev = params.data.avg_deviation
+        const devStr = dev != null ? `${(dev * 100).toFixed(1)}%` : '-'
+        const statusColors = { '优': '#008000', '正常': '#D3D3D3', '风险': '#DC143C' }
+        const color = statusColors[params.data.status_label] || '#D3D3D3'
+        return `<strong>${params.name}</strong><br/>报价: ${params.data.count}条<br/>偏离: <span style="color:${color}">${devStr}</span><br/>状态: <span style="color:${color}">${params.data.status_label || '-'}</span>`
+      }
+    },
+    visualMap: {
+      show: false,
+      min: -0.3,
+      max: 0.3,
+      inRange: { color: ['#008000', '#90EE90', '#D3D3D3', '#FFB6C1', '#DC143C'] },
+      pieces: [
+        { lte: -0.15, color: '#008000' },
+        { gt: -0.15, lte: 0.15, color: '#D3D3D3' },
+        { gt: 0.15, color: '#DC143C' }
+      ]
+    },
+    series: [{
+      type: 'treemap',
+      data: [],
+      label: { show: true, formatter: '{b}', fontSize: 11, color: '#1E293B' },
+      itemStyle: { borderColor: '#fff', borderWidth: 2, gapWidth: 2 },
+      emphasis: { itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0,0,0,0.2)' } }
+    }]
+  })
+
+  supplierTreemap.off('click')
+  supplierTreemap.on('click', (params) => {
+    if (params.data.id === 'others') return
+    selectedSupplier.value = params.data
+  })
 }
 
 onMounted(async () => {
   initLineChart()
   initPieChart()
   initBarChart()
-  initSupplierCharts()
+  initSupplierTreemap()
   setTimeout(() => {
     lineChart?.resize()
     pieChart?.resize()
     barChart?.resize()
-    supplierPieChart?.resize()
-    supplierBarChart?.resize()
+    supplierTreemap?.resize()
   }, 100)
   await nextTick()
   await nextTick()
@@ -1299,8 +1379,7 @@ onMounted(async () => {
     lineChart?.resize()
     pieChart?.resize()
     barChart?.resize()
-    supplierPieChart?.resize()
-    supplierBarChart?.resize()
+    supplierTreemap?.resize()
   })
 })
 
@@ -1308,8 +1387,7 @@ onUnmounted(() => {
   lineChart?.dispose()
   pieChart?.dispose()
   barChart?.dispose()
-  supplierPieChart?.dispose()
-  supplierBarChart?.dispose()
+  supplierTreemap?.dispose()
   Object.values(expandChartRefs.value).forEach(el => {
     if (el) {
       const chart = echarts.getInstanceByDom(el)
@@ -1836,4 +1914,168 @@ onUnmounted(() => {
 .supplier-table {
   margin-top: 8px;
 }
+
+/* Supplier Treemap Panel */
+.supplier-treemap-panel {
+  display: flex;
+  gap: 16px;
+  height: 320px;
+}
+
+.treemap-container {
+  flex: 0 0 80%;
+  height: 100%;
+  min-width: 0;
+}
+
+.supplier-detail-panel {
+  flex: 0 0 20%;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.detail-idle {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.idle-summary {
+  flex: 1;
+}
+
+.idle-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.idle-num {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.idle-dev {
+  font-size: 12px;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.idle-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: center;
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color);
+}
+
+.detail-active {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.supplier-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.detail-card {
+  background: var(--bg-hover);
+  border-radius: 6px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.detail-card .card-label {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.detail-card .card-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.product-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.list-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.product-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 11px;
+}
+
+.product-item:last-child {
+  border-bottom: none;
+}
+
+.product-name {
+  flex: 1;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.product-price {
+  color: var(--color-primary);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.product-dev {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.dev-good { color: #008000; }
+.dev-normal { color: var(--text-muted); }
+.dev-bad { color: #DC143C; }
 </style>
