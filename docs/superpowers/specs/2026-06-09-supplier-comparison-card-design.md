@@ -1,125 +1,247 @@
-# 供应商对比卡片 - 设计文档
+# 供应商智能分析看板 - 设计文档
 
 ## 1. 概述
 
-在 Dashboard.vue 中新增第四张卡片：**供应商对比**，位置在"价格分布与关键指标卡片"下方、"详细数据卡片"上方。
+将 Dashboard.vue 中的第四张卡片（供应商对比）从传统列表视图（饼图+柱状图+明细表）升级为**供应商智能分析看板**。
 
-卡片内包含三个视图：
-- 供应商报价数量统计（饼图）
-- 同一产品多供应商价格对比（柱状图）
-- 供应商-产品交叉明细表
+核心特性：
+- **Treemap（矩形树状图）**：面积=报价条数(count)，颜色=平均偏离度(avg_deviation)
+- **交互式详情面板（20%）**：Hover显示Tooltip，Click展开供应商详情
+- **长尾聚合**：前12名独立显示，其余聚合为"更多供应商"(灰色)
 
 ## 2. 位置
 
 ```
 Card 1: 价格分析（折线图 + 涨跌排行）
 Card 2: 价格分布与关键指标（饼图 + 指标卡片）
-Card 3: 供应商对比（新卡片）
+Card 3: 供应商智能分析看板（新，改版）
 Card 4: 详细数据（表格）
 ```
 
 ## 3. UI 布局
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│  供应商对比                                               │
-├──────────────────────────────────────────────────────────┤
-│  产品选择： [下拉]   时间范围：[7天][30天][90天]            │
-│                                                          │
-│  ┌──────────────────┐  ┌──────────────────────────────┐  │
-│  │  供应商报价数量    │  │  同一产品多供应商价格对比    │  │
-│  │     (饼图)       │  │       (横向柱状图)           │  │
-│  │                  │  │                              │  │
-│  └──────────────────┘  └──────────────────────────────┘  │
-│                                                          │
-│  ┌────────────────────────────────────────────────────┐  │
-│  │  供应商 | 产品 | 价格 | 报价数                      │  │
-│  │  供应商A | 产品X | 2800元/吨 | 3条                  │  │
-│  │  供应商B | 产品X | 3100元/吨 | 5条                  │  │
-│  └────────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│  供应商智能分析看板                                                      │
+├───────────────────────────────────────────┬─────────────────────────────┤
+│  产品选择：[下拉（可选）]  时间：[7][30][90] │                             │
+├───────────────────────────────────────────┤                             │
+│                                           │                             │
+│   ┌─────────┬──────────┬───────────────┐  │   ┌─────────────────────┐   │
+│   │ 供应商A │  供应商B │    供应商C    │  │   │ 选中供应商详情       │   │
+│   │ (大,绿) │ (中,红)  │  (中,绿)      │  │   │                     │   │
+│   ├─────────┴──────────┼───────────────┤  │   │ 头部：供应商全称     │   │
+│   │   供应商D        │   供应商E      │  │   │ 标签：VIP/战略供应商  │   │
+│   │   (中,灰)        │   (小,绿)      │  │   │                     │   │
+│   ├──────────────────┴────────────────┤  │   │ 核心指标卡片：        │   │
+│   │         更多供应商 (灰色聚合)       │  │   │ - 平均溢价率         │   │
+│   └───────────────────────────────────┘  │   │ - 涉及产品数/SKU     │   │
+│                                           │   │ - 历史最高/最低报价   │   │
+│   Treemap 主屏 (80%)                      │   │                     │   │
+│                                           │   │ 可滚动产品清单：      │   │
+│                                           │   │ - 产品A | 报价 vs 基准│   │
+│                                           │   │ - 产品B | 报价 vs 基准│   │
+│                                           │   │                     │   │
+│                                           │   └─────────────────────┘   │
+│                                           │   详情面板 (20%)            │
+└───────────────────────────────────────────┴─────────────────────────────┘
 ```
 
-## 4. 组件结构
+## 4. Treemap 渲染规则
 
-### 4.1 筛选器
-- **产品下拉选择器**：单选，从 products 列表加载，默认空（显示全部供应商）
-- **时间范围**：7天 / 30天 / 90天，默认 30 天
+### 4.1 数据映射
+- **面积（size）**：供应商的 `count`（报价条数）
+  - count 越大 → 方块越大
+  - 业务含义：活跃度/配合度
+- **颜色（color）**：供应商的 `avg_deviation`（平均偏离度）
+  - 计算公式：`(avg_price - benchmark_price) / benchmark_price`
+  - 业务含义：相对基准价的偏离程度
 
-### 4.2 左侧图表：供应商报价数量（饼图）
-- X 轴：供应商名称
-- Y 轴：该供应商的报价条数
-- 交互：点击扇区可高亮并筛选右侧柱状图
+### 4.2 色阶配置（visualMap pieces）
+| 区间 | 颜色 | 业务含义 |
+|------|------|---------|
+| avg_deviation <= -0.15 | 深绿 `#008000` | 高性价比/优质供应商 |
+| -0.15 < avg_deviation < 0.15 | 灰色系（正常波动） | 市场价格正常波动 |
+| avg_deviation >= 0.15 | 深红 `#DC143C` | 高价风险/需重点关注 |
 
-### 4.3 右侧图表：同一产品多供应商价格对比（横向柱状图）
-- Y 轴：供应商名称
-- X 轴：价格
-- 颜色：价格从低到高用渐变色（绿→红）
-- 交互：hover 显示供应商详情
+**渲染边界（min/max）**：-0.3 到 +0.3（允许显示的极端值）
+**分段阈值**：±15%（红绿分水岭）
 
-### 4.4 下方明细表
-- 列：供应商 | 产品 | 最新价格 | 报价条数 | 价格趋势
-- 点击行可展开该供应商的所有报价明细
-- 支持按供应商名称搜索过滤
+### 4.3 长尾聚合策略
+- **TOP_N_DISPLAY = 12**（可配置，建议10-15）
+- 按 count 降序排列，取前 N 名独立展示
+- 其余所有供应商聚合为 `id: "others"` 的虚拟节点
+  - count = 所有被聚合供应商的 count 之和
+  - color = 灰色（表示未分析详情）
+  - hover 显示"查看全部 X 个供应商"链接
 
-## 5. 数据来源
+## 5. 详情面板交互
 
-### 5.1 后端 API
+### 5.1 Hover（悬停）
+- 触发：鼠标悬停在 Treemap 任一方块上
+- 显示：ECharts Tooltip
+  - 供应商名称
+  - count（报价条数）
+  - avg_deviation（平均偏离度）
+  - status_label（如"优"、"风险"）
 
-**新 API：`GET /api/v1/prices/supplier-comparison`**
+### 5.2 Click（点击）
+- 触发：鼠标点击 Treemap 任一方块
+- 行为：右侧 20% 面板刷新内容（选中态）
+- 面板内容：
+  - **头部**：供应商全称 + 标签（如 VIP、战略供应商）
+  - **核心指标卡片**：
+    - 平均溢价率：`avg_deviation` 显示绿色/红色
+    - 涉及产品数：`product_count`
+    - 历史最高报价：`max_price`
+    - 历史最低报价：`min_price`
+  - **可滚动产品清单**：
+    - 每行：产品名称 | 报价 | 基准价 | 偏离度 | 状态标签
 
-Query 参数：
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| product_id | int (optional) | 筛选特定产品 |
-| days | int (default=30) | 时间范围 |
+### 5.3 空闲态（无选中）
+- 面板显示：全局统计摘要（如"共 X 个供应商，平均偏离度 Y%"）
+- 或"点击任一方块查看供应商详情"提示
 
-返回：
+## 6. 后端 API 改造
+
+### 6.1 改造 `/api/v1/prices/supplier-comparison`
+
+**Query 参数**：不变（product_id, days, source, industry）
+
+**返回结构**：扩展为包含 `avg_deviation` 等字段
+
 ```json
 {
   "supplier_counts": [
-    { "supplier": "供应商A", "count": 5, "product_count": 2 }
+    {
+      "supplier": "供应商A",
+      "count": 36,
+      "product_count": 14,
+      "avg_price": 90000,
+      "avg_deviation": -0.12,
+      "max_deviation": 0.05,
+      "status_label": "优"
+    }
   ],
   "product_supplier_prices": [
-    { "product": "产品X", "supplier": "供应商A", "price": 2800, "quote_count": 3 }
+    {
+      "product_id": 1,
+      "product": "AES",
+      "supplier": "供应商A",
+      "price": 3600,
+      "quote_count": 5,
+      "benchmark_price": 4000,
+      "deviation": -0.10
+    }
   ],
   "supplier_products": [
-    { "supplier": "供应商A", "products": [
-      { "product": "产品X", "price": 2800, "count": 3 }
-    ]}
+    {
+      "supplier": "供应商A",
+      "products": [
+        {
+          "product_id": 1,
+          "product": "AES",
+          "price": 3600,
+          "benchmark_price": 4000,
+          "deviation": -0.10,
+          "count": 5
+        }
+      ]
+    }
   ]
 }
 ```
 
-数据来源：`DetailedQuote` 表，按 `supplier` + `product_id` 聚合。
+### 6.2 计算逻辑
 
-### 5.2 前端数据处理
-- `supplier_counts`：按 supplier 分组，计数 + 去重产品数
-- `product_supplier_prices`：按 product + supplier 聚合，取最新价格
-- `supplier_products`：用于钻取展开
+```python
+# 对每个供应商的每条报价记录：
+deviation = (quote.price - benchmark.price) / benchmark.price
 
-## 6. 卡片样式
+# 供应商综合偏离度 = 加权平均（count 作为权重）
+avg_deviation = Σ(deviation_i * count_i) / Σ(count_i)
 
-- 圆角 16px，与其他卡片一致
-- 动画延迟 0.2s（animate-in style）
-- 图表容器高度：饼图 220px，柱状图 220px
-- 明细表最大高度 300px，超出滚动
+# 状态标签：
+# avg_deviation <= -0.15 → "优"（深绿）
+# -0.15 < avg_deviation < 0.15 → "正常"（灰）
+# avg_deviation >= 0.15 → "风险"（深红）
+```
 
-## 7. 筛选器交互
+## 7. 前端组件结构
 
-- 切换产品时：饼图 + 柱状图 + 明细表 同时更新
-- 切换时间范围时：重新从 `/prices/supplier-comparison` 获取数据
-- 不选产品时：显示全部供应商的汇总数据
+### 7.1 Treemap 组件
+- 使用 ECharts `treemap` 类型
+- `visualMap` 配置色阶 pieces
+- `tooltip` formatter 显示摘要
+- `click` 事件触发详情面板更新
 
-## 8. 扩展交互
+### 7.2 详情面板组件
+- 右侧固定 20% 宽度
+- 空闲态：显示统计摘要
+- 选中态：显示供应商详情 + 产品列表
+- 可滚动（max-height + overflow-y: auto）
 
-- 点击饼图扇区 → 高亮对应供应商行
-- 点击柱状图柱子 → 滚动到明细表中对应行
-- 明细表行展开 → 显示该供应商该产品的历史报价列表（时间线图）
+## 8. 实现步骤
 
-## 9. 实现步骤
+1. **后端**：改造 `/api/v1/prices/supplier-comparison`，增加 `avg_deviation`、`max_deviation`、`status_label`、`benchmark_price`、`deviation` 字段
+2. **前端 API**：确认 `price.js` 的 `getSupplierComparison` 方法能接收新字段
+3. **前端**：重构 Dashboard.vue 供应商卡片
+   - 移除旧饼图+柱状图+明细表
+   - 新增 Treemap（80%）+ 详情面板（20%）
+   - 实现 visualMap 色阶配置
+   - 实现长尾聚合（前12名 + others）
+   - 实现 hover tooltip 和 click 详情面板交互
+4. **测试**：验证 Treemap 渲染、色阶映射、详情面板交互
 
-1. **后端**：新增 `/api/v1/prices/supplier-comparison` 接口
-2. **前端 API**：在 `price.js` 中新增 `getSupplierComparison` 方法
-3. **前端**：在 `Dashboard.vue` 中新增第四张卡片（供应商对比）
-4. **测试**：验证数据流和 UI 交互
+## 9. 关键技术细节
+
+### 9.1 ECharts Treemap 配置
+```javascript
+{
+  series: [{
+    type: 'treemap',
+    data: treemapData,  // 已处理好的节点数据
+    visualMin: -0.3,
+    visualMax: 0.3,
+    visualMap: {
+      show: false,
+      pieces: [
+        { lte: -0.15, color: '#008000' },
+        { gt: -0.15, lte: 0.15, color: '#D3D3D3' },
+        { gt: 0.15, color: '#DC143C' }
+      ]
+    },
+    label: { show: true, formatter: '{b}' },
+    tooltip: {
+      formatter: (params) => `${params.name}<br/>报价: ${params.data.count}条<br/>偏离: ${(params.data.avg_deviation * 100).toFixed(1)}%`
+    }
+  }]
+}
+```
+
+### 9.2 长尾聚合伪代码
+```javascript
+function processSuppliers(suppliers, topN = 12) {
+  const sorted = [...suppliers].sort((a, b) => b.count - a.count)
+  const top = sorted.slice(0, topN)
+  const others = sorted.slice(topN)
+
+  const nodes = top.map(s => ({
+    name: s.supplier,
+    value: s.count,
+    avg_deviation: s.avg_deviation,
+    status_label: s.status_label
+  }))
+
+  if (others.length > 0) {
+    nodes.push({
+      name: `其他供应商 (${others.length}家)`,
+      value: others.reduce((sum, s) => sum + s.count, 0),
+      avg_deviation: null,  // 灰色
+      status_label: '未分析'
+    })
+  }
+
+  return nodes
+}
+```
