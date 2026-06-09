@@ -19,11 +19,6 @@
         <div class="filter-row">
           <SourceSelector v-model="filterSource" />
           <IndustrySelector v-model="filterIndustry" />
-          <CategorySelector
-            v-model="filterCategoryId"
-            v-model:subcategoryValue="filterSubcategoryId"
-            :industry="filterIndustry"
-          />
           <el-button type="primary" @click="loadAlertConfigs(); loadAlertRecords();" class="query-btn">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="11" cy="11" r="8"/>
@@ -161,21 +156,15 @@
           <el-form-item label="行业" required>
             <IndustrySelector v-model="dialogIndustry" />
           </el-form-item>
-          <el-form-item label="品类" v-if="dialogIndustry === '化工'">
-            <CategorySelector
-              v-model="dialogCategoryId"
-              v-model:subcategoryValue="dialogSubcategoryId"
-              :industry="dialogIndustry"
-            />
-          </el-form-item>
           <el-form-item label="产品" required>
             <el-select
               v-model="configForm.product_id"
-              :placeholder="dialogIndustry === '化工' ? '请先选择行业和品类' : '请选择产品'"
+              :placeholder="dialogIndustry ? '请选择产品' : '请先选择行业'"
               style="width: 100%"
-              :disabled="!dialogIndustry || (dialogIndustry === '化工' && !dialogSubcategoryId)"
+              :disabled="!dialogIndustry"
               :loading="productsLoading"
               @change="handleProductSelect"
+              filterable
             >
               <el-option
                 v-for="p in dialogProducts"
@@ -223,7 +212,6 @@ import { productApi } from '../api/product.js'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import SourceSelector from '../components/SourceSelector.vue'
 import IndustrySelector from '../components/IndustrySelector.vue'
-import CategorySelector from '../components/CategorySelector.vue'
 
 const alertConfigs = ref([])
 const alertRecords = ref([])
@@ -236,13 +224,9 @@ const filterUnread = ref(null)
 // 筛选器变量
 const filterSource = ref(null)
 const filterIndustry = ref(null)
-const filterCategoryId = ref(null)
-const filterSubcategoryId = ref(null)
 
 // 弹窗变量
 const dialogIndustry = ref(null)
-const dialogCategoryId = ref(null)
-const dialogSubcategoryId = ref(null)
 const dialogProducts = ref([])
 const productsLoading = ref(false)
 const configForm = ref({
@@ -253,13 +237,13 @@ const configForm = ref({
   is_active: true
 })
 
-// 监听行业和品类变化，加载产品列表
-watch([dialogIndustry, dialogSubcategoryId], () => {
-  // 切换行业时清空品类和产品选择
+// 监听行业变化，加载产品列表
+watch(dialogIndustry, () => {
   if (dialogIndustry.value) {
     loadDialogProducts()
   } else {
     dialogProducts.value = []
+    configForm.value.product_id = null
   }
 })
 
@@ -272,8 +256,6 @@ async function loadDialogProducts() {
     productsLoading.value = true
     const params = { limit: 500 }
     params.industry = dialogIndustry.value
-    if (dialogCategoryId.value) params.category_id = dialogCategoryId.value
-    if (dialogSubcategoryId.value) params.subcategory_id = dialogSubcategoryId.value
     console.log('Loading products with params:', params)
     const res = await productApi.getProducts(params)
     console.log('Products loaded:', res.data.length)
@@ -309,8 +291,6 @@ async function loadAlertConfigs() {
     const params = {}
     if (filterSource.value) params.source = filterSource.value
     if (filterIndustry.value) params.industry = filterIndustry.value
-    if (filterCategoryId.value) params.category_id = filterCategoryId.value
-    if (filterSubcategoryId.value) params.subcategory_id = filterSubcategoryId.value
     const res = await alertApi.getAlertConfigs(params)
     alertConfigs.value = res.data
     const activeCount = alertConfigs.value.filter(c => c.is_active).length
@@ -328,8 +308,6 @@ async function loadAlertRecords() {
     const params = { is_read: filterUnread.value }
     if (filterSource.value) params.source = filterSource.value
     if (filterIndustry.value) params.industry = filterIndustry.value
-    if (filterCategoryId.value) params.category_id = filterCategoryId.value
-    if (filterSubcategoryId.value) params.subcategory_id = filterSubcategoryId.value
     const res = await alertApi.getAlertRecords(params)
     alertRecords.value = res.data
     statCards.value[0].value = unreadCount.value
@@ -366,8 +344,6 @@ async function saveConfig() {
 function editConfig(row) {
   editingConfig.value = row
   dialogIndustry.value = row.industry || null
-  dialogCategoryId.value = null
-  dialogSubcategoryId.value = null
   dialogProducts.value = []
   configForm.value = {
     product_id: row.product_id,
@@ -377,19 +353,15 @@ function editConfig(row) {
     is_active: row.is_active
   }
   showConfigDialog.value = true
-  // 如果是化工行业，加载产品列表并选中当前产品
-  if (row.industry === '化工') {
-    loadDialogProducts().then(() => {
-      // 产品列表加载完成后保持选中状态
-    })
+  // 加载产品列表
+  if (row.industry) {
+    loadDialogProducts()
   }
 }
 
 function openNewConfigDialog() {
   editingConfig.value = null
   dialogIndustry.value = null
-  dialogCategoryId.value = null
-  dialogSubcategoryId.value = null
   dialogProducts.value = []
   configForm.value = {
     product_id: null,
@@ -433,21 +405,9 @@ async function deleteRecord(id) {
   }
 }
 
-function resetForm() {
-  configForm.value = {
-    product_id: null,
-    alert_type: 'threshold',
-    threshold_value: null,
-    change_percent: null,
-    is_active: true
-  }
-}
-
 function resetFilters() {
   filterSource.value = null
   filterIndustry.value = null
-  filterCategoryId.value = null
-  filterSubcategoryId.value = null
   loadAlertConfigs()
   loadAlertRecords()
 }
