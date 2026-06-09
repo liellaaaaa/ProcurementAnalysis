@@ -43,6 +43,10 @@ export const priceApi = {
   getBenchmarkHistoryMulti(params) {
     // params: { productIds, days, categoryId, subcategoryId, source, industry }
     return api.get('/prices/benchmark/history', { params })
+  },
+  getSupplierComparison(params) {
+    // params: { product_id, days, source, industry }
+    return api.get('/prices/supplier-comparison', { params })
   }
 }
 
