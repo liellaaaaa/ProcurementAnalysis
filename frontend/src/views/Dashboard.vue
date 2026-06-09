@@ -1087,7 +1087,11 @@ async function loadSupplierComparison() {
       status_label: s.status_label,
       count: s.count,
       product_count: s.product_count,
-      itemStyle: { color: s.avg_deviation != null ? undefined : '#D3D3D3' }
+      itemStyle: {
+        color: s.avg_deviation == null ? '#D3D3D3' :
+               s.avg_deviation <= -0.15 ? '#008000' :
+               s.avg_deviation >= 0.15 ? '#DC143C' : '#D3D3D3'
+      }
     }))
 
     if (others.length > 0) {
@@ -1326,20 +1330,10 @@ function initSupplierTreemap() {
         const devStr = dev != null ? `${(dev * 100).toFixed(1)}%` : '-'
         const statusColors = { '优': '#008000', '正常': '#D3D3D3', '风险': '#DC143C' }
         const color = statusColors[params.data.status_label] || '#D3D3D3'
-        return `<strong>${params.name}</strong><br/>报价: ${params.data.count}条<br/>偏离: <span style="color:${color}">${devStr}</span><br/>状态: <span style="color:${color}">${params.data.status_label || '-'}</span>`
+        return `<strong>${params.name}</strong><br/>报价: ${params.data.count}条<br/><span style="font-weight:600;color:#1E293B">偏离:</span> <span style="color:${color}">${devStr}</span><br/><span style="font-weight:600;color:#1E293B">状态:</span> <span style="color:${color}">${params.data.status_label || '-'}</span>`
       }
     },
-    visualMap: {
-      show: false,
-      type: 'piecewise',
-      min: -0.3,
-      max: 0.3,
-      pieces: [
-        { lte: -0.15, color: '#008000' },
-        { gt: -0.15, lte: 0.15, color: '#D3D3D3' },
-        { gt: 0.15, color: '#DC143C' }
-      ]
-    },
+    // visualMap removed — color set directly via itemStyle.color based on avg_deviation
     series: [{
       type: 'treemap',
       data: [],
@@ -2076,6 +2070,6 @@ onUnmounted(() => {
 }
 
 .dev-good { color: #008000; }
-.dev-normal { color: var(--text-muted); }
+.dev-normal { color: #1E293B; }
 .dev-bad { color: #DC143C; }
 </style>
