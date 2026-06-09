@@ -188,37 +188,37 @@ async def get_latest_prices(
 
     # 按 product_id 聚合，只取最新日期
     product_map = {}
-    for r in bp_results:
-        pid = r.product_id
+    for bp_id, product_name, product_code, industry, record_date, price, unit, price_original, spec, brand, market in bp_results:
+        pid = bp_id
         if pid not in product_map:
             product_map[pid] = {
                 "product_id": pid,
-                "product_name": r.product_name,
-                "product_code": r.product_code,
-                "industry": r.industry,
-                "latest_date": r.record_date,
-                "price": r.price,
-                "min_price": r.price,
-                "max_price": r.price,
+                "product_name": product_name,
+                "product_code": product_code,
+                "industry": industry,
+                "latest_date": record_date,
+                "price": price,
+                "min_price": price,
+                "max_price": price,
                 "change_percent": None,
                 "trend": None,
                 "source": source or "shengyishe",
-                "specification": r.spec or "",
-                "brand": r.brand or "",
-                "region": r.market or "",
+                "specification": spec or "",
+                "brand": brand or "",
+                "region": market or "",
                 "supplier": "",
                 "price_type": "基准价",
-                "unit": r.unit or "元/吨",
+                "unit": unit or "元/吨",
                 "extra_data": {"详细报价": []}
             }
         else:
-            if r.price < product_map[pid]["min_price"]:
-                product_map[pid]["min_price"] = r.price
-            if r.price > product_map[pid]["max_price"]:
-                product_map[pid]["max_price"] = r.price
-            if r.record_date > product_map[pid]["latest_date"]:
-                product_map[pid]["latest_date"] = r.record_date
-                product_map[pid]["price"] = r.price
+            if price < product_map[pid]["min_price"]:
+                product_map[pid]["min_price"] = price
+            if price > product_map[pid]["max_price"]:
+                product_map[pid]["max_price"] = price
+            if record_date > product_map[pid]["latest_date"]:
+                product_map[pid]["latest_date"] = record_date
+                product_map[pid]["price"] = price
 
     # 补充 detailed_quotes 到 extra_data.详细报价（返回完整历史）
     for pid in product_map:
@@ -288,34 +288,34 @@ async def get_latest_prices(
 
         pr_results = pr_query.order_by(Product.product_name, PriceRecord.record_date.desc()).all()
 
-        for r in pr_results:
-            pid = r.product_id
+        for pr_id, product_name, product_code, industry, record_date, price, change_percent, trend, pr_source, specification, brand, region, supplier, price_type, unit, extra_data in pr_results:
+            pid = pr_id
             if pid not in product_map:
                 product_map[pid] = {
                     "product_id": pid,
-                    "product_name": r.product_name,
-                    "product_code": r.product_code,
-                    "industry": r.industry,
-                    "latest_date": r.record_date,
-                    "price": r.price,
-                    "min_price": r.price,
-                    "max_price": r.price,
-                    "change_percent": r.change_percent,
-                    "trend": r.trend,
-                    "source": r.source,
-                    "specification": r.specification or "",
-                    "brand": r.brand or "",
-                    "region": r.region or "",
-                    "supplier": r.supplier or "",
-                    "price_type": r.price_type or "",
-                    "unit": r.unit or "元/吨",
-                    "extra_data": r.extra_data or {}
+                    "product_name": product_name,
+                    "product_code": product_code,
+                    "industry": industry,
+                    "latest_date": record_date,
+                    "price": price,
+                    "min_price": price,
+                    "max_price": price,
+                    "change_percent": change_percent,
+                    "trend": trend,
+                    "source": pr_source,
+                    "specification": specification or "",
+                    "brand": brand or "",
+                    "region": region or "",
+                    "supplier": supplier or "",
+                    "price_type": price_type or "",
+                    "unit": unit or "元/吨",
+                    "extra_data": extra_data or {}
                 }
             else:
-                if r.price < product_map[pid]["min_price"]:
-                    product_map[pid]["min_price"] = r.price
-                if r.price > product_map[pid]["max_price"]:
-                    product_map[pid]["max_price"] = r.price
+                if price < product_map[pid]["min_price"]:
+                    product_map[pid]["min_price"] = price
+                if price > product_map[pid]["max_price"]:
+                    product_map[pid]["max_price"] = price
 
     # 转为列表并排序
     products = list(product_map.values())
@@ -388,7 +388,9 @@ async def get_benchmark_history(
     """获取产品基准价历史趋势（从 benchmark_prices 读取）"""
     start_date = (date.today() - timedelta(days=days)).isoformat()
 
-    query = db.query(BenchmarkPrice).filter(
+    query = db.query(BenchmarkPrice, Product.product_name).join(
+        Product, BenchmarkPrice.product_id == Product.id
+    ).filter(
         BenchmarkPrice.product_id == product_id,
         BenchmarkPrice.record_date >= start_date
     )
@@ -400,16 +402,16 @@ async def get_benchmark_history(
 
     return [
         {
-            "product_id": r.product_id,
-            "product_name": r.product_name,
-            "price": r.price,
-            "unit": r.unit or "元/吨",
-            "record_date": r.record_date.strftime('%Y/%m/%d') if r.record_date else "",
-            "brand": r.brand or "",
-            "spec": r.spec or "",
-            "market": r.market or ""
+            "product_id": bp.product_id,
+            "product_name": product_name,
+            "price": bp.price,
+            "unit": bp.unit or "元/吨",
+            "record_date": bp.record_date.strftime('%Y/%m/%d') if bp.record_date else "",
+            "brand": bp.brand or "",
+            "spec": bp.spec or "",
+            "market": bp.market or ""
         }
-        for r in results
+        for bp, product_name in results
     ]
 
 
@@ -624,7 +626,7 @@ async def get_dashboard_distribution(
     if industry:
         query = query.filter(Product.industry == industry)
 
-    results = query.group_by(Product.id).order_by(func.avg(BenchmarkPrice.price).desc()).limit(10).all()
+    results = query.group_by(Product.id, Product.product_name).order_by(func.avg(BenchmarkPrice.price).desc()).limit(10).all()
 
     # 如果 benchmark_prices 没有数据，fallback 到 price_records
     if not results:
@@ -638,7 +640,7 @@ async def get_dashboard_distribution(
             query = query.filter(PriceRecord.source == source)
         if industry:
             query = query.filter(Product.industry == industry)
-        results = query.group_by(Product.id).order_by(func.avg(PriceRecord.price).desc()).limit(10).all()
+        results = query.group_by(Product.id, Product.product_name).order_by(func.avg(PriceRecord.price).desc()).limit(10).all()
 
     labels = [r.product_name[:15] for r in results]
     sizes = [round(r.avg_price, 2) for r in results]
