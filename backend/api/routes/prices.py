@@ -940,6 +940,130 @@ async def get_dashboard_volatility(
     }
 
 
+@router.get("/supplier-comparison")
+async def get_supplier_comparison(
+    product_id: Optional[int] = None,
+    days: int = Query(30, ge=1, le=365),
+    source: Optional[str] = None,
+    industry: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """获取供应商对比数据，从 DetailedQuote 表聚合"""
+    start_date = (date.today() - timedelta(days=days)).isoformat()
+
+    # 基础查询：从 DetailedQuote 读取，关联 Product 获取产品名称
+    base_query = db.query(DetailedQuote).join(Product, DetailedQuote.product_id == Product.id).filter(
+        DetailedQuote.publish_date >= start_date
+    )
+
+    if product_id:
+        base_query = base_query.filter(DetailedQuote.product_id == product_id)
+    if source and source != '__all__':
+        base_query = base_query.filter(DetailedQuote.source == source)
+    if industry:
+        base_query = base_query.filter(Product.industry == industry)
+
+    quotes = base_query.all()
+
+    # 1. supplier_counts: 每个供应商的报价条数和产品数
+    supplier_stats = {}
+    for q in quotes:
+        supplier = q.supplier or "未知供应商"
+        if supplier not in supplier_stats:
+            supplier_stats[supplier] = {"supplier": supplier, "count": 0, "product_count": 0}
+        supplier_stats[supplier]["count"] += 1
+        # 用 set 记录该供应商供应了哪些 product_id
+        if not hasattr(supplier_stats[supplier], "_product_ids"):
+            supplier_stats[supplier]["_product_ids"] = set()
+        supplier_stats[supplier]["_product_ids"].add(q.product_id)
+
+    supplier_counts = []
+    for supplier, stats in supplier_stats.items():
+        supplier_counts.append({
+            "supplier": supplier,
+            "count": stats["count"],
+            "product_count": len(stats["_product_ids"])
+        })
+    # 清理临时字段
+    for s in supplier_counts:
+        if "_product_ids" in s:
+            del s["_product_ids"]
+
+    # 2. product_supplier_prices: 同一产品多供应商的价格对比（取最新价格）
+    # 按 product_id + supplier 聚合，取每个组合的最新报价
+    product_supplier_map = {}
+    for q in quotes:
+        key = (q.product_id, q.supplier or "未知供应商")
+        if key not in product_supplier_map:
+            product_supplier_map[key] = {
+                "product_id": q.product_id,
+                "product": q.product_name,
+                "supplier": q.supplier or "未知供应商",
+                "price": q.price,
+                "quote_count": 1
+            }
+        else:
+            # 累加计数，保留最新报价（publish_date 最大的）
+            product_supplier_map[key]["quote_count"] += 1
+            if q.publish_date > (product_supplier_map[key].get("_latest_date") or date.min):
+                product_supplier_map[key]["price"] = q.price
+                product_supplier_map[key]["_latest_date"] = q.publish_date
+
+    # 清理临时字段并转列表
+    product_supplier_prices = []
+    for key, item in product_supplier_map.items():
+        product_supplier_prices.append({
+            "product_id": item["product_id"],
+            "product": item["product"],
+            "supplier": item["supplier"],
+            "price": item["price"],
+            "quote_count": item["quote_count"]
+        })
+
+    # 3. supplier_products: 每个供应商供应的产品列表
+    supplier_products_map = {}
+    for q in quotes:
+        supplier = q.supplier or "未知供应商"
+        if supplier not in supplier_products_map:
+            supplier_products_map[supplier] = {}
+
+        pid = q.product_id
+        if pid not in supplier_products_map[supplier]:
+            supplier_products_map[supplier][pid] = {
+                "product_id": pid,
+                "product": q.product_name,
+                "price": q.price,
+                "count": 1,
+                "_latest_date": q.publish_date
+            }
+        else:
+            supplier_products_map[supplier][pid]["count"] += 1
+            if q.publish_date > supplier_products_map[supplier][pid].get("_latest_date") or date.min:
+                supplier_products_map[supplier][pid]["price"] = q.price
+                supplier_products_map[supplier][pid]["_latest_date"] = q.publish_date
+
+    supplier_products = []
+    for supplier, products in supplier_products_map.items():
+        product_list = []
+        for pid, pdata in products.items():
+            product_list.append({
+                "product_id": pdata["product_id"],
+                "product": pdata["product"],
+                "price": pdata["price"],
+                "count": pdata["count"]
+            })
+        supplier_products.append({
+            "supplier": supplier,
+            "products": product_list
+        })
+
+    return {
+        "supplier_counts": supplier_counts,
+        "product_supplier_prices": product_supplier_prices,
+        "supplier_products": supplier_products
+    }
+
+
 @router.get("/dashboard/indicator-cards")
 async def get_dashboard_indicator_cards(
     period_type: str = Query(..., regex="^(yoy|qoq|d7|d30)$", description="yoy=同比, qoq=环比, d7=7日涨跌, d30=30日涨跌"),
