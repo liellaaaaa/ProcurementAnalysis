@@ -256,6 +256,7 @@ def save_benchmark_records(product_id: int, records: List[Dict]) -> int:
             else:
                 bp = BenchmarkPrice(
                     product_id=product_id,
+                    product_name=record.get('product_name', ''),
                     spec=record.get('spec', ''),
                     brand=record.get('brand', ''),
                     market=record.get('market', ''),
