@@ -6,6 +6,13 @@ from sqlalchemy.orm import Session
 from backend.api.deps import get_db
 from backend.models.database import AlertConfig, AlertRecord, Product, Category
 from backend.services.operation_logger import OperationLogger
+from backend.services.feedback_store import (
+    get_all as get_feedbacks_all,
+    get_by_id as get_feedback_by_id,
+    create as fb_create,
+    update as fb_update,
+    delete as fb_delete
+)
 
 router = APIRouter(prefix="/api/v1/alerts", tags=["预警管理"])
 
@@ -53,6 +60,36 @@ class AlertRecordResponse(BaseModel):
     triggered_price: float
     triggered_at: datetime
     is_read: bool
+
+    class Config:
+        from_attributes = True
+
+
+class FeedbackCreate(BaseModel):
+    feedback_date: datetime
+    current_status: str
+    expected_result: str
+    is_resolved: bool = False
+    resolved_at: Optional[datetime] = None
+
+
+class FeedbackUpdate(BaseModel):
+    feedback_date: Optional[datetime] = None
+    current_status: Optional[str] = None
+    expected_result: Optional[str] = None
+    is_resolved: Optional[bool] = None
+    resolved_at: Optional[datetime] = None
+
+
+class FeedbackResponse(BaseModel):
+    id: int
+    feedback_date: str
+    current_status: str
+    expected_result: str
+    is_resolved: bool
+    resolved_at: Optional[str] = None
+    created_at: str
+    updated_at: str
 
     class Config:
         from_attributes = True
@@ -312,3 +349,58 @@ async def delete_alert_record(record_id: int, db: Session = Depends(get_db)):
     db.delete(record)
     db.commit()
     return {"message": "预警记录已删除"}
+
+
+# ============ Feedback APIs (JSON 存储) ============
+
+@router.get("/feedbacks", response_model=List[FeedbackResponse])
+async def get_feedbacks(is_resolved: Optional[bool] = None):
+    """获取反馈列表"""
+    feedbacks = get_feedbacks_all(is_resolved)
+    return [FeedbackResponse(**f) for f in feedbacks]
+
+
+@router.post("/feedbacks", response_model=FeedbackResponse)
+async def create_feedback(feedback: FeedbackCreate):
+    """创建反馈"""
+    feedback_date_str = feedback.feedback_date.strftime("%Y-%m-%d") if isinstance(feedback.feedback_date, datetime) else str(feedback.feedback_date).split("T")[0]
+    resolved_at_str = feedback.resolved_at.strftime("%Y-%m-%d %H:%M:%S") if feedback.resolved_at else None
+
+    new_feedback = fb_create(
+        feedback_date=feedback_date_str,
+        current_status=feedback.current_status,
+        expected_result=feedback.expected_result,
+        is_resolved=feedback.is_resolved,
+        resolved_at=resolved_at_str
+    )
+    return FeedbackResponse(**new_feedback)
+
+
+@router.put("/feedbacks/{feedback_id}", response_model=FeedbackResponse)
+async def update_feedback(feedback_id: int, feedback: FeedbackUpdate):
+    """更新反馈"""
+    update_data = {}
+    if feedback.feedback_date is not None:
+        update_data["feedback_date"] = feedback.feedback_date.strftime("%Y-%m-%d") if isinstance(feedback.feedback_date, datetime) else str(feedback.feedback_date).split("T")[0]
+    if feedback.current_status is not None:
+        update_data["current_status"] = feedback.current_status
+    if feedback.expected_result is not None:
+        update_data["expected_result"] = feedback.expected_result
+    if feedback.is_resolved is not None:
+        update_data["is_resolved"] = feedback.is_resolved
+    if feedback.resolved_at is not None:
+        update_data["resolved_at"] = feedback.resolved_at.strftime("%Y-%m-%d %H:%M:%S") if isinstance(feedback.resolved_at, datetime) else str(feedback.resolved_at)
+
+    updated = fb_update(feedback_id, **update_data)
+    if not updated:
+        raise HTTPException(status_code=404, detail="反馈不存在")
+    return FeedbackResponse(**updated)
+
+
+@router.delete("/feedbacks/{feedback_id}")
+async def delete_feedback(feedback_id: int):
+    """删除反馈"""
+    deleted = fb_delete(feedback_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="反馈不存在")
+    return {"message": "反馈已删除"}
