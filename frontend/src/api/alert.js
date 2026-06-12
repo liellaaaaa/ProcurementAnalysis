@@ -24,5 +24,17 @@ export const alertApi = {
   },
   deleteAlertRecord(id) {
     return api.delete(`/alerts/${id}`)
+  },
+  getFeedbacks(params) {
+    return api.get('/alerts/feedbacks', { params })
+  },
+  createFeedback(data) {
+    return api.post('/alerts/feedbacks', data)
+  },
+  updateFeedback(id, data) {
+    return api.put(`/alerts/feedbacks/${id}`, data)
+  },
+  deleteFeedback(id) {
+    return api.delete(`/alerts/feedbacks/${id}`)
   }
 }

@@ -1,0 +1,22 @@
+[
+  {
+    "id": 1,
+    "feedback_date": "2026/06/12",
+    "current_status": "示例：乙烯价格波动较大，影响采购成本",
+    "expected_result": "示例：能否增加价格走势预测功能",
+    "is_resolved": false,
+    "resolved_at": null,
+    "created_at": "2026-06-12 10:30:00",
+    "updated_at": "2026-06-12 10:30:00"
+  },
+  {
+    "id": 2,
+    "feedback_date": "2026/06/10",
+    "current_status": "示例：部分产品历史数据缺失",
+    "expected_result": "示例：补充近三个月的历史价格数据",
+    "is_resolved": true,
+    "resolved_at": "2026-06-11 14:20:00",
+    "created_at": "2026-06-10 09:00:00",
+    "updated_at": "2026-06-11 14:20:00"
+  }
+]
