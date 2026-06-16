@@ -179,11 +179,7 @@
                   :value="p.product_id"
                 />
               </el-select>
-              <el-select v-model="supplierComparisonDays" size="small" style="width: 72px" @change="loadSupplierComparison">
-                <el-option label="7天" :value="7" />
-                <el-option label="30天" :value="30" />
-                <el-option label="90天" :value="90" />
-              </el-select>
+              <PeriodSelector v-model:startDate="supplierStart" v-model:endDate="supplierEnd" />
             </div>
           </div>
         </template>
@@ -461,6 +457,7 @@ watch([filter2Start, filter2End], () => { loadFilter2Charts() })
 const filter3Industry = ref(null)
 
 watch(filter3Industry, () => { loadSupplierComparison() })
+watch([supplierStart, supplierEnd], () => { loadSupplierComparison() })
 
 const filter3Source = ref(null)
 const searchKeyword = ref('')
@@ -479,7 +476,8 @@ let supplierTreemap = null
 const TOP_N = 12
 const supplierProducts = ref([])
 const selectedSupplierProduct = ref(null)
-const supplierComparisonDays = ref(30)
+const supplierStart = ref(null)
+const supplierEnd = ref(null)
 
 const indicatorCards = ref([
   { metricType: 'yoy', metricLabel: '同比涨幅', productName: '-', changePercent: 0, trend: 'rise', price: 0, hasData: true },
@@ -1059,9 +1057,17 @@ async function loadDistributionData() {
 
 async function loadSupplierComparison() {
   try {
+    let days = 30
+    if (supplierStart.value && supplierEnd.value) {
+      const start = new Date(supplierStart.value)
+      const end = new Date(supplierEnd.value)
+      days = Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1)
+    } else if (!supplierStart.value && !supplierEnd.value) {
+      days = 9999
+    }
     const params = {
-      days: supplierComparisonDays.value,
-      source: filter2Source.value || null,
+      days,
+      source: filter3Source.value || null,
       industry: filter3Industry.value || null
     }
     if (selectedSupplierProduct.value) {
