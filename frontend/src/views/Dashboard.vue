@@ -17,21 +17,7 @@
               <SourceSelector v-model="filter1Source" />
               <IndustrySelector v-model="filter1Industry" />
 
-              <el-date-picker
-                v-model="filter1DateRange"
-                type="daterange"
-                range-separator="至"
-                start-placeholder="开始"
-                end-placeholder="结束"
-                size="small"
-                style="width: 180px"
-                
-              />
-              <el-select v-model="compareDays" placeholder="时间范围" size="small" style="width: 72px" @change="loadFilter1Charts">
-                <el-option label="7天" :value="7" />
-                <el-option label="30天" :value="30" />
-                <el-option label="90天" :value="90" />
-              </el-select>
+              <PeriodSelector v-model:startDate="filter1Start" v-model:endDate="filter1End" />
             </div>
           </div>
         </template>
@@ -440,6 +426,7 @@ import * as echarts from 'echarts'
 
 import SourceSelector from '../components/SourceSelector.vue'
 import IndustrySelector from '../components/IndustrySelector.vue'
+import PeriodSelector from '../components/PeriodSelector.vue'
 
 const lineChartRef = ref(null)
 const pieChartRef = ref(null)
@@ -461,12 +448,14 @@ const expandedRows = ref([])
 const rankingData = ref({ rising: [], falling: [] })
 
 
-const filter1DateRange = ref([])
+const filter1Start = ref(null)
+const filter1End = ref(null)
 const filter1Source = ref(null)
 const filter1Industry = ref(null)
 
 watch(filter1Source, () => { loadFilter1Charts() })
 watch(filter1Industry, () => { loadFilter1Charts() })
+watch([filter1Start, filter1End], () => { loadFilter1Charts() })
 
 
 const filter2DateRange = ref([])
@@ -487,7 +476,6 @@ const searchKeyword = ref('')
 
 const pagination = ref({ page: 1, pageSize: 10, total: 0 })
 const historyPagination = ref({ page: 1, pageSize: 10 })
-const compareDays = ref(7)
 const expandChartDays = ref(7)
 
 // Supplier comparison card
@@ -871,16 +859,19 @@ function getMetricLabel(metricType) {
 async function loadLineChartData() {
   if (!lineChart) return
   try {
-    let days = compareDays.value
-    if (filter1DateRange.value && filter1DateRange.value.length === 2) {
-      const start = new Date(filter1DateRange.value[0])
-      const end = new Date(filter1DateRange.value[1])
-      days = Math.max(7, Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1)
+    let days = 7
+    if (filter1Start.value && filter1End.value) {
+      const start = new Date(filter1Start.value)
+      const end = new Date(filter1End.value)
+      days = Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1)
+    } else if (!filter1Start.value && !filter1End.value) {
+      days = 9999
     }
 
     // 使用基准价历史数据（与表格数据源一致）
     const res = await priceApi.getBenchmarkHistoryMulti({
-      days,
+      start_date: filter1Start.value,
+      end_date: filter1End.value,
       
       source: filter1Source.value || null,
       industry: filter1Industry.value || null
@@ -972,11 +963,13 @@ async function loadRankingData() {
   }
   try {
     console.log('[Ranking] Fetching ranking data...')
-    let days = compareDays.value
-    if (filter1DateRange.value && filter1DateRange.value.length === 2) {
-      const start = new Date(filter1DateRange.value[0])
-      const end = new Date(filter1DateRange.value[1])
-      days = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1
+    let days = 7
+    if (filter1Start.value && filter1End.value) {
+      const start = new Date(filter1Start.value)
+      const end = new Date(filter1End.value)
+      days = Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1)
+    } else if (!filter1Start.value && !filter1End.value) {
+      days = 9999
     }
 
     const params = {
