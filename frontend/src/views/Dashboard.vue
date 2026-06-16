@@ -452,7 +452,6 @@ watch([filter2Start, filter2End], () => { loadFilter2Charts() })
 const filter3Industry = ref(null)
 
 watch(filter3Industry, () => { loadSupplierComparison() })
-watch([supplierStart, supplierEnd], () => { loadSupplierComparison() })
 
 const filter3Source = ref(null)
 const searchKeyword = ref('')
@@ -472,6 +471,8 @@ const supplierProducts = ref([])
 const selectedSupplierProduct = ref(null)
 const supplierStart = ref(null)
 const supplierEnd = ref(null)
+
+watch([supplierStart, supplierEnd], () => { loadSupplierComparison() })
 
 const indicatorCards = ref([
   { metricType: 'yoy', metricLabel: '同比涨幅', productName: '-', changePercent: 0, trend: 'rise', price: 0, hasData: true },
