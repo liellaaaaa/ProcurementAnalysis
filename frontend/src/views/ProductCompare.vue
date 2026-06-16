@@ -48,27 +48,7 @@
 
         <div class="date-row">
           <span class="date-label">时间范围</span>
-          <div class="date-buttons">
-            <el-button
-              v-for="d in datePresets"
-              :key="d"
-              :type="selectedDays === d ? 'primary' : 'default'"
-              size="small"
-              @click="setDateDays(d)"
-            >{{ d }}天</el-button>
-            <el-button size="small" @click="showCustomDate = true">自定义</el-button>
-          </div>
-          <el-date-picker
-            v-if="showCustomDate"
-            v-model="dateRange"
-            type="daterange"
-            range-separator="至"
-            start-placeholder="开始"
-            end-placeholder="结束"
-            size="small"
-            style="width: 220px; margin-left: 8px"
-            @change="loadComparison"
-          />
+          <PeriodSelector v-model:startDate="compareStart" v-model:endDate="compareEnd" />
         </div>
 
         <div v-if="selectedProducts.length < 2" class="hint-box">
@@ -115,6 +95,7 @@ import { priceApi } from '../api/price.js'
 import { productApi } from '../api/product.js'
 import SourceSelector from '../components/SourceSelector.vue'
 import IndustrySelector from '../components/IndustrySelector.vue'
+import PeriodSelector from '../components/PeriodSelector.vue'
 import * as echarts from 'echarts'
 
 const chartRef = ref(null)
@@ -122,10 +103,8 @@ const products = ref([])
 const selectedProducts = ref([])
 const selectedSource = ref(null)
 const selectedIndustry = ref(null)
-const dateRange = ref(null)
-const datePresets = [7, 30, 60, 90]
-const selectedDays = ref(30)
-const showCustomDate = ref(false)
+const compareStart = ref(null)
+const compareEnd = ref(null)
 let chartInstance = null
 
 const colors = ['#0077cc', '#00a8e8', '#4db8e8', '#005fa3', '#003d6b', '#006594']
@@ -139,6 +118,8 @@ watch(selectedIndustry, (newIndustry) => {
   selectedProducts.value = []
   loadProducts()
 })
+
+watch([compareStart, compareEnd], () => { loadComparison() })
 
 function getProductColor(id) {
   const idx = selectedProducts.value.indexOf(id)
@@ -158,13 +139,6 @@ async function loadProducts() {
   } catch (e) {
     console.error('Failed to load products', e)
   }
-}
-
-function setDateDays(days) {
-  selectedDays.value = days
-  showCustomDate.value = false
-  dateRange.value = null
-  loadComparison()
 }
 
 function getNiceAxisRange(prices) {
@@ -192,12 +166,13 @@ async function loadComparison() {
   if (selectedProducts.value.length < 2) return
 
   try {
-    let days = selectedDays.value
-    if (dateRange.value && dateRange.value.length === 2) {
-      const start = new Date(dateRange.value[0])
-      const end = new Date(dateRange.value[1])
-      days = Math.ceil((end - start) / (1000 * 60 * 60 * 24))
-      if (days < 1) days = 1
+    let days = 30
+    if (compareStart.value && compareEnd.value) {
+      const start = new Date(compareStart.value)
+      const end = new Date(compareEnd.value)
+      days = Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1)
+    } else if (!compareStart.value && !compareEnd.value) {
+      days = 9999
     }
 
     const allData = await Promise.all(
