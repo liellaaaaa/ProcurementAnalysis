@@ -95,16 +95,7 @@
               <SourceSelector v-model="filter2Source" />
               <IndustrySelector v-model="filter2Industry" />
 
-              <el-date-picker
-                v-model="filter2DateRange"
-                type="daterange"
-                range-separator="至"
-                start-placeholder="开始"
-                end-placeholder="结束"
-                size="small"
-                style="width: 180px"
-                
-              />
+              <PeriodSelector v-model:startDate="filter2Start" v-model:endDate="filter2End" />
             </div>
           </div>
         </template>
@@ -458,12 +449,14 @@ watch(filter1Industry, () => { loadFilter1Charts() })
 watch([filter1Start, filter1End], () => { loadFilter1Charts() })
 
 
-const filter2DateRange = ref([])
+const filter2Start = ref(null)
+const filter2End = ref(null)
 const filter2Source = ref(null)
 const filter2Industry = ref(null)
 
 watch(filter2Source, () => { loadFilter2Charts() })
 watch(filter2Industry, () => { loadFilter2Charts() })
+watch([filter2Start, filter2End], () => { loadFilter2Charts() })
 
 const filter3Industry = ref(null)
 
@@ -1019,8 +1012,16 @@ async function loadRankingData() {
 async function loadDistributionData() {
   if (!pieChart) return
   try {
+    let days = 30
+    if (filter2Start.value && filter2End.value) {
+      const start = new Date(filter2Start.value)
+      const end = new Date(filter2End.value)
+      days = Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1)
+    } else if (!filter2Start.value && !filter2End.value) {
+      days = 9999
+    }
     const params = {
-      days: 30,
+      days,
       source: filter2Source.value || null,
       category_id: null,
       subcategory_id: null,
