@@ -453,12 +453,13 @@ watch([filter2Start, filter2End], () => { loadFilter2Charts() })
 const filter3Industry = ref(null)
 
 watch(filter3Industry, () => { loadSupplierComparison() })
-watch([detailStart, detailEnd], () => { loadLatestPrices() })
 
 const filter3Source = ref(null)
 const searchKeyword = ref('')
 const detailStart = ref(null)
 const detailEnd = ref(null)
+
+watch([detailStart, detailEnd], () => { loadLatestPrices() })
 
 
 
