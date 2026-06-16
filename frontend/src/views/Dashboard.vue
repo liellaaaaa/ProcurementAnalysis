@@ -460,6 +460,13 @@ const detailStart = ref(null)
 const detailEnd = ref(null)
 
 watch([detailStart, detailEnd], () => { loadLatestPrices() })
+watch([detailStart, detailEnd], () => {
+  if (expandedRows.value.length > 0) {
+    const expandedId = expandedRows.value[0]
+    const row = latestPrices.value.find(p => p.product_id === expandedId)
+    if (row) loadExpandChart(row)
+  }
+})
 
 
 
@@ -644,10 +651,18 @@ async function loadExpandChart(row) {
   if (!el) return
   const chart = echarts.init(el)
   try {
+    let days = 7
+    if (detailStart.value && detailEnd.value) {
+      const start = new Date(detailStart.value + 'T00:00:00')
+      const end = new Date(detailEnd.value + 'T00:00:00')
+      days = Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1)
+    } else if (!detailStart.value && !detailEnd.value) {
+      days = 365
+    }
     // 使用基准价历史数据（与表格数据源一致）
     const res = await priceApi.getBenchmarkHistory(
       row.product_id,
-      7,
+      days,
       null
     )
     if (!res.data || res.data.length === 0) {
