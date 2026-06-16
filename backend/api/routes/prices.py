@@ -80,7 +80,7 @@ async def get_prices(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     industry: Optional[str] = None,
-    limit: int = Query(100, le=1000),
+    limit: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
     """获取价格数据列表（从 benchmark_prices + price_records）"""
@@ -99,7 +99,10 @@ async def get_prices(
     if industry:
         bp_query = bp_query.filter(Product.industry == industry)
 
-    bp_results = bp_query.order_by(BenchmarkPrice.record_date.desc()).limit(limit).all()
+    bp_query = bp_query.order_by(BenchmarkPrice.record_date.desc())
+    if limit:
+        bp_query = bp_query.limit(limit)
+    bp_results = bp_query.all()
     for bp, product_name, product_code in bp_results:
         results.append({
             "id": bp.id,
@@ -132,7 +135,10 @@ async def get_prices(
         if industry:
             pr_query = pr_query.filter(Product.industry == industry)
 
-        pr_results = pr_query.order_by(PriceRecord.record_date.desc()).limit(limit).all()
+        pr_query = pr_query.order_by(PriceRecord.record_date.desc())
+        if limit:
+            pr_query = pr_query.limit(limit)
+        pr_results = pr_query.all()
         for pr, product_name, product_code in pr_results:
             results.append(PriceRecordResponse.from_record(pr, product_name, product_code, pr.extra_data))
 
