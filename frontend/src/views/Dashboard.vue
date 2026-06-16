@@ -847,7 +847,7 @@ async function loadLineChartData() {
       const end = new Date(filter1End.value)
       days = Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1)
     } else if (!filter1Start.value && !filter1End.value) {
-      days = 9999
+      days = 365
     }
 
     // 使用基准价历史数据（与表格数据源一致）
@@ -951,7 +951,7 @@ async function loadRankingData() {
       const end = new Date(filter1End.value)
       days = Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1)
     } else if (!filter1Start.value && !filter1End.value) {
-      days = 9999
+      days = 90
     }
 
     const params = {
@@ -1007,7 +1007,7 @@ async function loadDistributionData() {
       const end = new Date(filter2End.value)
       days = Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1)
     } else if (!filter2Start.value && !filter2End.value) {
-      days = 9999
+      days = 365
     }
     const params = {
       days,
@@ -1054,7 +1054,7 @@ async function loadSupplierComparison() {
       const end = new Date(supplierEnd.value)
       days = Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1)
     } else if (!supplierStart.value && !supplierEnd.value) {
-      days = 9999
+      days = 365
     }
     const params = {
       days,

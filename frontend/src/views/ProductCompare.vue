@@ -172,7 +172,7 @@ async function loadComparison() {
       const end = new Date(compareEnd.value)
       days = Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1)
     } else if (!compareStart.value && !compareEnd.value) {
-      days = 9999
+      days = 365
     }
 
     const allData = await Promise.all(
