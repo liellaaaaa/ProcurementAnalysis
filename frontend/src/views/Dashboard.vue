@@ -186,7 +186,7 @@
               <span>供应商智能分析看板</span>
             </div>
             <div class="controls">
-              <IndustrySelector v-model="filter2Industry" />
+              <IndustrySelector v-model="filter3Industry" />
               <el-select
                 v-model="selectedSupplierProduct"
                 clearable
@@ -476,9 +476,11 @@ const filter2Industry = ref(null)
 watch(filter2Source, () => { loadFilter2Charts() })
 watch(filter2Industry, () => { loadFilter2Charts() })
 
+const filter3Industry = ref(null)
+
+watch(filter3Industry, () => { loadSupplierComparison() })
 
 const filter3Source = ref(null)
-const filter3Industry = ref(null)
 const searchKeyword = ref('')
 
 
@@ -1066,7 +1068,7 @@ async function loadSupplierComparison() {
     const params = {
       days: supplierComparisonDays.value,
       source: filter2Source.value || null,
-      industry: filter2Industry.value || null
+      industry: filter3Industry.value || null
     }
     if (selectedSupplierProduct.value) {
       params.product_id = selectedSupplierProduct.value
