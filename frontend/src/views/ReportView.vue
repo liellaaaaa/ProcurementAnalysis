@@ -18,20 +18,7 @@
             </el-button>
           </div>
           <div class="filter-row">
-            <el-form-item label="报表类型">
-              <el-select v-model="reportType" style="width: 120px">
-                <el-option label="周报" value="weekly">
-                  <span class="option-label">◫ 周报</span>
-                </el-option>
-                <el-option label="月报" value="monthly">
-                  <span class="option-label">◧ 月报</span>
-                </el-option>
-              </el-select>
-            </el-form-item>
-            <el-form-item label="月份" v-if="reportType === 'monthly'">
-              <el-date-picker v-model="month" type="month" value-format="YYYY-MM" placeholder="选择月份" />
-            </el-form-item>
-            <el-form-item label="日期范围" v-if="reportType === 'weekly'">
+            <el-form-item label="日期范围">
               <PeriodSelector v-model:startDate="reportStart" v-model:endDate="reportEnd" />
             </el-form-item>
           </div>
@@ -117,10 +104,6 @@ import SourceSelector from '../components/SourceSelector.vue'
 import IndustrySelector from '../components/IndustrySelector.vue'
 import PeriodSelector from '../components/PeriodSelector.vue'
 
-const reportType = ref('weekly')
-const month = ref('')
-const startDate = ref('')
-const endDate = ref('')
 const reportStart = ref('')
 const reportEnd = ref('')
 const selectedSource = ref(null)
@@ -135,21 +118,6 @@ const statCards = ref([
   { icon: '◫', label: '平均价', value: '-', bgColor: 'rgba(255, 217, 61, 0.15)' }
 ])
 
-function getDefaultWeeklyRange() {
-  const today = new Date()
-  const sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
-  const fmt = (d) => d.toISOString().slice(0, 10)
-  return { start: fmt(sevenDaysAgo), end: fmt(today) }
-}
-
-watch(reportType, (type) => {
-  if (type === 'weekly' && !reportStart.value && !reportEnd.value) {
-    const defaults = getDefaultWeeklyRange()
-    reportStart.value = defaults.start
-    reportEnd.value = defaults.end
-  }
-}, { immediate: true })
-
 // 行业或数据源变化时自动刷新统计
 watch([selectedSource, selectedIndustry], () => {
   loadStats()
@@ -159,30 +127,10 @@ onMounted(() => {
   loadStats()
 })
 
-function getEffectiveDates() {
-  let s = startDate.value
-  let e = endDate.value
-  if (reportType.value === 'monthly' && month.value) {
-    const [year, mon] = month.value.split('-')
-    const lastDay = new Date(year, mon, 0).getDate()
-    s = `${year}-${mon}-01`
-    e = `${year}-${mon}-${String(lastDay).padStart(2, '0')}`
-  }
-  return { startDate: s || null, endDate: e || null }
-}
-
 async function loadStats() {
   try {
-    let s = null, e = null
-    if (reportType.value === 'weekly') {
-      s = reportStart.value
-      e = reportEnd.value
-    }
-    if (reportType.value === 'monthly') {
-      const { startDate: start, endDate: end } = getEffectiveDates()
-      s = start
-      e = end
-    }
+    const s = reportStart.value
+    const e = reportEnd.value
     if (!s || !e) {
       ElMessage.warning('请先选择日期范围')
       return
@@ -250,13 +198,14 @@ async function loadStats() {
 
 async function downloadPdf() {
   try {
-    const { startDate: s, endDate: e } = getEffectiveDates()
-    const res = await reportApi.downloadPdf(reportType.value, s, e, selectedIndustry.value, selectedSource.value)
+    const s = reportStart.value
+    const e = reportEnd.value
+    const res = await reportApi.downloadPdf('weekly', s, e, selectedIndustry.value, selectedSource.value)
     const blob = new Blob([res.data], { type: 'application/pdf' })
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `price_${reportType.value}_${new Date().toISOString().slice(0, 10)}.pdf`
+    a.download = `price_report_${new Date().toISOString().slice(0, 10)}.pdf`
     a.click()
     window.URL.revokeObjectURL(url)
     ElMessage.success('PDF 下载成功')
@@ -267,13 +216,14 @@ async function downloadPdf() {
 
 async function downloadExcel() {
   try {
-    const { startDate: s, endDate: e } = getEffectiveDates()
-    const res = await reportApi.downloadExcel(reportType.value, s, e, selectedIndustry.value, selectedSource.value)
+    const s = reportStart.value
+    const e = reportEnd.value
+    const res = await reportApi.downloadExcel('weekly', s, e, selectedIndustry.value, selectedSource.value)
     const blob = new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `price_${reportType.value}_${new Date().toISOString().slice(0, 10)}.xlsx`
+    a.download = `price_report_${new Date().toISOString().slice(0, 10)}.xlsx`
     a.click()
     window.URL.revokeObjectURL(url)
     ElMessage.success('Excel 下载成功')
@@ -284,13 +234,14 @@ async function downloadExcel() {
 
 async function downloadHtml() {
   try {
-    const { startDate: s, endDate: e } = getEffectiveDates()
-    const res = await reportApi.downloadHtml(reportType.value, s, e, selectedIndustry.value, selectedSource.value)
+    const s = reportStart.value
+    const e = reportEnd.value
+    const res = await reportApi.downloadHtml('weekly', s, e, selectedIndustry.value, selectedSource.value)
     const blob = new Blob([res.data], { type: 'text/html' })
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `price_${reportType.value}_${new Date().toISOString().slice(0, 10)}.html`
+    a.download = `price_report_${new Date().toISOString().slice(0, 10)}.html`
     a.click()
     window.URL.revokeObjectURL(url)
     ElMessage.success('HTML 下载成功')
