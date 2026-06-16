@@ -31,11 +31,8 @@
             <el-form-item label="月份" v-if="reportType === 'monthly'">
               <el-date-picker v-model="month" type="month" value-format="YYYY-MM" placeholder="选择月份" />
             </el-form-item>
-            <el-form-item label="开始日期" v-if="reportType === 'weekly'">
-              <el-date-picker v-model="startDate" type="date" value-format="YYYY-MM-DD" placeholder="选择开始日期" />
-            </el-form-item>
-            <el-form-item label="结束日期" v-if="reportType === 'weekly'">
-              <el-date-picker v-model="endDate" type="date" value-format="YYYY-MM-DD" placeholder="选择结束日期" />
+            <el-form-item label="日期范围" v-if="reportType === 'weekly'">
+              <PeriodSelector v-model:startDate="reportStart" v-model:endDate="reportEnd" />
             </el-form-item>
           </div>
         </div>
@@ -118,11 +115,14 @@ import { reportApi } from '../api/report.js'
 import { priceApi } from '../api/price.js'
 import SourceSelector from '../components/SourceSelector.vue'
 import IndustrySelector from '../components/IndustrySelector.vue'
+import PeriodSelector from '../components/PeriodSelector.vue'
 
 const reportType = ref('weekly')
 const month = ref('')
 const startDate = ref('')
 const endDate = ref('')
+const reportStart = ref('')
+const reportEnd = ref('')
 const selectedSource = ref(null)
 const selectedIndustry = ref(null)
 const stats = ref({})
@@ -143,10 +143,10 @@ function getDefaultWeeklyRange() {
 }
 
 watch(reportType, (type) => {
-  if (type === 'weekly' && !startDate.value && !endDate.value) {
+  if (type === 'weekly' && !reportStart.value && !reportEnd.value) {
     const defaults = getDefaultWeeklyRange()
-    startDate.value = defaults.start
-    endDate.value = defaults.end
+    reportStart.value = defaults.start
+    reportEnd.value = defaults.end
   }
 }, { immediate: true })
 
@@ -173,7 +173,16 @@ function getEffectiveDates() {
 
 async function loadStats() {
   try {
-    const { startDate: s, endDate: e } = getEffectiveDates()
+    let s = null, e = null
+    if (reportType.value === 'weekly') {
+      s = reportStart.value
+      e = reportEnd.value
+    }
+    if (reportType.value === 'monthly') {
+      const { startDate: start, endDate: end } = getEffectiveDates()
+      s = start
+      e = end
+    }
     if (!s || !e) {
       ElMessage.warning('请先选择日期范围')
       return
