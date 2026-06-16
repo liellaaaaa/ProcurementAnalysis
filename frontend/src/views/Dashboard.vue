@@ -305,11 +305,6 @@
                   <div class="expand-chart-section">
                     <div class="expand-chart-header">
                       <span class="expand-chart-title">历史基准价走势</span>
-                      <el-select v-model="expandChartDays" size="small" style="width: 72px" @change="() => handleExpandChartDaysChange(row)">
-                        <el-option label="7天" :value="7" />
-                        <el-option label="30天" :value="30" />
-                        <el-option label="90天" :value="90" />
-                      </el-select>
                     </div>
                     <div :ref="el => expandChartRefs[row.product_id] = el" class="expand-chart-container" style="height: 200px; width: 100%;"></div>
                   </div>
@@ -466,7 +461,6 @@ const searchKeyword = ref('')
 
 const pagination = ref({ page: 1, pageSize: 10, total: 0 })
 const historyPagination = ref({ page: 1, pageSize: 10 })
-const expandChartDays = ref(7)
 
 // Supplier comparison card
 const supplierTreemapRef = ref(null)
@@ -645,7 +639,7 @@ async function loadExpandChart(row) {
     // 使用基准价历史数据（与表格数据源一致）
     const res = await priceApi.getBenchmarkHistory(
       row.product_id,
-      expandChartDays.value,
+      7,
       null
     )
     if (!res.data || res.data.length === 0) {
@@ -709,10 +703,6 @@ async function loadExpandChart(row) {
   } catch (e) {
     console.error('Failed to load expand chart', e)
   }
-}
-
-function handleExpandChartDaysChange(row) {
-  loadExpandChart(row)
 }
 
 function handleHistoryPageChange(page) {
