@@ -602,7 +602,7 @@ async def delete_price_record(record_id: int, db: Session = Depends(get_db)):
 
 @router.get("/dashboard/distribution")
 async def get_dashboard_distribution(
-    days: int = Query(30, ge=7, le=365),
+    days: int = Query(30, ge=1, le=365),
     industry: Optional[str] = None,
     category_id: Optional[int] = None,
     subcategory_id: Optional[List[int]] = Query(None),
@@ -786,7 +786,7 @@ async def get_dashboard_ranking(
 @router.get("/dashboard/history/compare")
 async def get_dashboard_history_compare(
     product_ids: Optional[str] = Query(None, description="逗号分隔的产品ID，留空则返回分类下所有产品"),
-    days: int = Query(30, ge=7, le=365),
+    days: int = Query(30, ge=1, le=365),
     industry: Optional[str] = None,
     category_id: Optional[int] = Query(None),
     subcategory_id: Optional[List[int]] = Query(None),
