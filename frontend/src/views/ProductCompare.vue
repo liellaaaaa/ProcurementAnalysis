@@ -168,8 +168,8 @@ async function loadComparison() {
   try {
     let days = 30
     if (compareStart.value && compareEnd.value) {
-      const start = new Date(compareStart.value)
-      const end = new Date(compareEnd.value)
+      const start = new Date(compareStart.value + 'T00:00:00')
+      const end = new Date(compareEnd.value + 'T00:00:00')
       days = Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1)
     } else if (!compareStart.value && !compareEnd.value) {
       days = 365
