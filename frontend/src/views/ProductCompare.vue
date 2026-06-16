@@ -83,7 +83,7 @@
         </div>
       </el-card>
 
-      <el-card class="chart-card animate-in" style="animation-delay: 0.1s" v-if="selectedProducts.length >= 2">
+      <el-card class="chart-card animate-in" style="animation-delay: 0.1s" v-show="selectedProducts.length >= 2">
         <template #header>
           <div class="card-header">
             <div class="header-title">
@@ -283,7 +283,7 @@ function updateChart(seriesData) {
     series
   }
 
-  chartInstance.setOption(option)
+  chartInstance.setOption(option, { notMerge: true })
 }
 
 onMounted(() => {
