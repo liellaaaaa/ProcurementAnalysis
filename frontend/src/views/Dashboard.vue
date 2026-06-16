@@ -266,6 +266,7 @@
             <div class="controls">
               <SourceSelector v-model="filter3Source" />
               <IndustrySelector v-model="filter3Industry" />
+              <PeriodSelector v-model:startDate="detailStart" v-model:endDate="detailEnd" />
 
               <el-input
                 v-model="searchKeyword"
@@ -452,9 +453,12 @@ watch([filter2Start, filter2End], () => { loadFilter2Charts() })
 const filter3Industry = ref(null)
 
 watch(filter3Industry, () => { loadSupplierComparison() })
+watch([detailStart, detailEnd], () => { loadLatestPrices() })
 
 const filter3Source = ref(null)
 const searchKeyword = ref('')
+const detailStart = ref(null)
+const detailEnd = ref(null)
 
 
 
@@ -574,7 +578,9 @@ async function loadLatestPrices() {
       category_id: null,
       subcategory_id: null,
       source: filter3Source.value || null,
-      industry: filter3Industry.value || null
+      industry: filter3Industry.value || null,
+      start_date: detailStart.value || null,
+      end_date: detailEnd.value || null
     }
     const res = await priceApi.getLatestPrices(params)
     latestPrices.value = res.data.data || []
