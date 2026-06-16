@@ -104,8 +104,8 @@ import SourceSelector from '../components/SourceSelector.vue'
 import IndustrySelector from '../components/IndustrySelector.vue'
 import PeriodSelector from '../components/PeriodSelector.vue'
 
-const reportStart = ref('')
-const reportEnd = ref('')
+const reportStart = ref(null)
+const reportEnd = ref(null)
 const selectedSource = ref(null)
 const selectedIndustry = ref(null)
 const stats = ref({})

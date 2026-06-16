@@ -44,7 +44,7 @@ const customRange = ref(null)
 
 onMounted(() => {
   // 只有父组件没有传入初始值时，才自动设置默认 7d
-  if (props.startDate == null && props.endDate == null) {
+  if (!props.startDate && !props.endDate) {
     selectPeriod(period.value)
   }
 })
