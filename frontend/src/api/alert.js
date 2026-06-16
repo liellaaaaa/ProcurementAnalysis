@@ -36,5 +36,17 @@ export const alertApi = {
   },
   deleteFeedback(id) {
     return api.delete(`/alerts/feedbacks/${id}`)
+  },
+  getSatisfactions() {
+    return api.get('/alerts/satisfactions')
+  },
+  createSatisfaction(data) {
+    return api.post('/alerts/satisfactions', data)
+  },
+  updateSatisfaction(id, data) {
+    return api.put(`/alerts/satisfactions/${id}`, data)
+  },
+  deleteSatisfaction(id) {
+    return api.delete(`/alerts/satisfactions/${id}`)
   }
 }

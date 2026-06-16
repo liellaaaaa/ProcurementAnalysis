@@ -40,7 +40,8 @@ def get_by_id(feedback_id: int) -> Optional[dict]:
     return None
 
 def create(feedback_date: str, current_status: str, expected_result: str,
-           is_resolved: bool = False, resolved_at: Optional[str] = None) -> dict:
+           is_resolved: bool = False, resolved_at: Optional[str] = None,
+           rating: Optional[int] = None) -> dict:
     """创建反馈"""
     feedbacks = _load()
     max_id = max([f.get("id", 0) for f in feedbacks], default=0)
@@ -52,6 +53,7 @@ def create(feedback_date: str, current_status: str, expected_result: str,
         "expected_result": expected_result,
         "is_resolved": is_resolved,
         "resolved_at": resolved_at,
+        "rating": rating,
         "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }

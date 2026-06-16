@@ -13,6 +13,13 @@ from backend.services.feedback_store import (
     update as fb_update,
     delete as fb_delete
 )
+from backend.services.satisfaction_store import (
+    get_all as get_satisfaction_all,
+    get_by_id as get_satisfaction_by_id,
+    create as sat_create,
+    update as sat_update,
+    delete as sat_delete
+)
 
 router = APIRouter(prefix="/api/v1/alerts", tags=["预警管理"])
 
@@ -71,14 +78,16 @@ class FeedbackCreate(BaseModel):
     expected_result: str
     is_resolved: bool = False
     resolved_at: Optional[datetime] = None
+    rating: Optional[int] = None
 
 
 class FeedbackUpdate(BaseModel):
-    feedback_date: Optional[datetime] = None
+    feedback_date: Optional[str] = None
     current_status: Optional[str] = None
     expected_result: Optional[str] = None
     is_resolved: Optional[bool] = None
-    resolved_at: Optional[datetime] = None
+    resolved_at: Optional[str] = None
+    rating: Optional[int] = None
 
 
 class FeedbackResponse(BaseModel):
@@ -88,6 +97,28 @@ class FeedbackResponse(BaseModel):
     expected_result: str
     is_resolved: bool
     resolved_at: Optional[str] = None
+    rating: Optional[int] = None
+    created_at: str
+    updated_at: str
+
+    class Config:
+        from_attributes = True
+
+
+class SatisfactionCreate(BaseModel):
+    score: int
+    complaint: str
+
+
+class SatisfactionUpdate(BaseModel):
+    score: Optional[int] = None
+    complaint: Optional[str] = None
+
+
+class SatisfactionResponse(BaseModel):
+    id: int
+    score: int
+    complaint: str
     created_at: str
     updated_at: str
 
@@ -371,7 +402,8 @@ async def create_feedback(feedback: FeedbackCreate):
         current_status=feedback.current_status,
         expected_result=feedback.expected_result,
         is_resolved=feedback.is_resolved,
-        resolved_at=resolved_at_str
+        resolved_at=resolved_at_str,
+        rating=feedback.rating
     )
     return FeedbackResponse(**new_feedback)
 
@@ -381,7 +413,7 @@ async def update_feedback(feedback_id: int, feedback: FeedbackUpdate):
     """更新反馈"""
     update_data = {}
     if feedback.feedback_date is not None:
-        update_data["feedback_date"] = feedback.feedback_date.strftime("%Y-%m-%d") if isinstance(feedback.feedback_date, datetime) else str(feedback.feedback_date).split("T")[0]
+        update_data["feedback_date"] = str(feedback.feedback_date).split("T")[0]
     if feedback.current_status is not None:
         update_data["current_status"] = feedback.current_status
     if feedback.expected_result is not None:
@@ -389,7 +421,9 @@ async def update_feedback(feedback_id: int, feedback: FeedbackUpdate):
     if feedback.is_resolved is not None:
         update_data["is_resolved"] = feedback.is_resolved
     if feedback.resolved_at is not None:
-        update_data["resolved_at"] = feedback.resolved_at.strftime("%Y-%m-%d %H:%M:%S") if isinstance(feedback.resolved_at, datetime) else str(feedback.resolved_at)
+        update_data["resolved_at"] = str(feedback.resolved_at)
+    if feedback.rating is not None:
+        update_data["rating"] = feedback.rating
 
     updated = fb_update(feedback_id, **update_data)
     if not updated:
@@ -404,3 +438,46 @@ async def delete_feedback(feedback_id: int):
     if not deleted:
         raise HTTPException(status_code=404, detail="反馈不存在")
     return {"message": "反馈已删除"}
+
+
+# ============ Satisfaction Score APIs (1-10分制) ============
+
+@router.get("/satisfactions", response_model=List[SatisfactionResponse])
+async def get_satisfactions():
+    """获取满意度记录列表"""
+    records = get_satisfaction_all()
+    return [SatisfactionResponse(**r) for r in records]
+
+
+@router.post("/satisfactions", response_model=SatisfactionResponse)
+async def create_satisfaction(record: SatisfactionCreate):
+    """创建满意度记录"""
+    if not (1 <= record.score <= 10):
+        raise HTTPException(status_code=400, detail="评分必须在1-10之间")
+    new_record = sat_create(score=record.score, complaint=record.complaint)
+    return SatisfactionResponse(**new_record)
+
+
+@router.put("/satisfactions/{record_id}", response_model=SatisfactionResponse)
+async def update_satisfaction(record_id: int, record: SatisfactionUpdate):
+    """更新满意度记录"""
+    update_data = {}
+    if record.score is not None:
+        if not (1 <= record.score <= 10):
+            raise HTTPException(status_code=400, detail="评分必须在1-10之间")
+        update_data["score"] = record.score
+    if record.complaint is not None:
+        update_data["complaint"] = record.complaint
+    updated = sat_update(record_id, **update_data)
+    if not updated:
+        raise HTTPException(status_code=404, detail="记录不存在")
+    return SatisfactionResponse(**updated)
+
+
+@router.delete("/satisfactions/{record_id}")
+async def delete_satisfaction(record_id: int):
+    """删除满意度记录"""
+    deleted = sat_delete(record_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="记录不存在")
+    return {"message": "记录已删除"}

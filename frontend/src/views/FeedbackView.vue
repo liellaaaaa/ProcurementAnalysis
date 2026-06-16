@@ -68,6 +68,13 @@
               </el-tag>
             </template>
           </el-table-column>
+          <el-table-column prop="rating" label="评分" width="120" align="center">
+            <template #default="{ row }">
+              <div class="rating-cell" @click.stop="openRatingDialog(row)">
+                <el-rate v-model="row.rating" disabled size="small" class="rating-overlay" />
+              </div>
+            </template>
+          </el-table-column>
           <el-table-column prop="resolved_at" label="解决时间" min-width="160">
             <template #default="{ row }">
               {{ row.resolved_at || '-' }}
@@ -82,6 +89,55 @@
             </template>
           </el-table-column>
         </el-table>
+      </el-card>
+
+      <!-- 满意度记录 -->
+      <el-card class="satisfaction-card animate-in" style="animation-delay: 0.15s">
+        <template #header>
+          <div class="card-header">
+            <div class="header-title">
+              <div class="title-icon-wrapper satisfaction-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>
+                </svg>
+              </div>
+              <span>满意度记录</span>
+            </div>
+            <el-button type="primary" size="small" @click="openNewSatisfactionDialog" class="add-btn">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="5" x2="12" y2="19"/>
+                <line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              添加
+            </el-button>
+          </div>
+        </template>
+        <div class="satisfaction-list" v-loading="satLoading">
+          <div v-if="satisfactions.length === 0" class="empty-state">
+            暂无满意度记录
+          </div>
+          <div v-for="item in satisfactions" :key="item.id" class="satisfaction-item">
+            <div class="sat-score-section">
+              <div class="sat-score-label">{{ item.score }}分</div>
+              <div class="sat-progress">
+                <span
+                  v-for="n in 10"
+                  :key="n"
+                  class="sat-bar"
+                  :class="{ filled: n <= item.score }"
+                />
+              </div>
+            </div>
+            <div class="sat-content">
+              <div class="sat-complaint">{{ item.complaint }}</div>
+              <div class="sat-time">{{ item.created_at }}</div>
+            </div>
+            <div class="sat-actions">
+              <el-button link type="primary" size="small" @click="editSatisfaction(item)" class="action-link edit">编辑</el-button>
+              <el-button link type="danger" size="small" @click="deleteSatisfaction(item.id)" class="action-link delete">删除</el-button>
+            </div>
+          </div>
+        </div>
       </el-card>
     </div>
 
@@ -127,10 +183,47 @@
             value-format="YYYY-MM-DD HH:mm:ss"
           />
         </el-form-item>
+        <el-form-item label="评分" v-if="feedbackForm.is_resolved">
+          <el-rate v-model="feedbackForm.rating" size="large" show-text>
+            <span style="font-size: 12px; color: #999">{{ ratingTextMap[feedbackForm.rating] }}</span>
+          </el-rate>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showFeedbackDialog = false" class="btn-cancel">取消</el-button>
         <el-button type="primary" @click="saveFeedback" class="btn-save">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 新建/编辑满意度弹窗 -->
+    <el-dialog v-model="showSatDialog" :title="editingSatisfaction ? '编辑满意度' : '添加满意度'" width="520px" class="config-dialog">
+      <el-form :model="satForm" label-width="90px" class="config-form">
+        <el-form-item label="评分" required>
+          <div class="sat-form-score">
+            <el-slider v-model="satForm.score" :min="1" :max="10" :step="1" show-stops />
+            <span class="sat-score-display">{{ satForm.score }}分</span>
+          </div>
+          <div class="sat-progress preview-progress">
+            <span
+              v-for="n in 10"
+              :key="n"
+              class="sat-bar"
+              :class="{ filled: n <= satForm.score }"
+            />
+          </div>
+        </el-form-item>
+        <el-form-item label="吐槽内容" required>
+          <el-input
+            v-model="satForm.complaint"
+            type="textarea"
+            :rows="3"
+            placeholder="请输入吐槽内容"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showSatDialog = false" class="btn-cancel">取消</el-button>
+        <el-button type="primary" @click="saveSatisfaction" class="btn-save">保存</el-button>
       </template>
     </el-dialog>
   </div>
@@ -152,8 +245,17 @@ const feedbackForm = ref({
   current_status: '',
   expected_result: '',
   is_resolved: false,
-  resolved_at: null
+  resolved_at: null,
+  rating: null
 })
+
+const ratingTextMap = {
+  1: '非常不满意',
+  2: '不满意',
+  3: '一般',
+  4: '满意',
+  5: '非常满意'
+}
 
 const unresolvedCount = computed(() => feedbacks.value.filter(f => !f.is_resolved).length)
 const resolvedCount = computed(() => feedbacks.value.filter(f => f.is_resolved).length)
@@ -184,7 +286,8 @@ function openNewFeedbackDialog() {
     current_status: '',
     expected_result: '',
     is_resolved: false,
-    resolved_at: null
+    resolved_at: null,
+    rating: null
   }
   showFeedbackDialog.value = true
 }
@@ -196,9 +299,14 @@ function editFeedback(row) {
     current_status: row.current_status,
     expected_result: row.expected_result,
     is_resolved: row.is_resolved,
-    resolved_at: row.resolved_at
+    resolved_at: row.resolved_at,
+    rating: row.rating || null
   }
   showFeedbackDialog.value = true
+}
+
+function openRatingDialog(row) {
+  editFeedback(row)
 }
 
 async function saveFeedback() {
@@ -245,8 +353,73 @@ async function deleteFeedback(id) {
   }
 }
 
+// ============ Satisfaction ============
+const satisfactions = ref([])
+const satLoading = ref(false)
+const showSatDialog = ref(false)
+const editingSatisfaction = ref(null)
+const satForm = ref({ score: 5, complaint: '' })
+
+async function loadSatisfactions() {
+  satLoading.value = true
+  try {
+    const res = await alertApi.getSatisfactions()
+    satisfactions.value = res.data
+  } catch (e) {
+    console.error('Failed to load satisfactions', e)
+  } finally {
+    satLoading.value = false
+  }
+}
+
+function openNewSatisfactionDialog() {
+  editingSatisfaction.value = null
+  satForm.value = { score: 5, complaint: '' }
+  showSatDialog.value = true
+}
+
+function editSatisfaction(row) {
+  editingSatisfaction.value = row
+  satForm.value = { score: row.score, complaint: row.complaint }
+  showSatDialog.value = true
+}
+
+async function saveSatisfaction() {
+  if (!satForm.value.complaint) {
+    ElMessage.warning('请输入吐槽内容')
+    return
+  }
+  try {
+    const data = { ...satForm.value }
+    if (editingSatisfaction.value) {
+      await alertApi.updateSatisfaction(editingSatisfaction.value.id, data)
+      ElMessage.success('已更新')
+    } else {
+      await alertApi.createSatisfaction(data)
+      ElMessage.success('已添加')
+    }
+    showSatDialog.value = false
+    editingSatisfaction.value = null
+    loadSatisfactions()
+  } catch (e) {
+    ElMessage.error(e.response?.data?.detail || '保存失败')
+  }
+}
+
+async function deleteSatisfaction(id) {
+  try {
+    await ElMessageBox.confirm('确认删除此记录？', '提示', { type: 'warning' })
+    await alertApi.deleteSatisfaction(id)
+    ElMessage.success('已删除')
+    loadSatisfactions()
+  } catch (e) {
+    if (e !== 'cancel') ElMessage.error('删除失败')
+  }
+}
+
 onMounted(() => {
   loadFeedbacks()
+  loadSatisfactions()
 })
 </script>
 
@@ -410,5 +583,144 @@ onMounted(() => {
 .animate-in {
   opacity: 0;
   animation: fadeInUp 0.5s ease-out forwards;
+}
+
+/* ============ Satisfaction Card ============ */
+.satisfaction-card {
+  margin-bottom: 20px;
+  border-radius: 16px !important;
+}
+
+.satisfaction-icon {
+  background: var(--color-success-dim, rgba(34, 197, 94, 0.12));
+  color: var(--success-color, #22c55e);
+}
+
+.satisfaction-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.empty-state {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 24px 0;
+  font-size: 14px;
+}
+
+.satisfaction-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 14px 16px;
+  background: var(--bg-secondary, #f8f9fa);
+  border-radius: 10px;
+  transition: background 0.2s;
+}
+
+.satisfaction-item:hover {
+  background: var(--bg-tertiary, #f0f1f3);
+}
+
+.sat-score-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 64px;
+}
+
+.sat-score-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+.sat-progress {
+  display: flex;
+  gap: 3px;
+}
+
+.sat-bar {
+  width: 6px;
+  height: 18px;
+  border-radius: 3px;
+  background: var(--border-color, #e5e7eb);
+  transition: background 0.2s;
+}
+
+.sat-bar.filled {
+  background: var(--success-color, #22c55e);
+}
+
+.sat-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.sat-complaint {
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+.sat-time {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.sat-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 50px;
+}
+
+.rating-cell {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+}
+
+.rating-cell .rating-overlay {
+  pointer-events: none;
+}
+
+.rating-cell:hover .el-rate__icon {
+  transform: scale(1.1);
+}
+
+.sat-form-score {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.sat-form-score .el-slider {
+  flex: 1;
+}
+
+.sat-score-display {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-primary);
+  min-width: 40px;
+  text-align: right;
+}
+
+.preview-progress {
+  margin-top: 8px;
+}
+
+.preview-progress .sat-bar {
+  width: 20px;
+  height: 10px;
 }
 </style>
