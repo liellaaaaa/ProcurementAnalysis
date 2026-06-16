@@ -845,16 +845,14 @@ async function loadLineChartData() {
     if (filter1Start.value && filter1End.value) {
       const start = new Date(filter1Start.value)
       const end = new Date(filter1End.value)
-      days = Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1)
+      days = Math.max(7, Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1)
     } else if (!filter1Start.value && !filter1End.value) {
       days = 365
     }
 
     // 使用基准价历史数据（与表格数据源一致）
     const res = await priceApi.getBenchmarkHistoryMulti({
-      start_date: filter1Start.value,
-      end_date: filter1End.value,
-      
+      days,
       source: filter1Source.value || null,
       industry: filter1Industry.value || null
     })
@@ -1005,7 +1003,7 @@ async function loadDistributionData() {
     if (filter2Start.value && filter2End.value) {
       const start = new Date(filter2Start.value)
       const end = new Date(filter2End.value)
-      days = Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1)
+      days = Math.max(7, Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1)
     } else if (!filter2Start.value && !filter2End.value) {
       days = 365
     }
@@ -1052,7 +1050,7 @@ async function loadSupplierComparison() {
     if (supplierStart.value && supplierEnd.value) {
       const start = new Date(supplierStart.value)
       const end = new Date(supplierEnd.value)
-      days = Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1)
+      days = Math.max(7, Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1)
     } else if (!supplierStart.value && !supplierEnd.value) {
       days = 365
     }
