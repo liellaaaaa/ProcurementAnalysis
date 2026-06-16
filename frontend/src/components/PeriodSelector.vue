@@ -30,7 +30,7 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 
 const props = defineProps({
   startDate: { type: String, default: null },
@@ -41,6 +41,13 @@ const emit = defineEmits(['update:startDate', 'update:endDate'])
 // period: '1d' | '7d' | '30d' | '90d' | 'all' | 'custom'
 const period = ref('7d')
 const customRange = ref(null)
+
+onMounted(() => {
+  // 只有父组件没有传入初始值时，才自动设置默认 7d
+  if (props.startDate == null && props.endDate == null) {
+    selectPeriod(period.value)
+  }
+})
 
 const periodOptions = [
   { label: '1天', value: '1d' },
