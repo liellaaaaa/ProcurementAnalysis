@@ -123,6 +123,11 @@ watch([selectedSource, selectedIndustry], () => {
   loadStats()
 })
 
+// 时间范围变化时自动刷新统计
+watch([reportStart, reportEnd], () => {
+  loadStats()
+})
+
 onMounted(() => {
   loadStats()
 })
@@ -137,7 +142,7 @@ async function loadStats() {
     }
 
     // 按日期范围获取所有价格记录，JS 端聚合
-    const params = { start_date: s, end_date: e, limit: 1000 }
+    const params = { start_date: s, end_date: e }
     if (selectedSource.value) params.source = selectedSource.value
     if (selectedIndustry.value) params.industry = selectedIndustry.value
     const pricesRes = await priceApi.getPrices(params)
