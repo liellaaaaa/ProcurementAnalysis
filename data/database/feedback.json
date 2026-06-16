@@ -18,5 +18,15 @@
     "resolved_at": "2026-06-11 14:20:00",
     "created_at": "2026-06-10 09:00:00",
     "updated_at": "2026-06-11 14:20:00"
+  },
+  {
+    "id": 3,
+    "feedback_date": "2026-06-16",
+    "current_status": "产品对比模块，我勾选后第一组是可以呈现的，想切换另外 一组数据对比的时候就不行了。要退出重新进去才行",
+    "expected_result": "解决",
+    "is_resolved": false,
+    "resolved_at": null,
+    "created_at": "2026-06-16 10:10:54",
+    "updated_at": "2026-06-16 10:10:54"
   }
 ]
