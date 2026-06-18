@@ -141,8 +141,8 @@ async function loadStats() {
       return
     }
 
-    // 按日期范围获取所有价格记录，JS 端聚合
-    const params = { start_date: s, end_date: e }
+    // 按日期范围获取所有价格记录，JS 端聚合（上限 10000 条）
+    const params = { start_date: s, end_date: e, limit: 10000 }
     if (selectedSource.value) params.source = selectedSource.value
     if (selectedIndustry.value) params.industry = selectedIndustry.value
     const pricesRes = await priceApi.getPrices(params)

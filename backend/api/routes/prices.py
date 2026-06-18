@@ -226,14 +226,16 @@ async def get_latest_prices(
                 product_map[pid]["latest_date"] = record_date
                 product_map[pid]["price"] = price
 
-    # 补充 detailed_quotes 到 extra_data.详细报价（返回完整历史）
-    for pid in product_map:
-        # 取该产品所有详细报价（完整历史）
-        dq_query = db.query(DetailedQuote).filter(
-            DetailedQuote.product_id == pid
+    # 批量查询 detailed_quotes（修复 N+1：一次查询替代循环）
+    all_pids = list(product_map.keys())
+    if all_pids:
+        all_dqs = db.query(DetailedQuote).filter(
+            DetailedQuote.product_id.in_(all_pids)
         ).order_by(DetailedQuote.publish_date.desc()).all()
-        product_map[pid]["extra_data"]["详细报价"] = [
-            {
+        # 按 product_id 分组
+        dq_by_pid = {}
+        for dq in all_dqs:
+            dq_by_pid.setdefault(dq.product_id, []).append({
                 "supplier": dq.supplier,
                 "brand": dq.brand,
                 "spec_raw": dq.spec,
@@ -243,24 +245,35 @@ async def get_latest_prices(
                 "price_type": dq.price_type,
                 "unit": dq.unit or "元/吨",
                 "publish_date": dq.publish_date.strftime('%Y/%m/%d') if dq.publish_date else ''
-            }
-            for dq in dq_query
-        ]
+            })
+        for pid, dqs in dq_by_pid.items():
+            product_map[pid]["extra_data"]["详细报价"] = dqs
 
-        # 计算涨跌：用今日基准价和昨日基准价对比
-        prev_date = (product_map[pid]["latest_date"] - timedelta(days=1)) if product_map[pid]["latest_date"] else None
-        if prev_date:
-            prev_bp = db.query(BenchmarkPrice).filter(
-                BenchmarkPrice.product_id == pid,
-                BenchmarkPrice.record_date == prev_date
-            ).first()
-            if prev_bp and prev_bp.price > 0:
-                change_pct = round(((product_map[pid]["price"] - prev_bp.price) / prev_bp.price) * 100, 2)
-                product_map[pid]["change_percent"] = change_pct
-                product_map[pid]["trend"] = "涨" if change_pct > 0 else "跌" if change_pct < 0 else "平"
-        if product_map[pid]["change_percent"] is None and product_map[pid]["price"] > 0:
-            product_map[pid]["change_percent"] = 0.0
-            product_map[pid]["trend"] = "平"
+        # 批量查询昨日基准价用于计算涨跌（修复 N+1）
+        yesterday_map = {}  # {product_id: yesterday_price}
+        for p in product_map.values():
+            if p["latest_date"]:
+                prev_date = p["latest_date"] - timedelta(days=1)
+                yesterday_map[(p["product_id"], prev_date)] = p["product_id"]
+        if yesterday_map:
+            prev_date_list = list(set(d[1] for d in yesterday_map.keys()))
+            yesterday_bps = db.query(BenchmarkPrice.product_id, BenchmarkPrice.record_date, BenchmarkPrice.price).filter(
+                BenchmarkPrice.product_id.in_(all_pids),
+                BenchmarkPrice.record_date.in_(prev_date_list)
+            ).all()
+            # 构建 {(pid, date): price}
+            yb_lookup = {(bp.product_id, bp.record_date): bp.price for bp in yesterday_bps}
+            for pid, p in product_map.items():
+                if p["latest_date"]:
+                    prev_date = p["latest_date"] - timedelta(days=1)
+                    prev_price = yb_lookup.get((pid, prev_date))
+                    if prev_price and prev_price > 0:
+                        change_pct = round(((p["price"] - prev_price) / prev_price) * 100, 2)
+                        p["change_percent"] = change_pct
+                        p["trend"] = "涨" if change_pct > 0 else "跌" if change_pct < 0 else "平"
+                    elif p["price"] > 0:
+                        p["change_percent"] = 0.0
+                        p["trend"] = "平"
 
     # 如果 benchmark_prices 没有数据，fallback 到 price_records
     if not product_map:
@@ -342,7 +355,6 @@ async def get_latest_prices(
         p["unit"] = p["unit"] or "元/吨"
 
     total = len(products)
-
     return {
         "total": total,
         "data": products
