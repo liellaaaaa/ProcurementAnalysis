@@ -227,25 +227,33 @@ async def get_latest_prices(
                 product_map[pid]["price"] = price
 
     # 批量查询 detailed_quotes（修复 N+1：一次查询替代循环）
+    # 限制：只查询最近30天的报价，每个产品最多返回5条，避免数据量过大导致超时
+    MAX_QUOTES_PER_PRODUCT = 5
     all_pids = list(product_map.keys())
     if all_pids:
+        # 只查询最近30天的报价
+        recent_date = (date.today() - timedelta(days=30)).isoformat()
         all_dqs = db.query(DetailedQuote).filter(
-            DetailedQuote.product_id.in_(all_pids)
-        ).order_by(DetailedQuote.publish_date.desc()).all()
-        # 按 product_id 分组
+            DetailedQuote.product_id.in_(all_pids),
+            DetailedQuote.publish_date >= recent_date
+        ).order_by(DetailedQuote.product_id, DetailedQuote.publish_date.desc()).all()
+        # 按 product_id 分组，每个产品只取最新的 MAX_QUOTES_PER_PRODUCT 条
         dq_by_pid = {}
         for dq in all_dqs:
-            dq_by_pid.setdefault(dq.product_id, []).append({
-                "supplier": dq.supplier,
-                "brand": dq.brand,
-                "spec_raw": dq.spec,
-                "region": dq.region,
-                "price": dq.price,
-                "price_str": f"{dq.price}",
-                "price_type": dq.price_type,
-                "unit": dq.unit or "元/吨",
-                "publish_date": dq.publish_date.strftime('%Y/%m/%d') if dq.publish_date else ''
-            })
+            if dq.product_id not in dq_by_pid:
+                dq_by_pid[dq.product_id] = []
+            if len(dq_by_pid[dq.product_id]) < MAX_QUOTES_PER_PRODUCT:
+                dq_by_pid[dq.product_id].append({
+                    "supplier": dq.supplier,
+                    "brand": dq.brand,
+                    "spec_raw": dq.spec,
+                    "region": dq.region,
+                    "price": dq.price,
+                    "price_str": f"{dq.price}",
+                    "price_type": dq.price_type,
+                    "unit": dq.unit or "元/吨",
+                    "publish_date": dq.publish_date.strftime('%Y/%m/%d') if dq.publish_date else ''
+                })
         for pid, dqs in dq_by_pid.items():
             product_map[pid]["extra_data"]["详细报价"] = dqs
 

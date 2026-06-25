@@ -13,6 +13,7 @@ htmlcov/
 dist/
 build/
 *.log
+.mimocode
 
 # Node / npm
 node_modules/
