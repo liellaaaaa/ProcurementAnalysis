@@ -30,5 +30,16 @@
     "created_at": "2026-06-16 10:10:54",
     "updated_at": "2026-06-16 15:44:12",
     "rating": 0
+  },
+  {
+    "id": 4,
+    "feedback_date": "2026-06-17",
+    "current_status": "详细数据No data",
+    "expected_result": "显示正确数据，加载快速",
+    "is_resolved": true,
+    "resolved_at": "2026-06-18 10:00:00",
+    "rating": 0,
+    "created_at": "2026-06-18 09:58:37",
+    "updated_at": "2026-06-18 09:58:37"
   }
 ]
