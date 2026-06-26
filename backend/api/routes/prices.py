@@ -5,6 +5,7 @@ from datetime import date, timedelta, datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 import asyncio
+import statistics
 import numpy
 from backend.models.database import Product, PriceRecord, Category, ProductCategory, BenchmarkPrice, DetailedQuote
 from backend.services.alert_service import check_and_trigger_alerts
@@ -1011,10 +1012,14 @@ async def get_supplier_comparison(
     for q in quotes:
         supplier = q.supplier or "未知供应商"
         if supplier not in supplier_stats:
-            supplier_stats[supplier] = {"supplier": supplier, "count": 0, "product_count": 0, "_deviations": [], "_product_ids": set(), "_price_sum": 0}
+            supplier_stats[supplier] = {"supplier": supplier, "count": 0, "product_count": 0, "_deviations": [], "_product_ids": set(), "_price_sum": 0, "_dates": set(), "_prices": []}
         supplier_stats[supplier]["count"] += 1
         # 用 set 记录该供应商供应了哪些 product_id
         supplier_stats[supplier]["_product_ids"].add(q.product_id)
+        # 记录报价日期（用于活跃天数）
+        supplier_stats[supplier]["_dates"].add(q.publish_date)
+        # 记录价格（用于波动率和最高单价）
+        supplier_stats[supplier]["_prices"].append(q.price)
         # 计算偏离度
         benchmark_price = benchmark_map.get(q.product_id)
         if benchmark_price and benchmark_price > 0:
@@ -1036,6 +1041,15 @@ async def get_supplier_comparison(
             status_label = "正常"
 
         avg_price = round(stats["_price_sum"] / stats["count"], 2) if stats["count"] else 0
+        active_days = len(stats["_dates"])
+        prices = stats["_prices"]
+        # 变异系数：STDDEV / AVG，SQLite 无原生 STDDEV，在 Python 层计算
+        price_volatility = 0.0
+        if len(prices) > 1:
+            mean_price = sum(prices) / len(prices)
+            if mean_price > 0:
+                price_volatility = round(statistics.stdev(prices) / mean_price, 4)
+        price_range = round(max(prices), 2) if prices else 0
 
         supplier_counts.append({
             "supplier": supplier,
@@ -1044,7 +1058,10 @@ async def get_supplier_comparison(
             "avg_price": avg_price,
             "avg_deviation": round(avg_dev, 4),
             "max_deviation": round(max_dev, 4),
-            "status_label": status_label
+            "status_label": status_label,
+            "active_days": active_days,
+            "price_volatility": price_volatility,
+            "price_range": price_range
         })
 
     # 2. product_supplier_prices: 同一产品多供应商的价格对比（取最新价格）

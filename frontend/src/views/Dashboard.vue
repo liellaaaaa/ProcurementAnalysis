@@ -180,6 +180,17 @@
                 />
               </el-select>
               <PeriodSelector v-model:startDate="supplierStart" v-model:endDate="supplierEnd" />
+              <el-select
+                v-model="supplierSortField"
+                size="small"
+                style="width: 130px"
+              >
+                <el-option label="按报价条数" value="count" />
+                <el-option label="按覆盖产品数" value="product_count" />
+                <el-option label="按报价活跃天数" value="active_days" />
+                <el-option label="按价格波动率" value="price_volatility" />
+                <el-option label="按最高单价" value="price_range" />
+              </el-select>
             </div>
           </div>
         </template>
@@ -483,11 +494,14 @@ const supplierSummary = ref(null)
 let supplierTreemap = null
 const TOP_N = 12
 const supplierProducts = ref([])
+const supplierCountsCache = ref([])
 const selectedSupplierProduct = ref(null)
 const supplierStart = ref(null)
 const supplierEnd = ref(null)
+const supplierSortField = ref('count')
 
 watch([supplierStart, supplierEnd], () => { loadSupplierComparison() })
+watch(supplierSortField, () => { resortSupplierTreemap() })
 
 const indicatorCards = ref([
   { metricType: 'yoy', metricLabel: '同比涨幅', productName: '-', changePercent: 0, trend: 'rise', price: 0, hasData: true },
@@ -1091,7 +1105,13 @@ async function loadSupplierComparison() {
     const data = res.data || {}
 
     const counts = data.supplier_counts || []
-    const sorted = [...counts].sort((a, b) => b.count - a.count)
+    supplierCountsCache.value = counts
+    const sortField = supplierSortField.value
+    const sorted = [...counts].sort((a, b) => {
+      const va = a[sortField] ?? 0
+      const vb = b[sortField] ?? 0
+      return vb - va
+    })
     const top = sorted.slice(0, TOP_N)
     const others = sorted.slice(TOP_N)
 
@@ -1114,7 +1134,7 @@ async function loadSupplierComparison() {
     if (others.length > 0) {
       treemapData.push({
         name: `其他供应商 (${others.length}家)`,
-        value: others.reduce((sum, s) => sum + s.count, 0),
+        value: others.reduce((sum, s) => sum + (s[sortField] || 0), 0),
         id: 'others',
         avg_deviation: null,
         status_label: '未分析',
@@ -1141,6 +1161,52 @@ async function loadSupplierComparison() {
     supplierProducts.value = data.supplier_products || []
   } catch (e) {
     console.error('Failed to load supplier comparison', e)
+  }
+}
+
+function resortSupplierTreemap() {
+  const counts = supplierCountsCache.value
+  if (!counts || !counts.length) return
+  const sortField = supplierSortField.value
+  const sorted = [...counts].sort((a, b) => {
+    const va = a[sortField] ?? 0
+    const vb = b[sortField] ?? 0
+    return vb - va
+  })
+  const top = sorted.slice(0, TOP_N)
+  const others = sorted.slice(TOP_N)
+
+  const treemapData = top.map(s => ({
+    name: s.supplier,
+    value: s[sortField],
+    id: s.supplier,
+    avg_deviation: s.avg_deviation,
+    max_deviation: s.max_deviation,
+    status_label: s.status_label,
+    count: s.count,
+    product_count: s.product_count,
+    itemStyle: {
+      color: s.avg_deviation == null ? '#D3D3D3' :
+             s.avg_deviation <= -0.15 ? '#008000' :
+             s.avg_deviation >= 0.15 ? '#DC143C' : '#D3D3D3'
+    }
+  }))
+
+  if (others.length > 0) {
+    treemapData.push({
+      name: `其他供应商 (${others.length}家)`,
+      value: others.reduce((sum, s) => sum + (s[sortField] || 0), 0),
+      id: 'others',
+      avg_deviation: null,
+      status_label: '未分析',
+      count: others.reduce((sum, s) => sum + s.count, 0),
+      product_count: others.reduce((sum, s) => sum + s.product_count, 0),
+      itemStyle: { color: '#E8E3F3' }
+    })
+  }
+
+  if (supplierTreemap) {
+    supplierTreemap.setOption({ series: [{ data: treemapData }] })
   }
 }
 
@@ -1347,7 +1413,11 @@ function initSupplierTreemap() {
         const devStr = dev != null ? `${(dev * 100).toFixed(1)}%` : '-'
         const statusColors = { '优': '#008000', '正常': '#D3D3D3', '风险': '#DC143C' }
         const color = statusColors[params.data.status_label] || '#D3D3D3'
-        return `<strong>${params.name}</strong><br/>报价: ${params.data.count}条<br/><span style="font-weight:600;color:#1E293B">偏离:</span> <span style="color:${color}">${devStr}</span><br/><span style="font-weight:600;color:#1E293B">状态:</span> <span style="color:${color}">${params.data.status_label || '-'}</span>`
+        const pv = params.data.price_volatility
+        const pvStr = pv != null && pv > 0 ? `${(pv * 100).toFixed(1)}%` : '-'
+        const pr = params.data.price_range
+        const prStr = pr != null ? `¥${Number(pr).toLocaleString()}` : '-'
+        return `<strong>${params.name}</strong><br/>报价: ${params.data.count}条 | 产品: ${params.data.product_count}个<br/>活跃天数: ${params.data.active_days || 0}天 | 波动率: ${pvStr}<br/>最高单价: ${prStr}<br/><span style="font-weight:600;color:#1E293B">偏离:</span> <span style="color:${color}">${devStr}</span> <span style="font-weight:600;color:#1E293B">状态:</span> <span style="color:${color}">${params.data.status_label || '-'}</span>`
       }
     },
     // visualMap removed — color set directly via itemStyle.color based on avg_deviation
