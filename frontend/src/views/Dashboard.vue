@@ -163,7 +163,7 @@
               <span>供应商智能分析看板</span>
             </div>
             <div class="controls">
-              <IndustrySelector v-model="filter3Industry" />
+              <IndustrySelector v-model="filter3SupplierIndustry" />
               <el-select
                 v-model="selectedSupplierProduct"
                 clearable
@@ -451,10 +451,13 @@ watch(filter2Industry, () => { loadFilter2Charts() })
 watch([filter2Start, filter2End], () => { loadFilter2Charts() })
 
 const filter3Industry = ref(null)
-
-watch(filter3Industry, () => { loadSupplierComparison() })
-
+const filter3SupplierIndustry = ref(null)
 const filter3Source = ref(null)
+
+watch(filter3Industry, () => { loadLatestPrices() })
+watch(filter3Source, () => { loadLatestPrices() })
+watch(filter3SupplierIndustry, () => { loadSupplierComparison(); loadLatestPrices() })
+
 const searchKeyword = ref('')
 const detailStart = ref(null)
 const detailEnd = ref(null)
@@ -1079,7 +1082,7 @@ async function loadSupplierComparison() {
     const params = {
       days,
       source: filter3Source.value || null,
-      industry: filter3Industry.value || null
+      industry: filter3SupplierIndustry.value || null
     }
     if (selectedSupplierProduct.value) {
       params.product_id = selectedSupplierProduct.value
