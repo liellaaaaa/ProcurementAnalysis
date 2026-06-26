@@ -719,7 +719,6 @@ async def get_dashboard_ranking(
 
     # 从 BenchmarkPrice 计算日变化涨跌幅
     today_date = date.today()
-    yesterday_date = today_date - timedelta(days=1)
     start_date = (today_date - timedelta(days=days)).isoformat()
 
     # 获取每个产品的最新基准价
@@ -762,17 +761,17 @@ async def get_dashboard_ranking(
     product_ids = [lp.product_id for lp in latest_prices]
     products = {p.id: p.product_name for p in db.query(Product).filter(Product.id.in_(product_ids)).all()}
 
-    # 获取昨日基准价用于计算涨跌幅（注意：最新数据日期可能不是今天，需要用实际最新日期的前一天）
+    # 获取最新基准价对应日期，以及对比日期（最新日期 - days）
     latest_dates = {lp.product_id: lp.record_date for lp in latest_prices}
     actual_latest_date = max(latest_dates.values()) if latest_dates else today_date
-    actual_yesterday_date = actual_latest_date - timedelta(days=1)
+    compare_date = actual_latest_date - timedelta(days=days)
 
-    yesterday_prices_query = db.query(
+    compare_prices_query = db.query(
         BenchmarkPrice.product_id,
         BenchmarkPrice.price
-    ).filter(BenchmarkPrice.record_date == actual_yesterday_date)
+    ).filter(BenchmarkPrice.record_date == compare_date)
 
-    yesterday_prices = {bp.product_id: bp.price for bp in yesterday_prices_query.all()}
+    compare_prices = {bp.product_id: bp.price for bp in compare_prices_query.all()}
 
     ranking = []
     for lp in latest_prices:
@@ -785,12 +784,12 @@ async def get_dashboard_ranking(
             hist_query = hist_query.filter(BenchmarkPrice.source == source)
         hist = hist_query.scalar() or 0
 
-        # 计算涨跌幅：从基准价计算
-        yesterday_price = yesterday_prices.get(lp.product_id)
-        if yesterday_price and yesterday_price != 0:
-            change_percent = round((lp.price - yesterday_price) / yesterday_price * 100, 2)
+        # 计算涨跌幅：对比日期价格 vs 最新价格
+        base_price = compare_prices.get(lp.product_id)
+        if base_price and base_price != 0:
+            change_percent = round((lp.price - base_price) / base_price * 100, 2)
         else:
-            # 没有昨日数据时跳过该产品，不设置虚假的0%涨跌幅
+            # 没有对比日期数据时跳过该产品，不设置虚假的0%涨跌幅
             continue
 
         ranking.append({
