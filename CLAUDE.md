@@ -30,7 +30,8 @@ backend/
 │   ├── seed_categories.py   # 品类初始化与匹配
 │   ├── seed_exact_products.py # 精确产品名匹配
 │   ├── update_product_urls.py # 更新产品 URL
-│   └── migrate_json_to_db.py # JSON 数据迁移
+│   ├── migrate_json_to_db.py # JSON 数据迁移
+│   └── daily_refresh.py     # 每日自动刷新脚本（供任务计划调用）
 ├── api/routes/          # API 路由
 │   ├── auth.py          # 用户认证（登录/登出/JWT）
 │   ├── products.py      # 产品 API
@@ -153,6 +154,21 @@ python -m backend.scrapers.shengyishe --dry-run
 - 爬虫依赖数据库中的 `products.source_url` 和 `products.plist_url` 字段定位页面
 
 **防重复机制**：两次爬取间隔需大于 30 分钟
+
+#### 方式三：每日自动刷新（Windows 任务计划程序）
+
+通过 Windows 任务计划程序，每天 7:30 自动运行 `backend/scripts/daily_refresh.py`，该脚本内部调用 `shengyishe` 爬虫：
+
+```bash
+# 任务计划已创建，任务名：ProcurementDailyRefresh
+# 手动触发运行：
+python -m backend.scripts.daily_refresh
+
+# 查看/删除任务：
+# Get-ScheduledTask -TaskName "ProcurementDailyRefresh" | Unregister-ScheduledTask
+```
+
+日志文件：`log/operations.log`
 
 ## 历史数据回填
 
