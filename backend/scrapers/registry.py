@@ -1,20 +1,18 @@
 from typing import Dict, Type, List
 
-from backend.scrapers.base import BaseScraper
-
 
 class ScraperRegistry:
     """爬虫注册中心，管理所有数据源爬虫"""
 
-    _scrapers: Dict[str, Type[BaseScraper]] = {}
+    _scrapers: Dict[str, Type] = {}
 
     @classmethod
-    def register(cls, name: str, scraper_class: Type[BaseScraper]):
+    def register(cls, name: str, scraper_class: Type):
         """注册一个爬虫类"""
         cls._scrapers[name] = scraper_class
 
     @classmethod
-    def get(cls, name: str) -> BaseScraper:
+    def get(cls, name: str):
         """获取指定名称的爬虫实例"""
         if name not in cls._scrapers:
             raise ValueError(f"Unknown scraper: {name}")
