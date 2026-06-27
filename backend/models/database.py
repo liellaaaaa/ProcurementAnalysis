@@ -155,6 +155,32 @@ class AlertRecord(Base):
         Index("ix_alert_record_product", "product_id"),
     )
 
+class Feedback(Base):
+    """反馈记录表"""
+    __tablename__ = "feedbacks"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    feedback_date = Column(String(20), nullable=False)
+    current_status = Column(String(500), nullable=False)
+    expected_result = Column(String(500), nullable=False)
+    is_resolved = Column(Boolean, default=False)
+    resolved_at = Column(String(30))
+    rating = Column(Integer)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
+class Satisfaction(Base):
+    """满意度记录表"""
+    __tablename__ = "satisfactions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    score = Column(Integer, nullable=False)
+    complaint = Column(String(1000), nullable=False)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
 class ScraperLog(Base):
     __tablename__ = "scraper_logs"
 

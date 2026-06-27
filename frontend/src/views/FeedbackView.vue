@@ -231,7 +231,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { alertApi } from '../api/alert.js'
+import { feedbackApi } from '../api/feedback.js'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const feedbacks = ref([])
@@ -265,7 +265,7 @@ async function loadFeedbacks() {
   try {
     const params = {}
     if (filterResolved.value !== null) params.is_resolved = filterResolved.value
-    const res = await alertApi.getFeedbacks(params)
+    const res = await feedbackApi.getFeedbacks(params)
     feedbacks.value = res.data
   } catch (e) {
     console.error('Failed to load feedbacks', e)
@@ -328,10 +328,10 @@ async function saveFeedback() {
       feedback_date: feedbackForm.value.feedback_date + 'T00:00:00'
     }
     if (editingFeedback.value) {
-      await alertApi.updateFeedback(editingFeedback.value.id, data)
+      await feedbackApi.updateFeedback(editingFeedback.value.id, data)
       ElMessage.success('反馈已更新')
     } else {
-      await alertApi.createFeedback(data)
+      await feedbackApi.createFeedback(data)
       ElMessage.success('反馈已添加')
     }
     showFeedbackDialog.value = false
@@ -345,7 +345,7 @@ async function saveFeedback() {
 async function deleteFeedback(id) {
   try {
     await ElMessageBox.confirm('确认删除此反馈？', '提示', { type: 'warning' })
-    await alertApi.deleteFeedback(id)
+    await feedbackApi.deleteFeedback(id)
     ElMessage.success('已删除')
     loadFeedbacks()
   } catch (e) {
@@ -363,7 +363,7 @@ const satForm = ref({ score: 5, complaint: '' })
 async function loadSatisfactions() {
   satLoading.value = true
   try {
-    const res = await alertApi.getSatisfactions()
+    const res = await feedbackApi.getSatisfactions()
     satisfactions.value = res.data
   } catch (e) {
     console.error('Failed to load satisfactions', e)
@@ -392,10 +392,10 @@ async function saveSatisfaction() {
   try {
     const data = { ...satForm.value }
     if (editingSatisfaction.value) {
-      await alertApi.updateSatisfaction(editingSatisfaction.value.id, data)
+      await feedbackApi.updateSatisfaction(editingSatisfaction.value.id, data)
       ElMessage.success('已更新')
     } else {
-      await alertApi.createSatisfaction(data)
+      await feedbackApi.createSatisfaction(data)
       ElMessage.success('已添加')
     }
     showSatDialog.value = false
@@ -409,7 +409,7 @@ async function saveSatisfaction() {
 async function deleteSatisfaction(id) {
   try {
     await ElMessageBox.confirm('确认删除此记录？', '提示', { type: 'warning' })
-    await alertApi.deleteSatisfaction(id)
+    await feedbackApi.deleteSatisfaction(id)
     ElMessage.success('已删除')
     loadSatisfactions()
   } catch (e) {

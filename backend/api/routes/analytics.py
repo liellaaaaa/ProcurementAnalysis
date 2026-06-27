@@ -7,7 +7,7 @@ from backend.api.deps import get_db
 from backend.utils.date_utils import format_date
 from backend.models.database import Product, PriceRecord
 
-router = APIRouter(prefix="/api/v1/prices", tags=["价格分析"])
+router = APIRouter(prefix="/api/v1/analytics", tags=["价格分析"])
 
 
 def simple_linear_regression(values: List[float]) -> tuple:

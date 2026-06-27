@@ -1,6 +1,7 @@
 """
 操作日志服务
 记录用户关键操作，便于后续审计和问题定位
+同时写入文件和数据库
 """
 import os
 import json
@@ -34,6 +35,7 @@ class OperationLogger:
     MODULE_REPORT = "REPORT"
     MODULE_SCRAPER = "SCRAPER"
     MODULE_CATEGORY = "CATEGORY"
+    MODULE_FEEDBACK = "FEEDBACK"
     MODULE_SYSTEM = "SYSTEM"
 
     @classmethod
@@ -43,7 +45,7 @@ class OperationLogger:
 
     @classmethod
     def _write_log(cls, level: str, module: str, action: str, details: dict, result: str = "SUCCESS"):
-        """写入日志到文件"""
+        """写入日志到文件和数据库"""
         cls._ensure_log_dir()
         log_entry = {
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -53,8 +55,31 @@ class OperationLogger:
             "details": details,
             "result": result
         }
+        # 写入文件
         with open(LOG_FILE, "a", encoding="utf-8") as f:
             f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
+        # 写入数据库
+        try:
+            from backend.models.database import OperationLog, SessionLocal
+            session = SessionLocal()
+            try:
+                db_log = OperationLog(
+                    timestamp=datetime.now(),
+                    level=level,
+                    module=module,
+                    action=action,
+                    details=json.dumps(details, ensure_ascii=False)[:1000] if details else "",
+                    result=result,
+                    operator=details.get("operator", "system") if isinstance(details, dict) else "system"
+                )
+                session.add(db_log)
+                session.commit()
+            except Exception:
+                session.rollback()
+            finally:
+                session.close()
+        except Exception:
+            pass  # 数据库不可用时静默失败，文件日志仍有效
 
     @classmethod
     def log(cls, module: str, action: str, details: dict = None, result: str = "SUCCESS"):

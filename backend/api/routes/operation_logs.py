@@ -1,17 +1,22 @@
 """
 操作日志查询API
+优先从数据库查询，文件作为 fallback
 """
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Depends
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime
+from sqlalchemy.orm import Session
+from sqlalchemy import func
 import json
 import re
 from pathlib import Path
+from backend.api.deps import get_db
+from backend.models.database import OperationLog
 
 router = APIRouter(prefix="/api/v1/operation-logs", tags=["操作日志"])
 
-# 日志文件路径
+# 日志文件路径 (fallback)
 LOG_DIR = Path(__file__).parent.parent.parent.parent / "log"
 LOG_FILE = LOG_DIR / "operations.log"
 
@@ -23,8 +28,7 @@ def sanitize_operator(value: str) -> str:
     """清理 operator 字段，防止注入和信息泄露"""
     if not value or not isinstance(value, str):
         return "system"
-    # 移除潜在的危险字符，只保留字母数字下划线汉字
-    cleaned = value.strip()[:50]  # 限制长度
+    cleaned = value.strip()[:50]
     if OPERATOR_PATTERN.match(cleaned):
         return cleaned
     return "system"
@@ -41,7 +45,7 @@ class OperationLogResponse(BaseModel):
 
 
 def read_logs_from_file(lines: int = 100, keyword: str = None, module: str = None) -> List[dict]:
-    """从日志文件读取"""
+    """从日志文件读取 (fallback)"""
     if not LOG_FILE.exists():
         return []
 
@@ -49,10 +53,9 @@ def read_logs_from_file(lines: int = 100, keyword: str = None, module: str = Non
         all_lines = f.readlines()
 
     logs = []
-    for line in reversed(all_lines[-lines*2:]):  # 多读一些用于过滤
+    for line in reversed(all_lines[-lines*2:]):
         try:
             log = json.loads(line.strip())
-            # 过滤
             if module and log.get("module") != module:
                 continue
             if keyword:
@@ -75,31 +78,52 @@ async def get_operation_logs(
     module: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    level: Optional[str] = None
+    level: Optional[str] = None,
+    db: Session = Depends(get_db)
 ):
     """
-    获取操作日志列表
-
-    - **limit**: 返回条数，默认100，最大500
-    - **keyword**: 关键词搜索
-    - **module**: 模块筛选 (PRODUCT/PRICE/ALERT/REPORT/SCRAPER/CATEGORY)
-    - **start_date**: 开始日期 (yyyy-mm-dd)
-    - **end_date**: 结束日期 (yyyy-mm-dd)
-    - **level**: 级别筛选 (INFO/WARNING/ERROR)
+    获取操作日志列表（优先从数据库查询）
     """
+    # 尝试从数据库查询
+    try:
+        query = db.query(OperationLog)
+
+        if module:
+            query = query.filter(OperationLog.module == module)
+        if level:
+            query = query.filter(OperationLog.level == level)
+        if start_date:
+            query = query.filter(OperationLog.timestamp >= start_date)
+        if end_date:
+            query = query.filter(OperationLog.timestamp <= end_date + " 23:59:59")
+        if keyword:
+            query = query.filter(OperationLog.details.contains(keyword))
+
+        db_logs = query.order_by(OperationLog.timestamp.desc()).limit(limit).all()
+
+        if db_logs:
+            return [OperationLogResponse(
+                timestamp=log.timestamp.strftime("%Y-%m-%d %H:%M:%S") if log.timestamp else "",
+                level=log.level or "INFO",
+                module=log.module or "",
+                action=log.action or "",
+                details=json.loads(log.details) if log.details and log.details.startswith("{") else {"raw": log.details} if log.details else {},
+                result=log.result or "SUCCESS",
+                operator=sanitize_operator(log.operator or "system")
+            ) for log in db_logs]
+    except Exception:
+        pass
+
+    # Fallback: 从文件读取
     logs = read_logs_from_file(lines=1000, keyword=keyword, module=module)
 
-    # 日期过滤
     if start_date:
         logs = [l for l in logs if l.get("timestamp", "") >= start_date]
     if end_date:
         logs = [l for l in logs if l.get("timestamp", "")[:10] <= end_date]
-
-    # 级别过滤
     if level:
         logs = [l for l in logs if l.get("level") == level]
 
-    # 限制返回数量
     logs = logs[:limit]
 
     return [OperationLogResponse(
@@ -126,14 +150,27 @@ async def get_modules():
             {"value": "REPORT", "label": "报表生成"},
             {"value": "SCRAPER", "label": "爬虫运行"},
             {"value": "CATEGORY", "label": "分类管理"},
+            {"value": "FEEDBACK", "label": "采购反馈"},
             {"value": "SYSTEM", "label": "系统"}
         ]
     }
 
 
 @router.get("/summary")
-async def get_log_summary():
+async def get_log_summary(db: Session = Depends(get_db)):
     """获取日志统计摘要"""
+    # 尝试从数据库聚合
+    try:
+        total = db.query(func.count(OperationLog.id)).scalar() or 0
+        if total > 0:
+            by_module = dict(db.query(OperationLog.module, func.count(OperationLog.id)).group_by(OperationLog.module).all())
+            by_level = dict(db.query(OperationLog.level, func.count(OperationLog.id)).group_by(OperationLog.level).all())
+            by_result = dict(db.query(OperationLog.result, func.count(OperationLog.id)).group_by(OperationLog.result).all())
+            return {"total": total, "by_module": by_module, "by_level": by_level, "by_result": by_result}
+    except Exception:
+        pass
+
+    # Fallback: 从文件聚合
     if not LOG_FILE.exists():
         return {"total": 0, "by_module": {}, "by_level": {}, "by_result": {}}
 
