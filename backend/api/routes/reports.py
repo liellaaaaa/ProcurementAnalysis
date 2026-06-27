@@ -121,7 +121,7 @@ async def generate_pdf_report(
             return None
         try:
             return date.fromisoformat(s.replace('/', '-'))
-        except:
+        except (ValueError, TypeError):
             return None
 
     parsed_start = parse_date(start_date) if start_date else None
@@ -141,16 +141,26 @@ async def generate_pdf_report(
         return {"error": f"reportlab 导入失败: {str(e)}"}
 
     # 注册中文字体
-    try:
-        pdfmetrics.registerFont(TTFont('SimHei', 'C:/Windows/Fonts/simhei.ttf'))
-        pdfmetrics.registerFont(TTFont('Microsoft YaHei', 'C:/Windows/Fonts/msyh.ttc'))
-        CHINESE_FONT = 'SimHei'
-    except Exception:
+    import platform as _platform
+    _system = _platform.system()
+    _font_paths = []
+    if _system == "Windows":
+        _font_paths = [('SimHei', 'C:/Windows/Fonts/simhei.ttf'), ('Microsoft YaHei', 'C:/Windows/Fonts/msyh.ttc')]
+    elif _system == "Darwin":
+        _font_paths = [('PingFang', '/System/Library/Fonts/PingFang.ttc')]
+    else:
+        _font_paths = [('WenQuanYi', '/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc')]
+
+    CHINESE_FONT = 'Helvetica'
+    for fname, fpath in _font_paths:
         try:
-            pdfmetrics.registerFont(TTFont('Microsoft YaHei', 'C:/Windows/Fonts/msyh.ttc'))
-            CHINESE_FONT = 'Microsoft YaHei'
+            import os as _os
+            if _os.path.exists(fpath):
+                pdfmetrics.registerFont(TTFont(fname, fpath))
+                CHINESE_FONT = fname
+                break
         except Exception:
-            CHINESE_FONT = 'Helvetica'
+            continue
 
     start_date, end_date = get_date_range(report_type, parsed_start, parsed_end)
 
@@ -534,7 +544,7 @@ async def generate_html_report(
             return None
         try:
             return date.fromisoformat(s.replace('/', '-'))
-        except:
+        except (ValueError, TypeError):
             return None
 
     parsed_start = parse_date(start_date) if start_date else None
@@ -831,7 +841,7 @@ async def generate_excel_report(
             return None
         try:
             return date.fromisoformat(s.replace('/', '-'))
-        except:
+        except (ValueError, TypeError):
             return None
 
     parsed_start = parse_date(start_date) if start_date else None

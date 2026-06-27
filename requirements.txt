@@ -18,6 +18,7 @@ pydantic==2.5.3
 
 # Utils
 python-dateutil==2.8.2
+python-dotenv==1.0.0
 
 # Charts
 numpy==1.26.3

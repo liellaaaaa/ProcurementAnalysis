@@ -6,6 +6,7 @@ import sys
 import os
 from datetime import date, datetime
 
+from loguru import logger
 from backend.scrapers import ScraperRegistry
 from backend.models.database import PriceRecord, ScraperLog, Product
 from backend.api.deps import get_db
@@ -127,8 +128,8 @@ async def run_scraper(source: str, db: Session = Depends(get_db)):
         )
 
         if result.returncode != 0:
-            print(f"Scraper stderr: {result.stderr}")
-            print(f"Scraper stdout: {result.stdout}")
+            logger.error(f"Scraper stderr: {result.stderr}")
+            logger.error(f"Scraper stdout: {result.stdout}")
             raise HTTPException(status_code=500, detail=f"Scraper failed: {result.stderr[:200] if result.stderr else result.stdout[:200]}")
 
         # 记录成功日志

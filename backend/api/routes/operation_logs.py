@@ -65,7 +65,7 @@ def read_logs_from_file(lines: int = 100, keyword: str = None, module: str = Non
             logs.append(log)
             if len(logs) >= lines:
                 break
-        except:
+        except (json.JSONDecodeError, KeyError, TypeError):
             continue
 
     return list(reversed(logs))

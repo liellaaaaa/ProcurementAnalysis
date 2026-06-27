@@ -15,16 +15,25 @@ warnings.filterwarnings('ignore')
 plt.rcParams['font.sans-serif'] = ['Microsoft YaHei', 'SimHei', 'Arial Unicode MS', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
 
-# 尝试注册 Windows 中文字体
+# 尝试注册中文字体
 try:
     from matplotlib.font_manager import FontProperties
-    font_path = 'C:/Windows/Fonts/simhei.ttf'
-    if os.path.exists(font_path):
-        font_prop = FontProperties(fname=font_path)
-        # 测试字体
-        fig, ax = plt.subplots()
-        ax.text(0.5, 0.5, '测试', fontproperties=font_prop)
-        plt.close(fig)
+    import platform
+    _system = platform.system()
+    _font_candidates = []
+    if _system == "Windows":
+        _font_candidates = ['C:/Windows/Fonts/simhei.ttf', 'C:/Windows/Fonts/msyh.ttc']
+    elif _system == "Darwin":
+        _font_candidates = ['/System/Library/Fonts/PingFang.ttc', '/System/Library/Fonts/STHeiti Light.ttc']
+    else:
+        _font_candidates = ['/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc', '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc']
+    for font_path in _font_candidates:
+        if os.path.exists(font_path):
+            font_prop = FontProperties(fname=font_path)
+            fig, ax = plt.subplots()
+            ax.text(0.5, 0.5, '测试', fontproperties=font_prop)
+            plt.close(fig)
+            break
 except Exception:
     pass
 

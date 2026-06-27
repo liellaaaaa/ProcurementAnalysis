@@ -14,6 +14,7 @@ import time
 from datetime import datetime, date
 from typing import List, Dict, Optional
 
+from loguru import logger
 from playwright.sync_api import sync_playwright
 
 from backend.scrapers.base import (
@@ -45,7 +46,7 @@ class ShengyisheScraper:
             ).all()
             for p in products:
                 self._product_map[p.source_url] = p
-            print(f"从数据库获取到 {len(products)} 个产品")
+            logger.info(f"从数据库获取到 {len(products)} 个产品")
             return products
         finally:
             session.close()
@@ -56,7 +57,7 @@ class ShengyisheScraper:
     def scrape_benchmark(self, product: Product, browser=None, context=None) -> Optional[Dict]:
         """爬取单个产品的 detail 页，提取基准价"""
         url = product.source_url
-        print(f"  [基准价] {product.product_name}: {url}")
+        logger.info(f"  [基准价] {product.product_name}: {url}")
 
         page, b, ctx, own = new_page(url, browser=browser, context=context)
         try:
@@ -64,10 +65,10 @@ class ShengyisheScraper:
             page.wait_for_timeout(1000)
             data = self._parse_benchmark_page(page, product)
             if data:
-                print(f"    → price={data.get('price')} date={data.get('record_date')}")
+                logger.debug(f"    → price={data.get('price')} date={data.get('record_date')}")
             return data
         except Exception as e:
-            print(f"    ✗ 加载失败: {e}")
+            logger.warning(f"    ✗ 加载失败: {e}")
             return None
         finally:
             page.close()
@@ -172,7 +173,7 @@ class ShengyisheScraper:
                 'record_date': record_date,
             }
         except Exception as e:
-            print(f"    解析失败: {e}")
+            logger.warning(f"    解析失败: {e}")
             return None
 
     # ------------------------------------------------------------------
@@ -184,7 +185,7 @@ class ShengyisheScraper:
         if not url:
             return []
 
-        print(f"  [详细报价] {product.product_name}: {url}")
+        logger.info(f"  [详细报价] {product.product_name}: {url}")
 
         page, b, ctx, own = new_page(url, browser=browser, context=context)
         try:
@@ -192,10 +193,10 @@ class ShengyisheScraper:
             page.wait_for_timeout(1000)
             rows = _parse_plist_table(page)
             results = filter_latest_day(rows)
-            print(f"    → {len(results)} 条报价（最新一天）")
+            logger.info(f"    → {len(results)} 条报价（最新一天）")
             return results
         except Exception as e:
-            print(f"    ✗ 加载失败: {e}")
+            logger.warning(f"    ✗ 加载失败: {e}")
             return []
         finally:
             page.close()
@@ -209,7 +210,7 @@ class ShengyisheScraper:
         """增量爬取所有产品的最新一天数据"""
         products = self.get_all_products()
         if not products:
-            print("没有找到产品，退出")
+            logger.warning("没有找到产品，退出")
             return
 
         benchmark_total = 0
@@ -220,40 +221,34 @@ class ShengyisheScraper:
             context = make_playwright_context(browser)
 
             # 第一步：基准价
-            print(f"\n{'='*50}")
-            print(f"第一步：爬取基准价（{len(products)} 个产品）")
-            print(f"{'='*50}")
+            logger.info(f"第一步：爬取基准价（{len(products)} 个产品）")
             for product in products:
                 data = self.scrape_benchmark(product, browser=browser, context=context)
                 if data and not dry_run:
                     n = save_benchmark_record(product.id, data, SOURCE_KEY)
                     benchmark_total += n
                 elif dry_run:
-                    print(f"    [dry-run] would save benchmark for {product.product_name}")
+                    logger.debug(f"    [dry-run] would save benchmark for {product.product_name}")
                 time.sleep(0.5)
 
             # 第二步：详细报价
-            print(f"\n{'='*50}")
-            print(f"第二步：爬取详细报价（{len(products)} 个产品）")
-            print(f"{'='*50}")
+            logger.info(f"第二步：爬取详细报价（{len(products)} 个产品）")
             for product in products:
                 if not product.plist_url:
-                    print(f"  [skip] {product.product_name} 无 plist 页")
+                    logger.debug(f"  [skip] {product.product_name} 无 plist 页")
                     continue
                 rows = self.scrape_plist(product, browser=browser, context=context)
                 if rows and not dry_run:
                     n = save_detailed_quotes_batch(product.id, product.product_name, rows, SOURCE_KEY)
                     quotes_total += n
                 elif dry_run:
-                    print(f"    [dry-run] would save {len(rows)} detailed quotes for {product.product_name}")
+                    logger.debug(f"    [dry-run] would save {len(rows)} detailed quotes for {product.product_name}")
                 time.sleep(0.5)
 
             context.close()
             browser.close()
 
-        print(f"\n{'='*50}")
-        print(f"爬取完成！benchmark: {benchmark_total} 条, detailed_quotes: {quotes_total} 条")
-        print(f"{'='*50}")
+        logger.info(f"爬取完成！benchmark: {benchmark_total} 条, detailed_quotes: {quotes_total} 条")
 
         log_scraper_run(SOURCE_KEY, "success", benchmark_total + quotes_total)
 
@@ -310,7 +305,7 @@ def _parse_plist_table(page) -> List[Dict]:
                 'publish_date': parsed_date,
             })
     except Exception as e:
-        print(f"    表格解析失败: {e}")
+        logger.warning(f"    表格解析失败: {e}")
     return results
 
 
@@ -358,7 +353,7 @@ def main():
         scraper.run(dry_run=args.dry_run)
     except Exception as e:
         log_scraper_run(SOURCE_KEY, "failed", 0, str(e))
-        print(f"爬虫失败: {e}")
+        logger.error(f"爬虫失败: {e}")
         sys.exit(1)
 
 

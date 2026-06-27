@@ -18,6 +18,7 @@ import json
 from datetime import datetime, date, timedelta
 from typing import List, Dict, Optional
 
+from loguru import logger
 from playwright.sync_api import sync_playwright
 
 from backend.scrapers.base import (
@@ -80,7 +81,7 @@ def parse_benchmark_history_from_chart(page) -> List[Dict]:
 
         return results
     except Exception as e:
-        print(f"    解析图表数据失败: {e}")
+        logger.warning(f"    解析图表数据失败: {e}")
         return []
 
 
@@ -137,7 +138,7 @@ def parse_detail_page(page, product_name: str, industry: str) -> List[Dict]:
             })
 
     except Exception as e:
-        print(f"    解析 detail 页失败: {e}")
+        logger.warning(f"    解析 detail 页失败: {e}")
 
     return results
 
@@ -182,7 +183,7 @@ def scrape_benchmark_page(url: str, product_name: str, industry: str, browser=No
                     chart_page.wait_for_timeout(2000)
                     history_records = parse_benchmark_history_from_chart(chart_page)
                     if history_records:
-                        print(f"      历史图表数据: {len(history_records)} 条")
+                        logger.info(f"      历史图表数据: {len(history_records)} 条")
                         for record in history_records:
                             record['product_name'] = product_name
                             record['industry'] = industry
@@ -190,7 +191,7 @@ def scrape_benchmark_page(url: str, product_name: str, industry: str, browser=No
                             record['price_type'] = '基准价'
                         results.extend(history_records)
                 except Exception as e:
-                    print(f"      图表页面加载失败: {e}")
+                    logger.warning(f"      图表页面加载失败: {e}")
                 finally:
                     chart_page.close()
         finally:
@@ -198,7 +199,7 @@ def scrape_benchmark_page(url: str, product_name: str, industry: str, browser=No
             if own_browser:
                 browser.close()
     except Exception as e:
-        print(f"    Playwright 失败: {e}")
+        logger.warning(f"    Playwright 失败: {e}")
     return results
 
 
@@ -234,16 +235,16 @@ def scrape_plist_pages(base_url: str, product_name: str, industry: str, max_page
                 page.wait_for_timeout(1000)
                 rows = _parse_plist_table(page)
                 all_rows.extend(rows)
-                print(f"      第 {idx + 1} 页: {len(rows)} 条")
+                logger.info(f"      第 {idx + 1} 页: {len(rows)} 条")
             except Exception as e:
-                print(f"      页面 {page_url} 失败: {e}")
+                logger.warning(f"      页面 {page_url} 失败: {e}")
                 continue
 
         page.close()
         if own_browser:
             browser.close()
     except Exception as e:
-        print(f"    Playwright plist 失败: {e}")
+        logger.warning(f"    Playwright plist 失败: {e}")
 
     return all_rows
 
@@ -306,18 +307,15 @@ class FastBackfillScraper:
             with open(urls_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
         except Exception as e:
-            print(f"读取 URLs 文件失败: {e}")
+            logger.error(f"读取 URLs 文件失败: {e}")
             return 0, 0
 
         categories = data.get('categories', [])
         if not categories:
-            print("未找到 categories")
+            logger.warning("未找到 categories")
             return 0, 0
 
-        print(f"\n{'='*60}")
-        print(f"基准价模式回填（rawmex/detail 页面）")
-        print(f"{'='*60}")
-        print(f"产品数: {len(categories)}")
+        logger.info(f"基准价模式回填（rawmex/detail 页面），产品数: {len(categories)}")
 
         total_saved, total_failed, done = 0, 0, 0
         start_time = time.time()
@@ -331,26 +329,25 @@ class FastBackfillScraper:
                 industry = cat.get('category', '化工')
                 url = cat['url']
 
-                print(f"\n[{done}/{len(categories)}] {name} ({industry})")
-                print(f"  URL: {url}")
+                logger.info(f"[{done}/{len(categories)}] {name} ({industry}) → {url}")
 
                 product_id = get_or_create_product(name, industry, url, None)
                 if not product_id:
-                    print(f"  -> 产品创建失败")
+                    logger.warning(f"  -> 产品创建失败")
                     total_failed += 1
                     continue
 
                 records = scrape_benchmark_page(url, name, industry, browser=browser)
 
                 if not records:
-                    print(f"  -> 无数据")
+                    logger.debug(f"  -> 无数据")
                     continue
 
-                print(f"  -> 获取到 {len(records)} 条基准价")
+                logger.info(f"  -> 获取到 {len(records)} 条基准价")
 
                 if not dry_run:
                     saved = save_benchmark_records_batch(product_id, records, SOURCE_KEY)
-                    print(f"  -> 已保存 {saved} 条")
+                    logger.info(f"  -> 已保存 {saved} 条")
                     total_saved += saved
 
                 time.sleep(0.5)
@@ -358,7 +355,7 @@ class FastBackfillScraper:
             browser.close()
 
         elapsed = time.time() - start_time
-        print(f"\n基准价模式完成: 耗时 {elapsed:.1f}s, 总记录 {total_saved} 条, 失败 {total_failed} 个")
+        logger.info(f"基准价模式完成: 耗时 {elapsed:.1f}s, 总记录 {total_saved} 条, 失败 {total_failed} 个")
         return total_saved, total_failed
 
     def run_mprice(self, urls_file: str, dry_run: bool = False, max_pages: int = 10) -> tuple:
@@ -367,18 +364,15 @@ class FastBackfillScraper:
             with open(urls_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
         except Exception as e:
-            print(f"读取 URLs 文件失败: {e}")
+            logger.error(f"读取 URLs 文件失败: {e}")
             return 0, 0
 
         categories = data.get('categories', [])
         if not categories:
-            print("未找到 categories")
+            logger.warning("未找到 categories")
             return 0, 0
 
-        print(f"\n{'='*60}")
-        print(f"详细报价模式回填（mprice/plist 页面）")
-        print(f"{'='*60}")
-        print(f"产品数: {len(categories)}, 每产品翻 {max_pages} 页")
+        logger.info(f"详细报价模式回填（mprice/plist 页面），产品数: {len(categories)}, 每产品翻 {max_pages} 页")
 
         total_saved, total_failed, done = 0, 0, 0
         start_time = time.time()
@@ -392,26 +386,25 @@ class FastBackfillScraper:
                 industry = cat.get('category', '化工')
                 url = cat['url']
 
-                print(f"\n[{done}/{len(categories)}] {name} ({industry})")
-                print(f"  URL: {url}")
+                logger.info(f"[{done}/{len(categories)}] {name} ({industry}) → {url}")
 
                 product_id = get_or_create_product(name, industry, url, url)
                 if not product_id:
-                    print(f"  -> 产品创建失败")
+                    logger.warning(f"  -> 产品创建失败")
                     total_failed += 1
                     continue
 
                 all_rows = scrape_plist_pages(url, name, industry, max_pages, browser=browser)
 
                 if not all_rows:
-                    print(f"  -> 无数据")
+                    logger.debug(f"  -> 无数据")
                     continue
 
-                print(f"  -> 共获取 {len(all_rows)} 条报价")
+                logger.info(f"  -> 共获取 {len(all_rows)} 条报价")
 
                 if not dry_run:
                     saved = save_detailed_quotes_batch(product_id, name, all_rows, SOURCE_KEY)
-                    print(f"  -> 已保存 {saved} 条")
+                    logger.info(f"  -> 已保存 {saved} 条")
                     total_saved += saved
 
                 time.sleep(0.5)
@@ -419,21 +412,14 @@ class FastBackfillScraper:
             browser.close()
 
         elapsed = time.time() - start_time
-        print(f"\n详细报价模式完成: 耗时 {elapsed:.1f}s, 总记录 {total_saved} 条, 失败 {total_failed} 个")
+        logger.info(f"详细报价模式完成: 耗时 {elapsed:.1f}s, 总记录 {total_saved} 条, 失败 {total_failed} 个")
         return total_saved, total_failed
 
     def run(self, mode: str = 'both', urls_file_detail: str = 'category_urls.json',
             urls_file_mprice: str = 'category_urls_mprice.json',
             dry_run: bool = False, max_pages: int = 10):
         """主入口"""
-        print(f"\n{'='*60}")
-        print(f"生意社历史数据快速回填")
-        print(f"{'='*60}")
-        print(f"模式: {mode}")
-        print(f"详细报价文件: {urls_file_mprice}")
-        print(f"基准价文件: {urls_file_detail}")
-        print(f"模式: {'模拟运行' if dry_run else '实际回填'}")
-        print(f"{'='*60}")
+        logger.info(f"生意社历史数据快速回填 - 模式: {mode}, {'模拟运行' if dry_run else '实际回填'}")
 
         total_saved, total_failed = 0, 0
 
@@ -447,10 +433,7 @@ class FastBackfillScraper:
             total_saved += saved
             total_failed += failed
 
-        print(f"\n{'='*60}")
-        print(f"全部完成!")
-        print(f"总记录: {total_saved} 条, 失败: {total_failed} 个")
-        print(f"{'='*60}")
+        logger.info(f"全部完成! 总记录: {total_saved} 条, 失败: {total_failed} 个")
 
 
 # ---------------------------------------------------------------------------

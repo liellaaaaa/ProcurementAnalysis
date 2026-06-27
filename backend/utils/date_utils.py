@@ -8,7 +8,7 @@ def format_date(dt):
     if isinstance(dt, str):
         try:
             dt = date.fromisoformat(dt[:10])
-        except:
+        except (ValueError, TypeError):
             return dt
     if hasattr(dt, 'strftime'):
         return dt.strftime('%Y/%m/%d')
@@ -49,5 +49,5 @@ def parse_date(s: Optional[str]) -> Optional[date]:
         return None
     try:
         return date.fromisoformat(s.replace('/', '-'))
-    except:
+    except (ValueError, TypeError):
         return None

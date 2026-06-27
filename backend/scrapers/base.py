@@ -10,7 +10,10 @@ import random
 from datetime import datetime, date
 from typing import List, Dict, Optional
 
+from loguru import logger
 from playwright.sync_api import sync_playwright
+
+from backend.config import SCRAPER_RETRY_TIMES, SCRAPER_MIN_DELAY
 
 
 # ======================================================================
@@ -95,20 +98,41 @@ def make_playwright_context(browser, user_agent=None, viewport=None):
     )
 
 
-def new_page(url: str, playwright=None, browser=None, context=None):
+def new_page(url: str, playwright=None, browser=None, context=None, retries: int = None):
     """
-    创建新页面。
+    创建新页面，支持重试。
     返回 (page, browser, context, own_browser)。
     own_browser 标记是否由本函数创建了浏览器（调用方需负责关闭）。
     """
+    if retries is None:
+        retries = SCRAPER_RETRY_TIMES
     own_browser = browser is None
-    if own_browser:
-        pw = playwright or sync_playwright().start()
-        browser = pw.chromium.launch(headless=True)
-    if context is None:
-        context = make_playwright_context(browser)
-    page = context.new_page()
-    return page, browser, context, own_browser
+    last_error = None
+    for attempt in range(1, retries + 1):
+        try:
+            pw = playwright
+            if own_browser:
+                pw = pw or sync_playwright().start()
+                browser = pw.chromium.launch(headless=True)
+            if context is None:
+                context = make_playwright_context(browser)
+            page = context.new_page()
+            page.goto(url, timeout=30000, wait_until='networkidle')
+            page.wait_for_timeout(1000)
+            return page, browser, context, own_browser
+        except Exception as e:
+            last_error = e
+            logger.warning(f"    页面加载失败 (尝试 {attempt}/{retries}): {e}")
+            if attempt < retries:
+                time.sleep(SCRAPER_MIN_DELAY * attempt)
+            if own_browser and browser:
+                try:
+                    browser.close()
+                except Exception:
+                    pass
+                browser = None
+                context = None
+    raise last_error
 
 
 # ======================================================================
@@ -130,7 +154,7 @@ def save_benchmark_record(product_id: int, data: Dict, source: str = "shengyishe
             BenchmarkPrice.record_date == record_date,
         ).first()
         if existing:
-            print(f"    [skip] benchmark {data.get('product_name', '')} {record_date} 已存在")
+            logger.debug(f"    [skip] benchmark {data.get('product_name', '')} {record_date} 已存在")
             return 0
 
         bp = BenchmarkPrice(
@@ -182,7 +206,7 @@ def save_benchmark_record(product_id: int, data: Dict, source: str = "shengyishe
         return 1
     except Exception as e:
         session.rollback()
-        print(f"    保存 benchmark 失败: {e}")
+        logger.error(f"    保存 benchmark 失败: {e}")
         return 0
     finally:
         session.close()
@@ -263,7 +287,7 @@ def save_benchmark_records_batch(product_id: int, records: List[Dict], source: s
         session.commit()
     except Exception as e:
         session.rollback()
-        print(f"    批量保存 benchmark 失败: {e}")
+        logger.error(f"    批量保存 benchmark 失败: {e}")
     finally:
         session.close()
 
@@ -326,7 +350,7 @@ def save_detailed_quotes_batch(product_id: int, product_name: str, rows: List[Di
         session.commit()
     except Exception as e:
         session.rollback()
-        print(f"    保存 detailed_quotes 失败: {e}")
+        logger.error(f"    保存 detailed_quotes 失败: {e}")
         return 0
     finally:
         session.close()

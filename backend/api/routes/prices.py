@@ -1064,7 +1064,7 @@ async def get_supplier_comparison(
                 d1 = datetime.strptime(str(row.min_date)[:10], '%Y-%m-%d').date()
                 d2 = datetime.strptime(str(row.max_date)[:10], '%Y-%m-%d').date()
                 active_days = (d2 - d1).days + 1
-            except:
+            except (ValueError, TypeError):
                 active_days = 1
 
         price_volatility = 0.0
