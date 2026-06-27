@@ -67,5 +67,5 @@ async def health():
 
 if __name__ == "__main__":
     import uvicorn
-    from config import API_HOST, API_PORT
+    from backend.config import API_HOST, API_PORT
     uvicorn.run(app, host=API_HOST, port=API_PORT)

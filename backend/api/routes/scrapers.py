@@ -10,7 +10,7 @@ from backend.scrapers import ScraperRegistry
 from backend.models.database import PriceRecord, ScraperLog, Product
 from backend.api.deps import get_db
 from backend.services.operation_logger import OperationLogger
-from config import SOURCE_FRESHNESS_CONFIG, SCRAPER_MIN_INTERVAL
+from backend.config import SOURCE_FRESHNESS_CONFIG, SCRAPER_MIN_INTERVAL
 
 router = APIRouter(prefix="/api/v1", tags=["scrapers"])
 
