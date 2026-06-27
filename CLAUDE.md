@@ -9,13 +9,14 @@
 - **爬虫**: Playwright (异步无头浏览器，绕过 Cloudflare 反爬)
 - **数据源**: 生意社 (www.100ppi.com)
 - **图表**: ECharts (前端) + matplotlib (后端 PDF 图表生成)
+- **认证**: JWT (JSON Web Token)
 
 ## 项目结构
 
 ```
 backend/
 ├── main.py              # FastAPI 入口
-├── config.py            # 配置
+├── config.py            # 配置（含 JWT SECRET_KEY）
 ├── scrapers/            # 爬虫模块
 │   ├── __init__.py       # 爬虫注册（ScraperRegistry）
 │   ├── base.py          # 爬虫基类（BaseScraper, ScrapedItem）
@@ -28,8 +29,10 @@ backend/
 │   ├── init_products.py     # 从 category_urls.json 导入产品数据
 │   ├── seed_categories.py   # 品类初始化与匹配
 │   ├── seed_exact_products.py # 精确产品名匹配
-│   └── update_product_urls.py # 更新产品 URL
+│   ├── update_product_urls.py # 更新产品 URL
+│   └── migrate_json_to_db.py # JSON 数据迁移
 ├── api/routes/          # API 路由
+│   ├── auth.py          # 用户认证（登录/登出/JWT）
 │   ├── products.py      # 产品 API
 │   ├── prices.py        # 价格 API (含 Dashboard API)
 │   ├── scrapers.py      # 爬虫管理 API
@@ -37,13 +40,20 @@ backend/
 │   ├── reports.py       # 报表生成 API (PDF/Excel)
 │   ├── alerts.py        # 预警 API
 │   ├── categories.py     # 分类管理 API
-│   └── operation_logs.py # 操作日志 API
+│   ├── operation_logs.py # 操作日志 API
+│   ├── feedback.py      # 反馈 API
+│   └── update_logs.py   # 更新日志 API
+├── api/models/
+│   └── schemas.py       # Pydantic 模型
+├── api/deps.py          # 依赖注入（认证相关）
+├── api/exceptions.py    # 自定义异常
 ├── services/            # 业务服务
 │   ├── alert_service.py     # 预警服务
 │   ├── chart_generator.py   # matplotlib 图表生成服务
-│   └── operation_logger.py  # 操作日志服务
+│   ├── operation_logger.py  # 操作日志服务
+│   └── price_metrics.py    # 价格指标服务
 └── models/              # 数据模型
-    └── database.py      # 数据库模型
+    └── database.py      # 数据库模型（含 User、OperationLog）
 
 frontend/
 ├── src/
@@ -59,9 +69,19 @@ frontend/
 │   │   ├── IndustrySelector.vue  # 行业选择器
 │   │   └── CategorySelector.vue # 品类选择器
 │   ├── api/             # API 调用
+│   │   ├── index.js          # API 统一导出
+│   │   ├── auth.js           # 认证 API（登录/登出/当前用户）
+│   │   ├── product.js        # 产品 API
+│   │   ├── price.js          # 价格 API
+│   │   ├── category.js       # 分类 API
+│   │   ├── scraper.js        # 爬虫 API
+│   │   ├── report.js         # 报表 API
+│   │   └── feedback.js       # 反馈 API
 │   └── router/          # 路由配置
 └── package.json
 
+data/database/           # SQLite 数据库目录
+└── procurement.db       # 数据库文件
 log/                     # 操作日志目录
 └── operations.log       # 操作日志文件
 ```
@@ -84,6 +104,23 @@ cd frontend
 npm install
 npm run dev
 ```
+
+## 用户认证
+
+系统使用 JWT 进行用户认证：
+
+- **登录**: `POST /api/v1/auth/login` - 用户名+密码登录，返回 JWT token
+- **登出**: `POST /api/v1/auth/logout` - 记录登出日志
+- **当前用户**: `GET /api/v1/auth/me` - 获取当前登录用户信息
+
+**认证方式**: 所有需要认证的 API 在请求头中携带：
+```
+Authorization: Bearer <token>
+```
+
+默认密码：`123456`（可在 `backend/api/routes/auth.py` 中修改 `FIXED_PASSWORD`）
+
+操作日志会自动关联当前登录用户（user_id）。
 
 ### 数据更新流程
 
@@ -153,18 +190,25 @@ python -m backend.scrapers.backfill_fast --mode both --dry-run
 
 ### Python 依赖 (requirements.txt)
 - **核心**: fastapi, uvicorn, sqlalchemy, aiosqlite
-- **爬虫**: playwright, beautifulsoup4, lxml
-- **图表**: matplotlib, numpy, openpyxl
-- **其他**: loguru, pydantic, python-dateutil, schedule
+- **认证**: PyJWT
+- **爬虫**: playwright, beautifulsoup4, lxml, requests
+- **图表**: matplotlib, numpy, openpyxl, reportlab
+- **其他**: loguru, pydantic, python-dateutil, python-dotenv, schedule
 
 **注意**: 所有日期格式统一使用 `yyyy/mm/dd`
 
 ### 前端依赖 (package.json)
-- **框架**: vue, vite
+- **框架**: vue, vue-router
 - **UI**: element-plus
 - **图表**: echarts
+- **网络**: axios
 
 ## API 端点
+
+### 用户认证
+- `POST /api/v1/auth/login` - 用户登录（返回 JWT token）
+- `POST /api/v1/auth/logout` - 用户登出
+- `GET /api/v1/auth/me` - 获取当前用户信息
 
 ### 产品管理
 - `GET /api/v1/products` - 产品列表（支持品类筛选）
@@ -219,28 +263,38 @@ python -m backend.scrapers.backfill_fast --mode both --dry-run
 - `GET /api/v1/sources` - 已注册的数据源列表
 - `POST /api/v1/scrapers/{source}/run` - 触发指定数据源爬取
 
+### 反馈管理
+- `GET /api/v1/feedbacks` - 反馈列表
+- `POST /api/v1/feedbacks` - 提交反馈
+
 ## 数据模型
 
 - `products` - 产品目录（含 source, category, unit 字段）
 - `price_records` - 价格历史（含 source, region, supplier, brand, specification 字段）
+- `benchmark_prices` - 基准价（每天 1 条，含 trend/change_percent）
+- `detailed_quotes` - 详细报价（每天多条，含 region/supplier/brand）
 - `alert_configs` - 预警配置（支持 threshold/change_rate/trend 三种类型）
 - `alert_records` - 预警记录
 - `scraper_logs` - 爬虫运行日志
 - `categories` - 产品分类（支持二级分类）
 - `product_categories` - 产品-分类关联表
-- `operation_logs` - 操作日志
+- `users` - 用户表（认证用）
+- `operation_logs` - 操作日志（含 user_id 关联）
+- `feedbacks` - 反馈记录表
+- `satisfactions` - 满意度记录表
 
 ## 操作日志
 
-所有关键操作都会记录到 `log/operations.log`，包括：
+所有关键操作都会记录到 `log/operations.log` 和数据库 `operation_logs` 表，包括：
 - 产品增删改查
 - 价格查询
 - 预警配置操作
 - 报表生成
 - 爬虫运行
 - 分类管理
+- 用户登录/登出
 
-日志格式为 JSON，便于后续分析。
+操作日志自动关联当前登录用户（通过 JWT token）。
 
 ## 数据源扩展
 

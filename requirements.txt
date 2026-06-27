@@ -9,6 +9,11 @@ alembic==1.18.5
 
 # Scraping
 playwright==1.41.0
+beautifulsoup4==4.12.3
+lxml==5.1.0
+
+# Authentication
+PyJWT==2.8.0
 
 # Logging
 loguru==0.7.2
@@ -19,9 +24,13 @@ pydantic==2.5.3
 # Utils
 python-dateutil==2.8.2
 python-dotenv==1.0.0
+schedule==1.2.1
 
 # Charts
 numpy==1.26.3
 matplotlib==3.8.2
 openpyxl==3.1.2
 reportlab==4.5.0
+
+# Optional: for better HTML parsing
+requests==2.31.0
