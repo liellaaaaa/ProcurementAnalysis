@@ -132,7 +132,7 @@ def parse_detail_page(page, product_name: str, industry: str) -> List[Dict]:
             date_text = date_el.inner_text()
             date_match = re.search(r'(\d{2})-(\d{2})\s+(\d{2}):(\d{2})', date_text)
             if date_match:
-                record_date = date(2026, int(date_match.group(1)), int(date_match.group(2)))
+                record_date = date(date.today().year, int(date_match.group(1)), int(date_match.group(2)))
 
         # 从价格表格提取规格/品牌/市场
         table = page.query_selector('.price-newp table') or page.query_selector('table.price-newp, table.rmbpj')
@@ -430,7 +430,7 @@ def make_browser_context():
     return {
         'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
         'viewport': {'width': 1920, 'height': 1080},
-        'java_script_enabled': True,
+        'javascript_enabled': True,
     }
 
 

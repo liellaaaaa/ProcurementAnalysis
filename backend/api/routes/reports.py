@@ -1242,10 +1242,12 @@ async def generate_excel_report(
         AlertRecord.triggered_at >= start_date,
         AlertRecord.triggered_at <= end_date
     )
+    if industry or (source and source != '__all__'):
+        alert_summary_query = alert_summary_query.join(Product, AlertRecord.product_id == Product.id)
     if industry:
-        alert_summary_query = alert_summary_query.join(Product, AlertRecord.product_id == Product.id).filter(Product.industry == industry)
+        alert_summary_query = alert_summary_query.filter(Product.industry == industry)
     if source and source != '__all__':
-        alert_summary_query = alert_summary_query.filter(AlertRecord.source == source)
+        alert_summary_query = alert_summary_query.filter(Product.source == source)
     alert_summary = alert_summary_query.group_by(AlertConfig.alert_type).all()
 
     alert_ws.append(["告警类型", "触发次数"])
@@ -1280,7 +1282,7 @@ async def generate_excel_report(
     if industry:
         alert_records_query = alert_records_query.filter(Product.industry == industry)
     if source and source != '__all__':
-        alert_records_query = alert_records_query.filter(AlertRecord.source == source)
+        alert_records_query = alert_records_query.filter(Product.source == source)
     alert_records = alert_records_query.order_by(AlertRecord.triggered_at.desc()).limit(100).all()
 
     for record, pname, alert_type in alert_records:

@@ -153,45 +153,36 @@ async def scrape_historical(source: str, days: int = Query(default=365, descript
     if source not in SCRAPER_SCRIPTS:
         raise HTTPException(status_code=404, detail=f"Unknown source: {source}")
 
-    from backend.scrapers.shengyishe import ShengyisheScraper
+    # 历史数据回填请使用 backfill_fast 脚本
+    # python -m backend.scrapers.backfill_fast --mode both
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(current_dir)))
 
-    # 获取该数据源的所有产品
-    products = db.query(Product).filter(
-        Product.source == source,
-        Product.is_active == True
-    ).all()
+    env = os.environ.copy()
+    env['PYTHONPATH'] = base_dir
 
-    if not products:
-        raise HTTPException(status_code=404, detail=f"No active products found for source: {source}")
+    try:
+        result = subprocess.run(
+            [sys.executable, '-m', 'backend.scrapers.backfill_fast', '--mode', 'both'],
+            capture_output=True,
+            text=True,
+            cwd=base_dir,
+            env=env,
+            timeout=1800
+        )
 
-    scraper = ShengyisheScraper()
-    total_saved = 0
-    failed_products = []
+        if result.returncode != 0:
+            raise HTTPException(status_code=500, detail=f"Backfill failed: {result.stderr[:200] if result.stderr else result.stdout[:200]}")
 
-    for product in products:
-        try:
-            print(f"\n=== 开始爬取产品: {product.product_name} (ID: {product.id}) ===")
-            records = scraper.scrape_historical_prices(product.id, days)
-            if records:
-                saved = scraper.save_historical_to_db(product.id, records)
-                total_saved += saved
-                print(f"  -> 新增 {saved} 条记录")
-            else:
-                print(f"  -> 无新数据")
+        return {
+            "status": "completed",
+            "source": source,
+            "message": "历史数据回填完成"
+        }
 
-            import time
-            time.sleep(2)  # 速率控制
-
-        except Exception as e:
-            print(f"  产品 {product.product_name} 爬取失败: {e}")
-            failed_products.append(product.product_name)
-            continue
-
-    return {
-        "status": "completed",
-        "source": source,
-        "total_products": len(products),
-        "total_records_saved": total_saved,
-        "failed_products": failed_products if failed_products else None,
-        "message": f"成功保存 {total_saved} 条历史记录"
-    }
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=500, detail="回填超时（超过30分钟）")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Backfill error: {str(e)}")

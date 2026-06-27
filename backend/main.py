@@ -57,10 +57,6 @@ async def serve_static(path: str):
     # SPA fallback
     return FileResponse(os.path.join(FRONTEND_DIST, "index.html"))
 
-@app.get("/")
-async def root():
-    return {"message": "ProcurementAnalysis API", "version": "1.0.0"}
-
 @app.get("/health")
 async def health():
     return {"status": "ok"}

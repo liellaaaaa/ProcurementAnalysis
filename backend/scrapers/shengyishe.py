@@ -125,7 +125,7 @@ class ShengyisheScraper:
             date_text = date_el.inner_text() if date_el else ""
             date_match = re.search(r'(\d{2})-(\d{2})\s+(\d{2}):(\d{2})', date_text)
             if date_match:
-                record_date = date(2026, int(date_match.group(1)), int(date_match.group(2)))
+                record_date = date(date.today().year, int(date_match.group(1)), int(date_match.group(2)))
             else:
                 record_date = date.today()
 
