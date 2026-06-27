@@ -650,7 +650,7 @@ const paginatedHistoryData = computed(() => {
   return row.extra_data.详细报价.slice(start, end)
 })
 
-watch(paginatedHistoryData, () => { nextTick(() => {}) }, { deep: true })
+
 
 async function handleExpandChange(row) {
   const id = row.product_id
