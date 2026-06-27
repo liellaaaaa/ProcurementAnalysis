@@ -977,21 +977,18 @@ async def get_supplier_comparison(
     """获取供应商对比数据，从 DetailedQuote 表聚合"""
     start_date = (date.today() - timedelta(days=days)).isoformat()
 
-    # 基础查询：从 DetailedQuote 读取，关联 Product 获取产品名称
-    base_query = db.query(DetailedQuote).join(Product, DetailedQuote.product_id == Product.id).filter(
-        DetailedQuote.publish_date >= start_date
-    )
-
+    base_filter = [
+        DetailedQuote.publish_date >= start_date,
+        Product.is_active == True,
+    ]
     if product_id:
-        base_query = base_query.filter(DetailedQuote.product_id == product_id)
+        base_filter.append(DetailedQuote.product_id == product_id)
     if source and source != '__all__':
-        base_query = base_query.filter(DetailedQuote.source == source)
+        base_filter.append(DetailedQuote.source == source)
     if industry:
-        base_query = base_query.filter(Product.industry == industry)
+        base_filter.append(Product.industry == industry)
 
-    quotes = base_query.all()
-
-    # 获取所有产品的最新基准价
+    # 获取所有产品的最新基准价（一次性）
     benchmark_map = {}
     benchmark_subquery = db.query(
         BenchmarkPrice.product_id,
@@ -1003,33 +1000,52 @@ async def get_supplier_comparison(
         (BenchmarkPrice.product_id == benchmark_subquery.c.product_id) &
         (BenchmarkPrice.record_date == benchmark_subquery.c.max_date)
     ).all()
-
     for bp in benchmark_rows:
         benchmark_map[bp.product_id] = bp.price
 
-    # 1. supplier_counts: 每个供应商的报价条数和产品数
-    supplier_stats = {}
-    for q in quotes:
-        supplier = q.supplier or "未知供应商"
-        if supplier not in supplier_stats:
-            supplier_stats[supplier] = {"supplier": supplier, "count": 0, "product_count": 0, "_deviations": [], "_product_ids": set(), "_price_sum": 0, "_dates": set(), "_prices": []}
-        supplier_stats[supplier]["count"] += 1
-        # 用 set 记录该供应商供应了哪些 product_id
-        supplier_stats[supplier]["_product_ids"].add(q.product_id)
-        # 记录报价日期（用于活跃天数）
-        supplier_stats[supplier]["_dates"].add(q.publish_date)
-        # 记录价格（用于波动率和最高单价）
-        supplier_stats[supplier]["_prices"].append(q.price)
-        # 计算偏离度
-        benchmark_price = benchmark_map.get(q.product_id)
-        if benchmark_price and benchmark_price > 0:
-            dev = (q.price - benchmark_price) / benchmark_price
-            supplier_stats[supplier]["_deviations"].append(dev)
-            supplier_stats[supplier]["_price_sum"] += q.price
+    # 1. supplier_counts: SQL GROUP BY supplier
+    supplier_rows = db.query(
+        func.coalesce(DetailedQuote.supplier, '未知供应商').label('supplier'),
+        func.count(DetailedQuote.id).label('count'),
+        func.count(func.distinct(DetailedQuote.product_id)).label('product_count'),
+        func.sum(DetailedQuote.price).label('price_sum'),
+        func.max(DetailedQuote.publish_date).label('max_date'),
+        func.min(DetailedQuote.publish_date).label('min_date'),
+    ).join(Product, DetailedQuote.product_id == Product.id).filter(
+        *base_filter
+    ).group_by(func.coalesce(DetailedQuote.supplier, '未知供应商')).all()
+
+    # 批量获取每个供应商的价格列表（用于波动率计算）和偏离度
+    supplier_names = [row.supplier for row in supplier_rows]
+    all_prices_by_supplier = {}
+    all_devs_by_supplier = {}
+    if supplier_names:
+        # 只查有基准价的产品的报价，减少数据量
+        pids_with_benchmark = [pid for pid, p in benchmark_map.items() if p and p > 0]
+        if pids_with_benchmark:
+            raw_rows = db.query(
+                func.coalesce(DetailedQuote.supplier, '未知供应商').label('supplier'),
+                DetailedQuote.price,
+                DetailedQuote.product_id,
+            ).join(Product, DetailedQuote.product_id == Product.id).filter(
+                *base_filter,
+                func.coalesce(DetailedQuote.supplier, '未知供应商').in_(supplier_names),
+                DetailedQuote.product_id.in_(pids_with_benchmark),
+            ).all()
+            for r in raw_rows:
+                s = r.supplier
+                all_prices_by_supplier.setdefault(s, []).append(r.price)
+                bp = benchmark_map.get(r.product_id)
+                if bp and bp > 0:
+                    all_devs_by_supplier.setdefault(s, []).append((r.price - bp) / bp)
 
     supplier_counts = []
-    for supplier, stats in supplier_stats.items():
-        deviations = stats["_deviations"]
+    for row in supplier_rows:
+        supplier = row.supplier
+        count = row.count
+        prices = all_prices_by_supplier.get(supplier, [])
+        deviations = all_devs_by_supplier.get(supplier, [])
+
         avg_dev = sum(deviations) / len(deviations) if deviations else 0
         max_dev = max(deviations) if deviations else 0
 
@@ -1040,10 +1056,17 @@ async def get_supplier_comparison(
         else:
             status_label = "正常"
 
-        avg_price = round(stats["_price_sum"] / stats["count"], 2) if stats["count"] else 0
-        active_days = len(stats["_dates"])
-        prices = stats["_prices"]
-        # 变异系数：STDDEV / AVG，SQLite 无原生 STDDEV，在 Python 层计算
+        avg_price = round(row.price_sum / count, 2) if count else 0
+
+        active_days = 1
+        if row.min_date and row.max_date:
+            try:
+                d1 = datetime.strptime(str(row.min_date)[:10], '%Y-%m-%d').date()
+                d2 = datetime.strptime(str(row.max_date)[:10], '%Y-%m-%d').date()
+                active_days = (d2 - d1).days + 1
+            except:
+                active_days = 1
+
         price_volatility = 0.0
         if len(prices) > 1:
             mean_price = sum(prices) / len(prices)
@@ -1053,8 +1076,8 @@ async def get_supplier_comparison(
 
         supplier_counts.append({
             "supplier": supplier,
-            "count": stats["count"],
-            "product_count": len(stats["_product_ids"]),
+            "count": count,
+            "product_count": row.product_count,
             "avg_price": avg_price,
             "avg_deviation": round(avg_dev, 4),
             "max_deviation": round(max_dev, 4),
@@ -1064,81 +1087,100 @@ async def get_supplier_comparison(
             "price_range": price_range
         })
 
-    # 2. product_supplier_prices: 同一产品多供应商的价格对比（取最新价格）
-    # 按 product_id + supplier 聚合，取每个组合的最新报价
-    product_supplier_map = {}
-    for q in quotes:
-        key = (q.product_id, q.supplier or "未知供应商")
-        if key not in product_supplier_map:
-            product_supplier_map[key] = {
-                "product_id": q.product_id,
-                "product": q.product_name,
-                "supplier": q.supplier or "未知供应商",
-                "price": q.price,
-                "quote_count": 1
-            }
-        else:
-            # 累加计数，保留最新报价（publish_date 最大的）
-            product_supplier_map[key]["quote_count"] += 1
-            if q.publish_date > (product_supplier_map[key].get("_latest_date") or date.min):
-                product_supplier_map[key]["price"] = q.price
-                product_supplier_map[key]["_latest_date"] = q.publish_date
+    # 2. product_supplier_prices: SQL GROUP BY product_id + supplier，取最新报价
+    ps_rows = db.query(
+        DetailedQuote.product_id,
+        Product.product_name,
+        func.coalesce(DetailedQuote.supplier, '未知供应商').label('supplier'),
+        func.max(DetailedQuote.publish_date).label('latest_date'),
+        func.count(DetailedQuote.id).label('quote_count'),
+    ).join(Product, DetailedQuote.product_id == Product.id).filter(
+        *base_filter
+    ).group_by(
+        DetailedQuote.product_id, Product.product_name, func.coalesce(DetailedQuote.supplier, '未知供应商')
+    ).all()
 
-    # 清理临时字段并转列表
+    # 批量获取最新报价价格（避免 N+1）
+    latest_price_subquery = db.query(
+        DetailedQuote.product_id,
+        func.coalesce(DetailedQuote.supplier, '未知供应商').label('supplier'),
+        func.max(DetailedQuote.publish_date).label('latest_date'),
+    ).join(Product, DetailedQuote.product_id == Product.id).filter(
+        *base_filter
+    ).group_by(
+        DetailedQuote.product_id, func.coalesce(DetailedQuote.supplier, '未知供应商')
+    ).subquery()
+
+    latest_prices_rows = db.query(
+        latest_price_subquery.c.product_id,
+        latest_price_subquery.c.supplier,
+        latest_price_subquery.c.latest_date,
+        DetailedQuote.price,
+    ).join(
+        DetailedQuote,
+        (DetailedQuote.product_id == latest_price_subquery.c.product_id) &
+        (func.coalesce(DetailedQuote.supplier, '未知供应商') == latest_price_subquery.c.supplier) &
+        (DetailedQuote.publish_date == latest_price_subquery.c.latest_date)
+    ).all()
+
+    latest_price_map = {}
+    for lp in latest_prices_rows:
+        latest_price_map[(lp.product_id, lp.supplier)] = lp.price
+
     product_supplier_prices = []
-    for key, item in product_supplier_map.items():
-        benchmark_price = benchmark_map.get(item["product_id"])
-        deviation = round((item["price"] - benchmark_price) / benchmark_price, 4) if benchmark_price and benchmark_price > 0 else 0
+    for row in ps_rows:
+        price = latest_price_map.get((row.product_id, row.supplier), 0)
+
+        benchmark_price = benchmark_map.get(row.product_id)
+        deviation = round((price - benchmark_price) / benchmark_price, 4) if benchmark_price and benchmark_price > 0 else 0
         product_supplier_prices.append({
-            "product_id": item["product_id"],
-            "product": item["product"],
-            "supplier": item["supplier"],
-            "price": item["price"],
-            "quote_count": item["quote_count"],
+            "product_id": row.product_id,
+            "product": row.product_name,
+            "supplier": row.supplier,
+            "price": price,
+            "quote_count": row.quote_count,
             "benchmark_price": benchmark_price or 0,
             "deviation": deviation
         })
 
-    # 3. supplier_products: 每个供应商供应的产品列表
+    # 3. supplier_products: SQL GROUP BY supplier + product_id
+    sp_rows = db.query(
+        func.coalesce(DetailedQuote.supplier, '未知供应商').label('supplier'),
+        DetailedQuote.product_id,
+        Product.product_name,
+        func.max(DetailedQuote.publish_date).label('latest_date'),
+        func.count(DetailedQuote.id).label('count'),
+    ).join(Product, DetailedQuote.product_id == Product.id).filter(
+        *base_filter
+    ).group_by(
+        func.coalesce(DetailedQuote.supplier, '未知供应商'),
+        DetailedQuote.product_id,
+        Product.product_name,
+    ).all()
+
     supplier_products_map = {}
-    for q in quotes:
-        supplier = q.supplier or "未知供应商"
+    for row in sp_rows:
+        supplier = row.supplier
         if supplier not in supplier_products_map:
-            supplier_products_map[supplier] = {}
+            supplier_products_map[supplier] = []
 
-        pid = q.product_id
-        if pid not in supplier_products_map[supplier]:
-            supplier_products_map[supplier][pid] = {
-                "product_id": pid,
-                "product": q.product_name,
-                "price": q.price,
-                "count": 1,
-                "_latest_date": q.publish_date
-            }
-        else:
-            supplier_products_map[supplier][pid]["count"] += 1
-            if q.publish_date > (supplier_products_map[supplier][pid].get("_latest_date") or date.min):
-                supplier_products_map[supplier][pid]["price"] = q.price
-                supplier_products_map[supplier][pid]["_latest_date"] = q.publish_date
+        price = latest_price_map.get((row.product_id, row.supplier), 0)
 
-    supplier_products = []
-    for supplier, products in supplier_products_map.items():
-        product_list = []
-        for pid, pdata in products.items():
-            bp = benchmark_map.get(pid)
-            dev = round((pdata["price"] - bp) / bp, 4) if bp and bp > 0 else 0
-            product_list.append({
-                "product_id": pdata["product_id"],
-                "product": pdata["product"],
-                "price": pdata["price"],
-                "count": pdata["count"],
-                "benchmark_price": bp or 0,
-                "deviation": dev
-            })
-        supplier_products.append({
-            "supplier": supplier,
-            "products": product_list
+        bp = benchmark_map.get(row.product_id)
+        dev = round((price - bp) / bp, 4) if bp and bp > 0 else 0
+        supplier_products_map[supplier].append({
+            "product_id": row.product_id,
+            "product": row.product_name,
+            "price": price,
+            "count": row.count,
+            "benchmark_price": bp or 0,
+            "deviation": dev
         })
+
+    supplier_products = [
+        {"supplier": supplier, "products": products}
+        for supplier, products in supplier_products_map.items()
+    ]
 
     return {
         "supplier_counts": supplier_counts,

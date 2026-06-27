@@ -132,16 +132,29 @@ async def get_price_ranking(limit: int = Query(10, le=50), days: int = Query(7, 
     product_ids = [r.product_id for r in latest_records]
     products_map = {p.id: p.product_name for p in db.query(Product).filter(Product.id.in_(product_ids)).all()}
 
+    # 批量获取旧数据（修复 N+1）：用最早 latest_date - days 作为下界
+    if not latest_records:
+        return {"rising": [], "falling": []}
+    min_latest = min(r.record_date for r in latest_records)
+    old_cutoff = min_latest - timedelta(days=days)
+
+    old_records = db.query(PriceRecord).filter(
+        PriceRecord.product_id.in_(product_ids),
+        PriceRecord.record_date <= min_latest,
+        PriceRecord.record_date >= old_cutoff - timedelta(days=days),
+    ).order_by(PriceRecord.product_id, PriceRecord.record_date.desc()).all()
+
+    # 按 product_id 分组，每组取最近一条作为旧价格
+    old_map = {}
+    for r in old_records:
+        if r.product_id not in old_map:
+            old_map[r.product_id] = r
+
     change_data = []
     for record in latest_records:
-        old_date = record.record_date - timedelta(days=days)
-        old_record = db.query(PriceRecord).filter(
-            PriceRecord.product_id == record.product_id,
-            PriceRecord.record_date <= old_date,
-            PriceRecord.source == record.source
-        ).order_by(PriceRecord.record_date.desc()).first()
+        old_record = old_map.get(record.product_id)
 
-        if old_record and old_record.price > 0:
+        if old_record and old_record.price > 0 and old_record.source == record.source:
             change_pct = ((record.price - old_record.price) / old_record.price) * 100
             change_data.append({
                 "product_id": record.product_id,
@@ -207,22 +220,38 @@ async def compare_products(product_ids: str = Query(..., description="产品ID�
     """多产品横向对比"""
     ids = [int(x.strip()) for x in product_ids.split(',')]
 
+    products_map = {p.id: p for p in db.query(Product).filter(Product.id.in_(ids)).all()}
+    if not products_map:
+        return {"products": []}
+
+    cutoff_30d = date.today() - timedelta(days=30)
+    all_records = db.query(PriceRecord).filter(
+        PriceRecord.product_id.in_(ids),
+        PriceRecord.record_date >= cutoff_30d
+    ).order_by(PriceRecord.product_id, PriceRecord.record_date.desc()).all()
+
+    latest_records = db.query(PriceRecord).filter(
+        PriceRecord.product_id.in_(ids)
+    ).order_by(PriceRecord.product_id, PriceRecord.record_date.desc()).all()
+
+    latest_map = {}
+    for r in latest_records:
+        if r.product_id not in latest_map:
+            latest_map[r.product_id] = r
+
+    records_by_pid = {}
+    for r in all_records:
+        records_by_pid.setdefault(r.product_id, []).append(r)
+
     results = []
     for pid in ids:
-        product = db.query(Product).filter(Product.id == pid).first()
+        product = products_map.get(pid)
         if not product:
             continue
 
-        latest_record = db.query(PriceRecord).filter(
-            PriceRecord.product_id == pid
-        ).order_by(PriceRecord.record_date.desc()).first()
-
-        records_30 = db.query(PriceRecord).filter(
-            PriceRecord.product_id == pid,
-            PriceRecord.record_date >= date.today() - timedelta(days=30)
-        ).all()
-
-        prices = [r.price for r in records_30] if records_30 else [latest_record.price] if latest_record else []
+        latest = latest_map.get(pid)
+        recs = records_by_pid.get(pid, [])
+        prices = [r.price for r in recs] if recs else [latest.price] if latest else []
 
         results.append({
             "product_id": pid,
@@ -230,12 +259,12 @@ async def compare_products(product_ids: str = Query(..., description="产品ID�
             "industry": product.industry,
             "category": product.category,
             "unit": product.unit,
-            "latest_price": latest_record.price if latest_record else None,
-            "latest_date": format_date(latest_record.record_date) if latest_record else None,
+            "latest_price": latest.price if latest else None,
+            "latest_date": format_date(latest.record_date) if latest else None,
             "avg_price_30d": round(sum(prices) / len(prices), 2) if prices else None,
             "max_price_30d": max(prices) if prices else None,
             "min_price_30d": min(prices) if prices else None,
-            "record_count_30d": len(records_30)
+            "record_count_30d": len(recs)
         })
 
     return {"products": results}
