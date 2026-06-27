@@ -261,12 +261,17 @@ function updateChart(seriesData) {
   chartInstance.setOption(option, { notMerge: true })
 }
 
+const handleResize = () => {
+  chartInstance?.resize()
+}
+
 onMounted(() => {
   loadProducts()
-  window.addEventListener('resize', () => chartInstance?.resize())
+  window.addEventListener('resize', handleResize)
 })
 
 onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
   chartInstance?.dispose()
 })
 </script>

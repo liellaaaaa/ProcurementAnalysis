@@ -1467,15 +1467,18 @@ onMounted(async () => {
     loadFilter1Charts()
     loadFilter2Charts()
   }, 200)
-  window.addEventListener('resize', () => {
-    lineChart?.resize()
-    pieChart?.resize()
-    barChart?.resize()
-    supplierTreemap?.resize()
-  })
+  window.addEventListener('resize', handleResize)
 })
 
+const handleResize = () => {
+  lineChart?.resize()
+  pieChart?.resize()
+  barChart?.resize()
+  supplierTreemap?.resize()
+}
+
 onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
   lineChart?.dispose()
   pieChart?.dispose()
   barChart?.dispose()
