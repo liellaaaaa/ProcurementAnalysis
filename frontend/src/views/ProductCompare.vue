@@ -21,7 +21,7 @@
         </template>
 
         <div class="selector-row">
-          <SourceSelector @update:source="val => { selectedSource = val; loadComparison() }" />
+          <SourceSelector v-model="selectedSource" @update:modelValue="loadComparison" />
           <IndustrySelector v-model="selectedIndustry" />
         </div>
 

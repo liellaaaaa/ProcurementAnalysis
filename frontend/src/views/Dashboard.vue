@@ -349,11 +349,11 @@
                       size="small"
                       layout="sizes, prev, pager, next"
                       :total="row.extra_data?.详细报价?.length || 0"
-                      :page-size="historyPagination.pageSize"
+                      :page-size="(historyPaginations[row.product_id] || { pageSize: 10 }).pageSize"
                       :page-sizes="[10, 20, 50, 100]"
-                      :current-page="historyPagination.page"
-                      @size-change="handleHistorySizeChange"
-                      @current-change="handleHistoryPageChange"
+                      :current-page="(historyPaginations[row.product_id] || { page: 1 }).page"
+                      @size-change="size => handleHistorySizeChange(row.product_id, size)"
+                      @current-change="page => handleHistoryPageChange(row.product_id, page)"
                       style="margin-top: 10px; justify-content: center"
                     />
                   </template>
@@ -485,7 +485,7 @@ watch([detailStart, detailEnd], () => {
 
 
 const pagination = ref({ page: 1, pageSize: 10, total: 0 })
-const historyPagination = ref({ page: 1, pageSize: 10 })
+const historyPaginations = ref({})
 
 // Supplier comparison card
 const supplierTreemapRef = ref(null)
@@ -644,8 +644,9 @@ const paginatedHistoryData = computed(() => {
   const expandedId = expandedRows.value[0]
   const row = latestPrices.value.find(p => p.product_id === expandedId)
   if (!row || !row.extra_data?.详细报价 || row.extra_data.详细报价.length === 0) return []
-  const start = (historyPagination.value.page - 1) * historyPagination.value.pageSize
-  const end = start + historyPagination.value.pageSize
+  const hp = historyPaginations.value[expandedId] || { page: 1, pageSize: 10 }
+  const start = (hp.page - 1) * hp.pageSize
+  const end = start + hp.pageSize
   return row.extra_data.详细报价.slice(start, end)
 })
 
@@ -657,7 +658,11 @@ async function handleExpandChange(row) {
     expandedRows.value = []
   } else {
     expandedRows.value = [id]
-    historyPagination.value.page = 1
+    if (!historyPaginations.value[id]) {
+      historyPaginations.value[id] = { page: 1, pageSize: 10 }
+    } else {
+      historyPaginations.value[id].page = 1
+    }
     await nextTick()
     loadExpandChart(row)
   }
@@ -745,13 +750,19 @@ async function loadExpandChart(row) {
   }
 }
 
-function handleHistoryPageChange(page) {
-  historyPagination.value.page = page
+function handleHistoryPageChange(productId, page) {
+  if (!historyPaginations.value[productId]) {
+    historyPaginations.value[productId] = { page: 1, pageSize: 10 }
+  }
+  historyPaginations.value[productId].page = page
 }
 
-function handleHistorySizeChange(size) {
-  historyPagination.value.pageSize = size
-  historyPagination.value.page = 1
+function handleHistorySizeChange(productId, size) {
+  if (!historyPaginations.value[productId]) {
+    historyPaginations.value[productId] = { page: 1, pageSize: 10 }
+  }
+  historyPaginations.value[productId].pageSize = size
+  historyPaginations.value[productId].page = 1
 }
 
 
