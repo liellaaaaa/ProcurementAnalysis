@@ -8,7 +8,7 @@ export const reportApi = {
     return api.get('/prices/stats/monthly', { params: month ? { month } : {} })
   },
   getRanking(days = 7) {
-    return api.get('/prices/stats/ranking', { params: { days } })
+    return api.get('/prices/dashboard/ranking', { params: { days } })
   },
   getForecast(productId, days = 30) {
     return api.get(`/prices/forecast/${productId}`, { params: { days } })
