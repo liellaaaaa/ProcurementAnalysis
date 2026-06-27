@@ -9,10 +9,6 @@ alembic==1.18.5
 
 # Scraping
 playwright==1.41.0
-beautifulsoup4==4.12.3
-lxml==5.1.0
-
-# Scheduler
 
 # Logging
 loguru==0.7.2

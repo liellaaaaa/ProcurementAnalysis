@@ -101,11 +101,9 @@ ProcurementAnalysis/
 │   ├── config.py            # 配置
 │   ├── scrapers/            # 爬虫模块
 │   │   ├── __init__.py       # 爬虫注册（ScraperRegistry）
-│   │   ├── base.py          # 爬虫基类（BaseScraper, ScrapedItem）
+│   │   ├── base.py          # 共享工具（解析函数、Playwright管理、DB保存）
 │   │   ├── registry.py      # 爬虫注册中心
-│   │   ├── shengyishe.py    # 生意社爬虫（增量更新，Requests 版）
-│   │   ├── detail_scraper.py # 基准价详情页爬虫
-│   │   ├── plist_scraper.py  # 详细报价列表页爬虫
+│   │   ├── shengyishe.py    # 生意社爬虫（增量更新，Playwright 版）
 │   │   └── backfill_fast.py # 历史数据快速回填脚本（Playwright 版）
 │   ├── scripts/             # 工具脚本
 │   │   ├── init_products.py     # 从 category_urls.json 导入产品数据
