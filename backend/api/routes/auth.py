@@ -78,7 +78,7 @@ def get_current_user_optional(token: str = Depends(extract_token)) -> UserInfo |
     try:
         payload = verify_token(token)
         return UserInfo(id=payload["user_id"], username=payload["username"])
-    except:
+    except Exception:
         return None
 
 
@@ -125,7 +125,7 @@ def logout(token: str = Depends(extract_token)):
                 user_id=payload.get("user_id"),
                 username=payload.get("username")
             )
-        except:
+        except Exception:
             pass
     return {"message": "已退出登录"}
 

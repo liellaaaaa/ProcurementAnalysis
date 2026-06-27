@@ -214,9 +214,6 @@ class OperationLog(Base):
     result = Column(String(20))
     operator = Column(String(50), default="system")
     user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    details = Column(String(1000))
-    result = Column(String(20))
-    operator = Column(String(50), default="system")
 
 
 engine = create_engine(

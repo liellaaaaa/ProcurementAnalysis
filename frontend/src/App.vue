@@ -2,7 +2,8 @@
   <div id="app">
     <div class="bg-pattern"></div>
 
-    <nav class="main-nav">
+    <!-- 登录页不显示导航栏 -->
+    <nav v-if="!isLoginPage" class="main-nav">
       <div class="nav-container">
         <div class="nav-brand">
           <div class="brand-mark">
@@ -157,14 +158,15 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElIcon } from 'element-plus'
 import { Loading } from '@element-plus/icons-vue'
 import { feedbackApi } from './api/feedback'
 import { updateLogApi, getToken, removeToken } from './api/auth'
 
 const router = useRouter()
+const route = useRoute()
 
 const showFeedbackDialog = ref(false)
 const feedbackDescription = ref('')
@@ -176,21 +178,25 @@ const loadingLogs = ref(false)
 
 const currentUser = ref('')
 
-async function loadCurrentUser() {
-  if (!getToken()) return
+// 判断当前是否为登录页
+const isLoginPage = computed(() => route.path === '/login')
+
+function parseUsernameFromToken() {
+  const token = getToken()
+  if (!token) {
+    currentUser.value = ''
+    return
+  }
   try {
-    const token = getToken()
-    if (token) {
-      try {
-        const payload = JSON.parse(atob(token.split('.')[1]))
-        currentUser.value = payload.username || '用户'
-      } catch {
-        currentUser.value = '用户'
-      }
-    }
+    const payload = JSON.parse(atob(token.split('.')[1]))
+    currentUser.value = payload.username || '用户'
   } catch {
     currentUser.value = '用户'
   }
+}
+
+function loadCurrentUser() {
+  parseUsernameFromToken()
 }
 
 async function submitFeedback() {
@@ -243,6 +249,11 @@ function handleCommand(command) {
 
 onMounted(() => {
   loadCurrentUser()
+})
+
+// 监听路由变化，登录/登出后重新解析用户名
+watch(() => route.path, () => {
+  parseUsernameFromToken()
 })
 </script>
 

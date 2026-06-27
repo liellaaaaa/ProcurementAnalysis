@@ -1,4 +1,4 @@
-import api from './index'
+import api from './auth'
 
 export const productApi = {
   getProducts(params) {
