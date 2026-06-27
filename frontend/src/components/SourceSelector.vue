@@ -82,11 +82,11 @@ watch(() => props.modelValue, (val) => {
 }
 
 .source-selector :deep(.el-input__wrapper) {
-  padding: 0 8px !important;
+  padding: 0 8px;
 }
 
 .source-selector :deep(.el-select__prefix) {
-  left: 6px !important;
+  left: 8px;
 }
 
 .selector-prefix {
@@ -96,14 +96,6 @@ watch(() => props.modelValue, (val) => {
   padding-right: 4px;
   border-right: 1px solid var(--border-color);
   margin-right: 6px;
-}
-
-.source-selector :deep(.el-input__wrapper) {
-  padding-left: 8px !important;
-}
-
-.source-selector :deep(.el-select__prefix) {
-  left: 8px !important;
 }
 
 .source-label {

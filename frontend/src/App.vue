@@ -228,7 +228,7 @@ onMounted(() => {
 </script>
 
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Fira+Sans:wght@300;400;500;600;700&family=Fira+Code:wght@400;500;600&display=swap');
+
 
 :root {
   /* Primary - Cyan */
@@ -434,11 +434,11 @@ body ::selection {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 16px !important;
-  border-radius: 8px !important;
-  font-weight: 500 !important;
-  font-size: 13px !important;
-  transition: all 0.2s ease !important;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-weight: 500;
+  font-size: 13px;
+  transition: all 0.2s ease;
 }
 
 .nav-refresh-btn:hover {
@@ -448,178 +448,178 @@ body ::selection {
 
 /* Global card styles */
 .el-card {
-  --el-card-bg-color: var(--bg-card) !important;
-  --el-card-border-color: var(--border-light) !important;
-  border-radius: 16px !important;
-  box-shadow: var(--shadow) !important;
-  border: 1px solid var(--border-light) !important;
-  transition: box-shadow 0.3s ease !important;
+  --el-card-bg-color: var(--bg-card);
+  --el-card-border-color: var(--border-light);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border-light);
+  transition: box-shadow 0.3s ease;
 }
 
 .el-card:hover {
-  box-shadow: var(--shadow-md) !important;
+  box-shadow: var(--shadow-md);
 }
 
 /* Element Plus overrides */
 .el-table {
-  --el-table-bg-color: var(--bg-card) !important;
-  --el-table-tr-bg-color: var(--bg-card) !important;
-  --el-table-header-bg-color: var(--bg-primary) !important;
-  --el-table-row-hover-bg-color: var(--bg-hover) !important;
-  --el-table-border-color: var(--border-light) !important;
-  --el-table-text-color: var(--text-primary) !important;
-  --el-table-header-text-color: var(--text-secondary) !important;
+  --el-table-bg-color: var(--bg-card);
+  --el-table-tr-bg-color: var(--bg-card);
+  --el-table-header-bg-color: var(--bg-primary);
+  --el-table-row-hover-bg-color: var(--bg-hover);
+  --el-table-border-color: var(--border-light);
+  --el-table-text-color: var(--text-primary);
+  --el-table-header-text-color: var(--text-secondary);
 }
 
 .el-table th.el-table__cell {
-  font-weight: 600 !important;
-  font-size: 12px !important;
+  font-weight: 600;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
 .el-input__wrapper {
-  background-color: var(--bg-card) !important;
-  border-color: var(--border-color) !important;
-  box-shadow: none !important;
-  border-radius: 8px !important;
-  transition: all 0.2s ease !important;
+  background-color: var(--bg-card);
+  border-color: var(--border-color);
+  box-shadow: none;
+  border-radius: 8px;
+  transition: all 0.2s ease;
 }
 
 .el-input__wrapper:hover {
-  border-color: var(--color-primary-light) !important;
+  border-color: var(--color-primary-light);
 }
 
 .el-input__wrapper.is-focus {
-  border-color: var(--color-primary) !important;
-  box-shadow: 0 0 0 3px var(--color-primary-dim) !important;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-dim);
 }
 
 .el-input__inner {
-  color: var(--text-primary) !important;
+  color: var(--text-primary);
 }
 
 .el-select .el-input__wrapper {
-  background-color: var(--bg-card) !important;
-  border-color: var(--border-color) !important;
-  box-shadow: none !important;
-  border-radius: 8px !important;
+  background-color: var(--bg-card);
+  border-color: var(--border-color);
+  box-shadow: none;
+  border-radius: 8px;
 }
 
 .el-select__wrapper {
-  background-color: var(--bg-card) !important;
-  border-color: var(--border-color) !important;
-  box-shadow: none !important;
-  border-radius: 8px !important;
-  transition: all 0.2s ease !important;
+  background-color: var(--bg-card);
+  border-color: var(--border-color);
+  box-shadow: none;
+  border-radius: 8px;
+  transition: all 0.2s ease;
 }
 
 .el-select__wrapper:hover {
-  border-color: var(--color-primary-light) !important;
+  border-color: var(--color-primary-light);
 }
 
 .el-select__wrapper.is-focused {
-  border-color: var(--color-primary) !important;
-  box-shadow: 0 0 0 3px var(--color-primary-dim) !important;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-dim);
 }
 
 .el-select__wrapper .el-select__caret {
-  color: var(--text-secondary) !important;
+  color: var(--text-secondary);
 }
 
 .el-select-dropdown {
-  background-color: var(--bg-card) !important;
-  border-color: var(--border-light) !important;
-  border-radius: 12px !important;
-  box-shadow: var(--shadow-lg) !important;
+  background-color: var(--bg-card);
+  border-color: var(--border-light);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
   overflow: hidden;
 }
 
 .el-select-dropdown__item {
-  color: var(--text-primary) !important;
-  border-radius: 6px !important;
-  margin: 4px 8px !important;
+  color: var(--text-primary);
+  border-radius: 6px;
+  margin: 4px 8px;
 }
 
 .el-select-dropdown__item.hover,
 .el-select-dropdown__item:hover {
-  background-color: var(--color-primary-dim) !important;
+  background-color: var(--color-primary-dim);
 }
 
 .el-select-dropdown__item.is-selected {
-  background-color: var(--color-primary-dim) !important;
-  color: var(--color-primary) !important;
-  font-weight: 600 !important;
+  background-color: var(--color-primary-dim);
+  color: var(--color-primary);
+  font-weight: 600;
 }
 
 .el-dialog {
-  --el-dialog-bg-color: var(--bg-card) !important;
-  --el-dialog-border-color: var(--border-light) !important;
-  border-radius: 20px !important;
+  --el-dialog-bg-color: var(--bg-card);
+  --el-dialog-border-color: var(--border-light);
+  border-radius: 20px;
   overflow: hidden;
 }
 
 .el-dialog__header {
-  padding: 20px 24px 0 !important;
+  padding: 20px 24px 0;
 }
 
 .el-dialog__title {
-  font-family: 'Fira Sans', sans-serif !important;
-  font-weight: 600 !important;
-  font-size: 18px !important;
-  color: var(--text-primary) !important;
+  font-family: 'Fira Sans', sans-serif;
+  font-weight: 600;
+  font-size: 18px;
+  color: var(--text-primary);
 }
 
 .el-dialog__body {
-  padding: 24px !important;
+  padding: 24px;
 }
 
 .el-button {
-  border-color: var(--border-color) !important;
-  font-family: 'Fira Sans', sans-serif !important;
-  border-radius: 8px !important;
-  font-weight: 500 !important;
-  transition: all 0.2s ease !important;
+  border-color: var(--border-color);
+  font-family: 'Fira Sans', sans-serif;
+  border-radius: 8px;
+  font-weight: 500;
+  transition: all 0.2s ease;
 }
 
 .el-button:hover {
   transform: translateY(-1px);
-  box-shadow: var(--shadow-sm) !important;
+  box-shadow: var(--shadow-sm);
 }
 
 .el-button--primary {
-  --el-button-bg-color: var(--color-primary) !important;
-  --el-button-border-color: var(--color-primary) !important;
-  --el-button-hover-bg-color: var(--color-primary-dark) !important;
-  --el-button-hover-border-color: var(--color-primary-dark) !important;
-  --el-button-active-bg-color: var(--color-primary-dark) !important;
+  --el-button-bg-color: var(--color-primary);
+  --el-button-border-color: var(--color-primary);
+  --el-button-hover-bg-color: var(--color-primary-dark);
+  --el-button-hover-border-color: var(--color-primary-dark);
+  --el-button-active-bg-color: var(--color-primary-dark);
 }
 
 .el-tabs__item {
-  color: var(--text-secondary) !important;
-  font-weight: 500 !important;
-  font-size: 14px !important;
-  padding: 0 20px !important;
-  height: 44px !important;
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-size: 14px;
+  padding: 0 20px;
+  height: 44px;
 }
 
 .el-tabs__item:hover {
-  color: var(--color-primary) !important;
+  color: var(--color-primary);
 }
 
 .el-tabs__item.is-active {
-  color: var(--color-primary) !important;
+  color: var(--color-primary);
 }
 
 .el-tabs__active-bar {
-  background-color: var(--color-primary) !important;
-  height: 3px !important;
-  border-radius: 2px !important;
+  background-color: var(--color-primary);
+  height: 3px;
+  border-radius: 2px;
 }
 
 .el-tabs__nav-wrap::after {
-  background-color: var(--border-light) !important;
-  height: 1px !important;
+  background-color: var(--border-light);
+  height: 1px;
 }
 
 /* Custom scrollbar */
@@ -740,9 +740,9 @@ body ::selection {
 }
 
 .btn-refresh-all {
-  background: var(--color-primary) !important;
-  border-color: var(--color-primary) !important;
-  font-weight: 600 !important;
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  font-weight: 600;
 }
 
 .warning-list li:last-child {
@@ -781,20 +781,20 @@ body ::selection {
 }
 
 .btn-later {
-  background: var(--bg-primary) !important;
-  border-color: var(--border-color) !important;
-  color: var(--text-secondary) !important;
+  background: var(--bg-primary);
+  border-color: var(--border-color);
+  color: var(--text-secondary);
 }
 
 .btn-later:hover {
-  background: var(--bg-hover) !important;
-  color: var(--text-primary) !important;
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .btn-update {
-  background: var(--color-primary) !important;
-  border-color: var(--color-primary) !important;
-  font-weight: 600 !important;
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  font-weight: 600;
 }
 
 /* Pagination */
@@ -807,22 +807,22 @@ body ::selection {
 }
 
 .el-pagination .el-pager li {
-  border-radius: 8px !important;
+  border-radius: 8px;
   margin: 0 2px;
 }
 
 .el-pagination .el-pager li:hover {
-  color: var(--color-primary) !important;
+  color: var(--color-primary);
 }
 
 .el-pagination .el-pager li.is-active {
-  background: var(--color-primary) !important;
-  color: #fff !important;
+  background: var(--color-primary);
+  color: #fff;
 }
 
 .el-date-editor .el-input__wrapper {
-  background-color: var(--bg-card) !important;
-  border-radius: 8px !important;
+  background-color: var(--bg-card);
+  border-radius: 8px;
 }
 
 /* Animation keyframes */

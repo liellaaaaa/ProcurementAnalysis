@@ -96,7 +96,12 @@ import { productApi } from '../api/product.js'
 import SourceSelector from '../components/SourceSelector.vue'
 import IndustrySelector from '../components/IndustrySelector.vue'
 import PeriodSelector from '../components/PeriodSelector.vue'
-import * as echarts from 'echarts'
+import * as echarts from 'echarts/core'
+import { LineChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
+import { CanvasRenderer } from 'echarts/renderers'
+
+echarts.use([LineChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer])
 
 const chartRef = ref(null)
 const products = ref([])
@@ -313,11 +318,11 @@ onUnmounted(() => {
 
 .selector-card {
   margin-bottom: 20px;
-  border-radius: 16px !important;
+  border-radius: 16px;
 }
 
 .chart-card {
-  border-radius: 16px !important;
+  border-radius: 16px;
 }
 
 .card-header {

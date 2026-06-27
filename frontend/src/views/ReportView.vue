@@ -293,7 +293,7 @@ async function downloadHtml() {
 
 .filter-card {
   margin-bottom: 24px;
-  border-radius: 16px !important;
+  border-radius: 16px;
 }
 
 .filter-form {
@@ -322,8 +322,8 @@ async function downloadHtml() {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 16px !important;
-  border-radius: 8px !important;
+  padding: 8px 16px;
+  border-radius: 8px;
 }
 
 .stats-grid {
@@ -382,7 +382,7 @@ async function downloadHtml() {
 
 .download-card {
   margin-bottom: 24px;
-  border-radius: 16px !important;
+  border-radius: 16px;
 }
 
 .card-header {
@@ -493,7 +493,7 @@ async function downloadHtml() {
 }
 
 .ranking-card {
-  border-radius: 16px !important;
+  border-radius: 16px;
 }
 
 .ranking-list {

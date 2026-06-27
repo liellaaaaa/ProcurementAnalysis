@@ -237,17 +237,17 @@ async function handleDeleteSubcategory(id) {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 10px 20px !important;
-  border-radius: 10px !important;
-  font-weight: 600 !important;
+  padding: 10px 20px;
+  border-radius: 10px;
+  font-weight: 600;
 }
 
 .table-card {
-  border-radius: 16px !important;
+  border-radius: 16px;
 }
 
 .category-table :deep(.el-table__header-wrapper th) {
-  font-size: 11px !important;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -287,16 +287,16 @@ async function handleDeleteSubcategory(id) {
 }
 
 .sub-tag {
-  border: none !important;
-  background: var(--color-primary-dim) !important;
-  color: var(--color-primary) !important;
-  border-radius: 6px !important;
-  font-weight: 500 !important;
+  border: none;
+  background: var(--color-primary-dim);
+  color: var(--color-primary);
+  border-radius: 6px;
+  font-weight: 500;
 }
 
 .add-sub-btn {
-  color: var(--color-primary) !important;
-  font-size: 12px !important;
+  color: var(--color-primary);
+  font-size: 12px;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -308,34 +308,34 @@ async function handleDeleteSubcategory(id) {
 }
 
 .action-btn {
-  border: none !important;
-  font-size: 12px !important;
-  padding: 6px 10px !important;
-  border-radius: 6px !important;
+  border: none;
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 6px;
   display: flex;
   align-items: center;
   gap: 4px;
 }
 
 .action-btn.edit {
-  background: var(--color-primary-dim) !important;
-  color: var(--color-primary) !important;
+  background: var(--color-primary-dim);
+  color: var(--color-primary);
 }
 
 .action-btn.delete {
-  background: rgba(230, 57, 70, 0.12) !important;
-  color: var(--rise-color) !important;
+  background: rgba(230, 57, 70, 0.12);
+  color: var(--rise-color);
 }
 
 .btn-cancel {
-  background: var(--bg-primary) !important;
-  border-color: var(--border-color) !important;
-  color: var(--text-secondary) !important;
+  background: var(--bg-primary);
+  border-color: var(--border-color);
+  color: var(--text-secondary);
 }
 
 .btn-save {
-  background: var(--color-primary) !important;
-  border-color: var(--color-primary) !important;
+  background: var(--color-primary);
+  border-color: var(--color-primary);
 }
 
 @keyframes fadeInUp {

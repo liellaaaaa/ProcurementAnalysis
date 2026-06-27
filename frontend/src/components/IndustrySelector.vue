@@ -59,11 +59,11 @@ watch(() => props.modelValue, (val) => {
 }
 
 .industry-selector :deep(.el-input__wrapper) {
-  padding-left: 8px !important;
+  padding-left: 8px;
 }
 
 .industry-selector :deep(.el-select__prefix) {
-  left: 8px !important;
+  left: 8px;
 }
 
 .selector-prefix {

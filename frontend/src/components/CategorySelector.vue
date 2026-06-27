@@ -173,11 +173,11 @@ onMounted(() => {
 }
 
 .category-selector :deep(.el-input__wrapper) {
-  padding-left: 8px !important;
+  padding-left: 8px;
 }
 
 .category-selector :deep(.el-select__prefix) {
-  left: 8px !important;
+  left: 8px;
 }
 
 .option-label {

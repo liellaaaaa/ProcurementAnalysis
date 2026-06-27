@@ -416,7 +416,12 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { priceApi } from '../api/price.js'
-import * as echarts from 'echarts'
+import * as echarts from 'echarts/core'
+import { LineChart, BarChart, PieChart, TreemapChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent, LegendComponent, TitleComponent } from 'echarts/components'
+import { CanvasRenderer } from 'echarts/renderers'
+
+echarts.use([LineChart, BarChart, PieChart, TreemapChart, GridComponent, TooltipComponent, LegendComponent, TitleComponent, CanvasRenderer])
 
 import SourceSelector from '../components/SourceSelector.vue'
 import IndustrySelector from '../components/IndustrySelector.vue'
@@ -1507,7 +1512,7 @@ onUnmounted(() => {
 }
 
 .chart-card {
-  border-radius: 16px !important;
+  border-radius: 16px;
 }
 
 .card-header {
@@ -1789,7 +1794,7 @@ onUnmounted(() => {
 
 .table-section :deep(.el-table__header-wrapper th) {
   padding: 10px 4px;
-  font-size: 11px !important;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -1799,13 +1804,13 @@ onUnmounted(() => {
 }
 
 .expand-content .el-table__body-wrapper {
-  overflow: visible !important;
-  width: 100% !important;
+  overflow: visible;
+  width: 100%;
 }
 
 .expand-content .el-table__body-wrapper table {
-  table-layout: auto !important;
-  width: 100% !important;
+  table-layout: auto;
+  width: 100%;
 }
 
 .price-value {
@@ -1903,53 +1908,47 @@ onUnmounted(() => {
 }
 
 .detail-table {
-  background: transparent !important;
-  width: 100% !important;
-  table-layout: auto !important;
+  background: transparent;
+  width: 100%;
+  table-layout: auto;
 }
 .detail-table .el-table__header,
 .detail-table .el-table__body,
 .detail-table .el-table__footer {
-  table-layout: auto !important;
-  width: 100% !important;
+  table-layout: auto;
+  width: 100%;
 }
 .detail-table .el-table__body-wrapper {
-  width: 100% !important;
-  overflow: visible !important;
+  width: 100%;
+  overflow: visible;
 }
 .detail-table .el-table__body-wrapper table {
-  width: 100% !important;
-  table-layout: auto !important;
+  width: 100%;
+  table-layout: auto;
 }
 .detail-table .el-table__header-wrapper {
-  width: 100% !important;
+  width: 100%;
 }
 .detail-table .el-table__header-wrapper table {
-  width: 100% !important;
-  table-layout: auto !important;
+  width: 100%;
+  table-layout: auto;
 }
 .detail-table td.el-table__cell,
 .detail-table th.el-table__cell {
-  width: auto !important;
+  width: auto;
 }
 .detail-table .el-table__body {
-  width: 100% !important;
+  width: 100%;
 }
 .detail-table .el-table__header {
-  width: 100% !important;
+  width: 100%;
 }
 .detail-table.is-scrolling-none {
-  width: 100% !important;
+  width: 100%;
 }
 .detail-table.el-table--layout-fixed {
-  table-layout: auto !important;
-  width: 100% !important;
-}
-.detail-table .el-table__header,
-.detail-table .el-table__body,
-.detail-table .el-table__footer {
-  table-layout: auto !important;
-  width: 100% !important;
+  table-layout: auto;
+  width: 100%;
 }
 
 .text-rise { color: var(--rise-color); font-weight: 500; }
@@ -1978,32 +1977,32 @@ onUnmounted(() => {
 }
 
 .data-table {
-  width: 100% !important;
+  width: 100%;
 }
 
 .table-section :deep(.el-table) {
-  width: 100% !important;
+  width: 100%;
 }
 
 .table-section :deep(.el-table__body-wrapper) {
-  overflow: hidden !important;
+  overflow: hidden;
 }
 
 .table-section :deep(.el-table__header-wrapper) {
-  overflow: hidden !important;
+  overflow: hidden;
 }
 
 .table-section :deep(.el-table__expanded-cell) {
-  overflow: visible !important;
+  overflow: visible;
 }
 
 .table-section :deep(.el-table__expanded-cell .el-table__body-wrapper) {
-  overflow: visible !important;
+  overflow: visible;
 }
 
 .table-section :deep(.el-table__expanded-cell .el-table__body-wrapper table) {
-  width: 100% !important;
-  table-layout: auto !important;
+  width: 100%;
+  table-layout: auto;
 }
 
 .supplier-table {

@@ -454,7 +454,7 @@ onMounted(() => {
 
 .filter-card {
   margin-bottom: 20px;
-  border-radius: 16px !important;
+  border-radius: 16px;
 }
 
 .filter-row {
@@ -471,27 +471,27 @@ onMounted(() => {
 }
 
 .reset-btn {
-  background: var(--bg-primary) !important;
-  border-color: var(--border-color) !important;
-  color: var(--text-secondary) !important;
+  background: var(--bg-primary);
+  border-color: var(--border-color);
+  color: var(--text-secondary);
 }
 
 .add-btn {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 6px 14px !important;
-  border-radius: 8px !important;
-  font-weight: 600 !important;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-weight: 600;
 }
 
 .feedback-card {
   margin-bottom: 20px;
-  border-radius: 16px !important;
+  border-radius: 16px;
 }
 
 .feedback-table :deep(.el-table__header-wrapper th) {
-  font-size: 11px !important;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -543,7 +543,7 @@ onMounted(() => {
 }
 
 .status-tag {
-  border: none !important;
+  border: none;
 }
 
 .action-buttons {
@@ -552,27 +552,27 @@ onMounted(() => {
 }
 
 .action-link {
-  font-size: 12px !important;
-  padding: 2px 4px !important;
+  font-size: 12px;
+  padding: 2px 4px;
 }
 
 .action-link.edit {
-  color: var(--color-primary) !important;
+  color: var(--color-primary);
 }
 
 .action-link.delete {
-  color: var(--rise-color) !important;
+  color: var(--rise-color);
 }
 
 .btn-cancel {
-  background: var(--bg-primary) !important;
-  border-color: var(--border-color) !important;
-  color: var(--text-secondary) !important;
+  background: var(--bg-primary);
+  border-color: var(--border-color);
+  color: var(--text-secondary);
 }
 
 .btn-save {
-  background: var(--color-primary) !important;
-  border-color: var(--color-primary) !important;
+  background: var(--color-primary);
+  border-color: var(--color-primary);
 }
 
 @keyframes fadeInUp {
@@ -588,7 +588,7 @@ onMounted(() => {
 /* ============ Satisfaction Card ============ */
 .satisfaction-card {
   margin-bottom: 20px;
-  border-radius: 16px !important;
+  border-radius: 16px;
 }
 
 .satisfaction-icon {
