@@ -20,7 +20,7 @@ app.add_middleware(
 )
 
 # Import routers
-from backend.api.routes import products, prices, scrapers, analytics, reports, alerts, categories, operation_logs, feedback
+from backend.api.routes import products, prices, scrapers, analytics, reports, alerts, categories, operation_logs, feedback, auth, update_logs
 
 # Include routers (必须放在 catch-all 路由之前)
 app.include_router(products.router)
@@ -32,6 +32,8 @@ app.include_router(alerts.router)
 app.include_router(categories.router)
 app.include_router(operation_logs.router)
 app.include_router(feedback.router)
+app.include_router(auth.router)
+app.include_router(update_logs.router)
 
 # 获取项目根目录
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

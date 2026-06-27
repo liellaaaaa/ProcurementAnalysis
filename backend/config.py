@@ -35,3 +35,7 @@ SCRAPER_MIN_INTERVAL = int(os.getenv("SCRAPER_MIN_INTERVAL", "1800"))
 # Logging
 LOG_DIR = BASE_DIR / "logs"
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+
+# JWT
+SECRET_KEY = os.getenv("SECRET_KEY", "procurement-analysis-secret-key-2024")
+ALGORITHM = "HS256"

@@ -192,6 +192,15 @@ class ScraperLog(Base):
     started_at = Column(DateTime)
     completed_at = Column(DateTime)
 
+class User(Base):
+    """用户表"""
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    username = Column(String(50), unique=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.now)
+
+
 class OperationLog(Base):
     """操作日志（文件日志为主，此表用于方便查询）"""
     __tablename__ = "operation_logs"
@@ -201,6 +210,10 @@ class OperationLog(Base):
     level = Column(String(10))
     module = Column(String(20))
     action = Column(String(20))
+    details = Column(String(1000))
+    result = Column(String(20))
+    operator = Column(String(50), default="system")
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     details = Column(String(1000))
     result = Column(String(20))
     operator = Column(String(50), default="system")

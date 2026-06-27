@@ -1,6 +1,5 @@
 <template>
   <div id="app">
-    <!-- Subtle background pattern -->
     <div class="bg-pattern"></div>
 
     <nav class="main-nav">
@@ -54,99 +53,103 @@
             </span>
             <span class="link-text">报表中心</span>
           </router-link>
-
-          <router-link to="/feedback" class="nav-link">
-            <span class="link-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-              </svg>
-            </span>
-            <span class="link-text">采购反馈</span>
-          </router-link>
         </div>
 
         <div class="nav-actions">
-          <div class="nav-divider"></div>
-          <el-button type="primary" size="small" class="nav-refresh-btn" @click="triggerUpdate('shengyishe')">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="23 4 23 10 17 10"/>
-              <polyline points="1 20 1 14 7 14"/>
-              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-            </svg>
-            刷新数据
-          </el-button>
+          <el-dropdown trigger="click" @command="handleCommand">
+            <span class="nav-link user-dropdown-trigger">
+              <span class="link-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                  <circle cx="12" cy="7" r="4"/>
+                </svg>
+              </span>
+              <span class="link-text">{{ currentUser }}</span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </span>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="feedback">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                  </svg>
+                  问题与建议
+                </el-dropdown-item>
+                <el-dropdown-item command="updateLog">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                  </svg>
+                  更新日志
+                </el-dropdown-item>
+                <el-dropdown-item divided command="logout" style="color: #e63946">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                    <polyline points="16 17 21 12 16 7"/>
+                    <line x1="21" y1="12" x2="9" y2="12"/>
+                  </svg>
+                  退出登录
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
       </div>
     </nav>
 
-    <!-- 数据新鲜度提示弹窗 -->
+    <!-- 问题与建议反馈弹窗 -->
     <el-dialog
-      v-model="showFreshnessDialog"
-      title="数据更新提醒"
-      width="420px"
-      :close-on-click-modal="updating ? false : true"
-      :show-close="!updating"
-      class="freshness-dialog"
+      v-model="showFeedbackDialog"
+      title="问题与建议"
+      width="480px"
+      class="feedback-dialog"
+      :close-on-click-modal="false"
     >
-      <div v-if="updating" class="freshness-loading">
-        <div class="loading-spinner">
-          <svg width="48" height="48" viewBox="0 0 48 48">
-            <circle cx="24" cy="24" r="20" stroke="currentColor" stroke-width="3" fill="none" stroke-dasharray="80 40"/>
-          </svg>
-        </div>
-        <p class="loading-title">正在抓取数据</p>
-        <p class="loading-tip">抓取完成后可正常操作系统</p>
+      <div class="feedback-tip">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="8" x2="12" y2="12"/>
+          <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        为更快解决问题，问题发生时请立即反馈。
       </div>
-      <div v-else-if="freshnessData.any_needs_update" class="freshness-warning">
-        <div class="warning-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/>
-            <line x1="12" y1="8" x2="12" y2="12"/>
-            <line x1="12" y1="16" x2="12.01" y2="16"/>
-          </svg>
-        </div>
-        <p class="warning-title">以下数据源需要更新</p>
-        <ul class="warning-list">
-          <li v-for="s in freshnessData.sources" :key="s.source" :class="{ 'needs-update': s.needs_update }">
-            <div class="source-info">
-              <span class="source-name">{{ sourceLabelMap[s.source] || s.source }}</span>
-              <span class="source-status">{{ s.message }}</span>
-            </div>
-            <el-button
-              v-if="s.needs_update"
-              size="small"
-              type="primary"
-              :loading="refreshingSource === s.source"
-              @click="triggerUpdate(s.source)"
-            >
-              刷新
-            </el-button>
-            <el-tag v-else size="small" type="success">已是最新</el-tag>
-          </li>
-        </ul>
-        <div class="refresh-all-wrapper">
-          <el-button
-            type="primary"
-            :loading="refreshingSource === 'all'"
-            @click="triggerUpdate('all')"
-            class="btn-refresh-all"
-          >
-            全部刷新
-          </el-button>
-        </div>
-      </div>
-      <div v-else class="freshness-ok">
-        <div class="ok-icon">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-            <polyline points="22 4 12 14.01 9 11.01"/>
-          </svg>
-        </div>
-        <p class="ok-text">所有数据已是最新</p>
-      </div>
+      <el-input
+        v-model="feedbackDescription"
+        type="textarea"
+        :rows="5"
+        maxlength="500"
+        placeholder="详细描述问题或建议"
+        class="feedback-textarea"
+      />
+      <div class="feedback-char-count">{{ feedbackDescription.length }}/500</div>
       <template #footer>
-        <el-button v-if="!updating" @click="handleLater" class="btn-later">关闭</el-button>
+        <el-button @click="showFeedbackDialog = false" class="btn-cancel">取消</el-button>
+        <el-button type="primary" :loading="submittingFeedback" @click="submitFeedback" class="btn-submit-feedback">提交</el-button>
       </template>
+    </el-dialog>
+
+    <!-- 更新日志弹窗 -->
+    <el-dialog
+      v-model="showUpdateLogDialog"
+      title="更新日志"
+      width="500px"
+      class="update-log-dialog"
+    >
+      <div v-if="loadingLogs" class="logs-loading">
+        <el-icon class="is-loading"><Loading /></el-icon>
+        <span>加载中...</span>
+      </div>
+      <div v-else-if="updateLogs.length === 0" class="logs-empty">
+        暂无更新日志
+      </div>
+      <div v-else class="logs-list">
+        <div v-for="log in updateLogs" :key="log.date" class="log-item">
+          <div class="log-date">{{ log.date }}</div>
+          <div class="log-content">{{ log.content }}</div>
+        </div>
+      </div>
     </el-dialog>
 
     <router-view />
@@ -154,84 +157,98 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { scraperApi } from './api/scraper'
-import { ElMessage } from 'element-plus'
+import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage, ElIcon } from 'element-plus'
+import { Loading } from '@element-plus/icons-vue'
+import { feedbackApi } from './api/feedback'
+import { updateLogApi, getToken, removeToken } from './api/auth'
 
-const showFreshnessDialog = ref(false)
-const freshnessData = ref({ any_needs_update: false, sources: [] })
-const updating = ref(false)
-const refreshingSource = ref(null)
+const router = useRouter()
 
-const sourceLabelMap = {
-  'shengyishe': '生意社'
+const showFeedbackDialog = ref(false)
+const feedbackDescription = ref('')
+const submittingFeedback = ref(false)
+
+const showUpdateLogDialog = ref(false)
+const updateLogs = ref([])
+const loadingLogs = ref(false)
+
+const currentUser = ref('')
+
+async function loadCurrentUser() {
+  if (!getToken()) return
+  try {
+    const token = getToken()
+    if (token) {
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]))
+        currentUser.value = payload.username || '用户'
+      } catch {
+        currentUser.value = '用户'
+      }
+    }
+  } catch {
+    currentUser.value = '用户'
+  }
 }
 
-const FRESHNESS_CACHE_KEY = 'procurement_freshness_check_ts'
-const FRESHNESS_CACHE_DURATION = 60 * 60 * 1000 // 1小时
-
-async function checkFreshness() {
-  const cached = localStorage.getItem(FRESHNESS_CACHE_KEY)
-  if (cached && Date.now() - parseInt(cached) < FRESHNESS_CACHE_DURATION) {
+async function submitFeedback() {
+  if (!feedbackDescription.value.trim()) {
+    ElMessage.warning('请输入问题描述')
     return
   }
-
+  submittingFeedback.value = true
   try {
-    const res = await scraperApi.checkFreshness()
-    freshnessData.value = res.data
-    if (res.data.any_needs_update) {
-      localStorage.setItem(FRESHNESS_CACHE_KEY, Date.now().toString())
-      showFreshnessDialog.value = true
-    }
+    await feedbackApi.createFeedback({ description: feedbackDescription.value })
+    ElMessage.success('反馈已提交，感谢您的建议')
+    feedbackDescription.value = ''
+    showFeedbackDialog.value = false
   } catch (e) {
-    console.error('Failed to check freshness', e)
+    ElMessage.error('提交失败：' + (e?.response?.data?.detail || e.message || '请稍后重试'))
+  } finally {
+    submittingFeedback.value = false
   }
 }
 
-function handleLater() {
-  showFreshnessDialog.value = false
+async function loadUpdateLogs() {
+  loadingLogs.value = true
+  try {
+    const res = await updateLogApi.getLogs()
+    updateLogs.value = res.data.logs || []
+  } catch (e) {
+    ElMessage.error('加载更新日志失败')
+    updateLogs.value = []
+  } finally {
+    loadingLogs.value = false
+  }
 }
 
-async function triggerUpdate(source = 'shengyishe') {
-  refreshingSource.value = source
-  try {
-    if (source === 'all') {
-      // 依次刷新所有需要更新的数据源
-      const sourcesToUpdate = freshnessData.value.sources
-        .filter(s => s.needs_update)
-        .map(s => s.source)
-      for (const src of sourcesToUpdate) {
-        await scraperApi.runScraper(src)
-      }
-      ElMessage.success('全部数据源更新成功')
-    } else {
-      const res = await scraperApi.runScraper(source)
-      if (res.data?.status === 'skipped') {
-        ElMessage.info(res.data.message || '请稍后再试')
-        refreshingSource.value = null
-        return
-      }
-      ElMessage.success(sourceLabelMap[source] + ' 数据更新成功')
-    }
-    localStorage.removeItem(FRESHNESS_CACHE_KEY)
-    window.location.reload()
-  } catch (e) {
-    console.error('Update failed', e)
-    ElMessage.error('数据更新失败：' + (e?.response?.data?.detail || e.message || '请稍后重试'))
-    refreshingSource.value = null
+function handleCommand(command) {
+  switch (command) {
+    case 'feedback':
+      showFeedbackDialog.value = true
+      break
+    case 'updateLog':
+      loadUpdateLogs()
+      showUpdateLogDialog.value = true
+      break
+    case 'logout':
+      removeToken()
+      ElMessage.success('已退出登录')
+      router.push('/login')
+      break
   }
 }
 
 onMounted(() => {
-  checkFreshness()
+  loadCurrentUser()
 })
 </script>
 
 <style>
 
-
 :root {
-  /* Primary - Cyan */
   --color-primary: #0077cc;
   --color-primary-light: #00a8e8;
   --color-primary-pale: #e6f4fa;
@@ -239,30 +256,25 @@ onMounted(() => {
   --color-primary-dim: rgba(0, 119, 204, 0.1);
   --color-primary-glow: rgba(0, 119, 204, 0.15);
 
-  /* Background */
   --bg-primary: #f5f7fa;
   --bg-secondary: #ffffff;
   --bg-card: #ffffff;
   --bg-hover: #f0f2f5;
   --bg-elevated: #fafbfc;
 
-  /* Text */
   --text-primary: #1a1a2e;
   --text-secondary: #5a6178;
   --text-muted: #9ca3af;
   --el-font-size-base: 16px;
 
-  /* Border */
   --border-color: #e4e7ed;
   --border-light: #e4e7ed;
 
-  /* Semantic */
   --rise-color: #e63946;
   --fall-color: #2a9d5c;
   --success-color: #2a9d5c;
   --warning-color: #f59e0b;
 
-  /* Shadow */
   --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
   --shadow: 0 2px 12px rgba(0,0,0,0.08);
   --shadow-md: 0 4px 16px rgba(0,0,0,0.1);
@@ -292,7 +304,6 @@ body ::selection {
   min-height: 100vh;
 }
 
-/* Navigation */
 .main-nav {
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-light);
@@ -372,6 +383,10 @@ body ::selection {
   font-size: 14px;
   transition: all 0.2s ease;
   position: relative;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
 }
 
 .nav-link::after {
@@ -420,33 +435,21 @@ body ::selection {
 .nav-actions {
   display: flex;
   align-items: center;
-  gap: 16px;
   flex-shrink: 0;
 }
 
-.nav-divider {
-  width: 1px;
-  height: 24px;
-  background: var(--border-color);
+.user-dropdown-trigger {
+  cursor: pointer;
 }
 
-.nav-refresh-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  border-radius: 8px;
-  font-weight: 500;
-  font-size: 13px;
-  transition: all 0.2s ease;
+.user-dropdown-trigger .link-icon {
+  opacity: 0.6;
 }
 
-.nav-refresh-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
+.user-dropdown-trigger:hover .link-icon {
+  opacity: 0.8;
 }
 
-/* Global card styles */
 .el-card {
   --el-card-bg-color: var(--bg-card);
   --el-card-border-color: var(--border-light);
@@ -460,7 +463,6 @@ body ::selection {
   box-shadow: var(--shadow-md);
 }
 
-/* Element Plus overrides */
 .el-table {
   --el-table-bg-color: var(--bg-card);
   --el-table-tr-bg-color: var(--bg-card);
@@ -622,7 +624,6 @@ body ::selection {
   height: 1px;
 }
 
-/* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -641,163 +642,115 @@ body ::selection {
   background: var(--color-primary-light);
 }
 
-/* Dialog styles */
-.freshness-loading {
-  text-align: center;
-  padding: 32px 0;
+/* Feedback dialog */
+.feedback-dialog .el-dialog__body {
+  padding: 20px 24px 16px;
 }
 
-.loading-spinner {
+.feedback-tip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: var(--color-primary-pale);
+  border-radius: 10px;
+  color: var(--color-primary-dark);
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+.feedback-tip svg {
+  flex-shrink: 0;
   color: var(--color-primary);
-  margin-bottom: 20px;
 }
 
-.loading-spinner svg {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.loading-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-primary);
+.feedback-textarea {
   margin-bottom: 4px;
 }
 
-.loading-tip {
-  font-size: 13px;
-  color: var(--text-muted);
+.feedback-textarea .el-textarea__inner {
+  border-radius: 10px;
+  resize: none;
+  font-size: 14px;
+  line-height: 1.6;
 }
 
-.freshness-warning {
-  text-align: center;
-}
-
-.warning-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: var(--color-primary-dim);
-  color: var(--color-primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto 16px;
-}
-
-.warning-title {
-  font-size: 15px;
-  font-weight: 500;
-  color: var(--text-primary);
-  margin-bottom: 16px;
-}
-
-.warning-list {
-  list-style: none;
-  text-align: left;
-  background: var(--bg-primary);
-  border-radius: 12px;
-  padding: 12px 16px;
-}
-
-.warning-list li {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--border-light);
-}
-
-.warning-list li:last-child {
-  border-bottom: none;
-}
-
-.source-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.source-info .source-name {
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.source-info .source-status {
+.feedback-char-count {
+  text-align: right;
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--text-muted);
+  padding: 0 4px;
 }
 
-.refresh-all-wrapper {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border-light);
-  text-align: center;
-}
-
-.btn-refresh-all {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
-  font-weight: 600;
-}
-
-.warning-list li:last-child {
-  border-bottom: none;
-}
-
-.warning-list li.needs-update .source-status {
-  color: var(--rise-color);
-  font-weight: 500;
-}
-
-.source-name {
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.source-status {
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-.freshness-ok {
-  text-align: center;
-  padding: 24px 0;
-}
-
-.ok-icon {
-  color: var(--fall-color);
-  margin-bottom: 16px;
-}
-
-.ok-text {
-  font-size: 16px;
-  font-weight: 500;
-  color: var(--fall-color);
-}
-
-.btn-later {
+.btn-cancel {
   background: var(--bg-primary);
   border-color: var(--border-color);
   color: var(--text-secondary);
 }
 
-.btn-later:hover {
+.btn-cancel:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
 }
 
-.btn-update {
+.btn-submit-feedback {
   background: var(--color-primary);
   border-color: var(--color-primary);
-  font-weight: 600;
+  font-weight: 500;
 }
 
-/* Pagination */
+.btn-submit-feedback:hover {
+  background: var(--color-primary-dark);
+  border-color: var(--color-primary-dark);
+}
+
+/* Update log dialog */
+.logs-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 40px;
+  color: var(--text-muted);
+}
+
+.logs-empty {
+  text-align: center;
+  padding: 40px;
+  color: var(--text-muted);
+}
+
+.logs-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.log-item {
+  display: flex;
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.log-item:last-child {
+  border-bottom: none;
+}
+
+.log-date {
+  flex-shrink: 0;
+  width: 90px;
+  font-size: 13px;
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+.log-content {
+  flex: 1;
+  font-size: 14px;
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+
 .el-pagination {
   --el-pagination-bg-color: var(--bg-card);
   --el-pagination-text-color: var(--text-secondary);
@@ -825,7 +778,6 @@ body ::selection {
   border-radius: 8px;
 }
 
-/* Animation keyframes */
 @keyframes fadeInUp {
   from {
     opacity: 0;

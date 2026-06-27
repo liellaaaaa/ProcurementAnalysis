@@ -44,7 +44,7 @@ class OperationLogger:
         LOG_DIR.mkdir(parents=True, exist_ok=True)
 
     @classmethod
-    def _write_log(cls, level: str, module: str, action: str, details: dict, result: str = "SUCCESS"):
+    def _write_log(cls, level: str, module: str, action: str, details: dict, result: str = "SUCCESS", user_id: int = None, username: str = None):
         """写入日志到文件和数据库"""
         cls._ensure_log_dir()
         log_entry = {
@@ -53,7 +53,9 @@ class OperationLogger:
             "module": module,
             "action": action,
             "details": details,
-            "result": result
+            "result": result,
+            "user_id": user_id,
+            "username": username
         }
         # 写入文件
         with open(LOG_FILE, "a", encoding="utf-8") as f:
@@ -70,7 +72,8 @@ class OperationLogger:
                     action=action,
                     details=json.dumps(details, ensure_ascii=False)[:1000] if details else "",
                     result=result,
-                    operator=details.get("operator", "system") if isinstance(details, dict) else "system"
+                    operator=username or "system",
+                    user_id=user_id
                 )
                 session.add(db_log)
                 session.commit()
@@ -82,24 +85,24 @@ class OperationLogger:
             pass  # 数据库不可用时静默失败，文件日志仍有效
 
     @classmethod
-    def log(cls, module: str, action: str, details: dict = None, result: str = "SUCCESS"):
+    def log(cls, module: str, action: str, details: dict = None, result: str = "SUCCESS", user_id: int = None, username: str = None):
         """记录一般操作"""
-        cls._write_log("INFO", module, action, details or {}, result)
+        cls._write_log("INFO", module, action, details or {}, result, user_id, username)
 
     @classmethod
-    def log_success(cls, module: str, action: str, details: dict = None):
+    def log_success(cls, module: str, action: str, details: dict = None, user_id: int = None, username: str = None):
         """记录成功操作"""
-        cls._write_log("INFO", module, action, details or {}, "SUCCESS")
+        cls._write_log("INFO", module, action, details or {}, "SUCCESS", user_id, username)
 
     @classmethod
-    def log_failure(cls, module: str, action: str, details: dict = None, error: str = ""):
+    def log_failure(cls, module: str, action: str, details: dict = None, error: str = "", user_id: int = None, username: str = None):
         """记录失败操作"""
-        cls._write_log("ERROR", module, action, {**(details or {}), "error": error}, "FAILURE")
+        cls._write_log("ERROR", module, action, {**(details or {}), "error": error}, "FAILURE", user_id, username)
 
     @classmethod
-    def log_warning(cls, module: str, action: str, details: dict = None):
+    def log_warning(cls, module: str, action: str, details: dict = None, user_id: int = None, username: str = None):
         """记录警告操作"""
-        cls._write_log("WARNING", module, action, details or {}, "WARNING")
+        cls._write_log("WARNING", module, action, details or {}, "WARNING", user_id, username)
 
     # ============ 便捷方法 ============
 
