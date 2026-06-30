@@ -214,6 +214,22 @@ class OperationLog(Base):
     result = Column(String(20))
     operator = Column(String(50), default="system")
     user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    ip_address = Column(String(50), nullable=True)
+    user_agent = Column(String(500), nullable=True)
+    session_id = Column(String(100), nullable=True)
+    page = Column(String(200), nullable=True)
+    referrer = Column(String(200), nullable=True)
+
+    __table_args__ = (
+        Index("ix_operation_logs_user_id", "user_id"),
+        Index("ix_operation_logs_module", "module"),
+        Index("ix_operation_logs_action", "action"),
+        Index("ix_operation_logs_session_id", "session_id"),
+        Index("ix_operation_logs_page", "page"),
+        Index("ix_operation_logs_timestamp", "timestamp"),
+        Index("ix_operation_logs_page_action", "page", "action"),
+        Index("ix_operation_logs_user_timestamp", "user_id", "timestamp"),
+    )
 
 
 engine = create_engine(

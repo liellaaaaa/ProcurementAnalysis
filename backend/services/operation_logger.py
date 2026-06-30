@@ -37,6 +37,24 @@ class OperationLogger:
     MODULE_CATEGORY = "CATEGORY"
     MODULE_FEEDBACK = "FEEDBACK"
     MODULE_SYSTEM = "SYSTEM"
+    # 行为分析模块
+    MODULE_NAV = "NAV"
+    MODULE_UI = "UI"
+    MODULE_BEHAVIOR = "BEHAVIOR"
+
+    # 前端行为动作
+    OP_PAGE_VIEW = "PAGE_VIEW"
+    OP_CLICK = "CLICK"
+    OP_FILTER = "FILTER_CHANGE"
+    OP_SEARCH = "SEARCH"
+    OP_DIALOG_OPEN = "DIALOG_OPEN"
+    OP_DIALOG_CLOSE = "DIALOG_CLOSE"
+    OP_DOWNLOAD = "DOWNLOAD"
+    OP_PAGINATE = "PAGINATE"
+    OP_SORT = "SORT"
+    OP_EXPAND = "EXPAND"
+    OP_INDICATOR_SWITCH = "INDICATOR_SWITCH"
+    OP_STAY = "STAY"
 
     @classmethod
     def _ensure_log_dir(cls):
@@ -44,7 +62,10 @@ class OperationLogger:
         LOG_DIR.mkdir(parents=True, exist_ok=True)
 
     @classmethod
-    def _write_log(cls, level: str, module: str, action: str, details: dict, result: str = "SUCCESS", user_id: int = None, username: str = None):
+    def _write_log(cls, level: str, module: str, action: str, details: dict, result: str = "SUCCESS",
+                   user_id: int = None, username: str = None,
+                   page: str = None, referrer: str = None, session_id: str = None,
+                   ip_address: str = None, user_agent: str = None):
         """写入日志到文件和数据库"""
         cls._ensure_log_dir()
         log_entry = {
@@ -55,7 +76,12 @@ class OperationLogger:
             "details": details,
             "result": result,
             "user_id": user_id,
-            "username": username
+            "username": username,
+            "page": page,
+            "referrer": referrer,
+            "session_id": session_id,
+            "ip_address": ip_address,
+            "user_agent": user_agent
         }
         # 写入文件
         with open(LOG_FILE, "a", encoding="utf-8") as f:
@@ -73,7 +99,12 @@ class OperationLogger:
                     details=json.dumps(details, ensure_ascii=False)[:1000] if details else "",
                     result=result,
                     operator=username or "system",
-                    user_id=user_id
+                    user_id=user_id,
+                    page=page[:200] if page else None,
+                    referrer=referrer[:200] if referrer else None,
+                    session_id=session_id[:100] if session_id else None,
+                    ip_address=ip_address[:50] if ip_address else None,
+                    user_agent=user_agent[:500] if user_agent else None
                 )
                 session.add(db_log)
                 session.commit()
@@ -103,6 +134,27 @@ class OperationLogger:
     def log_warning(cls, module: str, action: str, details: dict = None, user_id: int = None, username: str = None):
         """记录警告操作"""
         cls._write_log("WARNING", module, action, details or {}, "WARNING", user_id, username)
+
+    @classmethod
+    def log_frontend_behavior(cls, module: str, action: str, details: dict = None,
+                               user_id: int = None, username: str = None,
+                               page: str = None, referrer: str = None, session_id: str = None,
+                               ip_address: str = None, user_agent: str = None, result: str = "SUCCESS"):
+        """记录前端行为日志"""
+        cls._write_log(
+            level="INFO",
+            module=module,
+            action=action,
+            details=details or {},
+            result=result,
+            user_id=user_id,
+            username=username,
+            page=page,
+            referrer=referrer,
+            session_id=session_id,
+            ip_address=ip_address,
+            user_agent=user_agent
+        )
 
     # ============ 便捷方法 ============
 

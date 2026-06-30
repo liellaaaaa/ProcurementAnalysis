@@ -39,3 +39,8 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 # JWT
 SECRET_KEY = os.getenv("SECRET_KEY", "procurement-analysis-secret-key-2024")
 ALGORITHM = "HS256"
+
+# 行为日志配置
+BEHAVIOR_SLOW_REQUEST_THRESHOLD_MS = int(os.getenv("BEHAVIOR_SLOW_REQUEST_THRESHOLD_MS", "2000"))
+BEHAVIOR_SAMPLE_RATE = int(os.getenv("BEHAVIOR_SAMPLE_RATE", "10"))  # 成功请求采样率 %
+BEHAVIOR_DATA_RETENTION_DAYS = 90  # GDPR 合规：数据保留天数
