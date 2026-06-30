@@ -19,6 +19,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 行为日志中间件
+from backend.middleware.behavior_logger import BehaviorLoggerMiddleware
+app.add_middleware(BehaviorLoggerMiddleware)
+
 # Import routers
 from backend.api.routes import products, prices, scrapers, analytics, reports, alerts, categories, operation_logs, feedback, auth, update_logs
 
