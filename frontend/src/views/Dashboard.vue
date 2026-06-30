@@ -480,7 +480,6 @@ const detailStart = ref(null)
 const detailEnd = ref(null)
 
 // 搜索关键词追踪（防抖）
-let searchTimer = null
 watch(searchKeyword, (val) => {
   clearTimeout(searchTimer)
   searchTimer = setTimeout(() => {
