@@ -98,6 +98,7 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { categoryApi } from '../api/category.js'
+import { behaviorTracker } from '../utils/behaviorTracker.js'
 
 const loading = ref(false)
 const categoriesTree = ref([])
@@ -133,6 +134,7 @@ function showAddDialog(parent) {
   dialogMode.value = 'add'
   form.value = { name: '', sort_order: 0 }
   dialogVisible.value = true
+  behaviorTracker.trackDialogOpen(parent ? 'add-subcategory-dialog' : 'add-category-dialog', '/categories')
 }
 
 function showEditDialog(category) {
@@ -141,6 +143,7 @@ function showEditDialog(category) {
   dialogMode.value = 'edit'
   form.value = { name: category.name, sort_order: category.sort_order || 0 }
   dialogVisible.value = true
+  behaviorTracker.trackDialogOpen('edit-category-dialog', '/categories')
 }
 
 async function handleSave() {
@@ -159,12 +162,15 @@ async function handleSave() {
         data.parent_id = parentCategory.value.id
       }
       await categoryApi.createCategory(data)
+      behaviorTracker.trackCategoryCreate({ ...data, is_subcategory: !!parentCategory.value }, '/categories')
       ElMessage.success('创建成功')
     } else {
-      await categoryApi.updateCategory(editingCategory.value.id, {
+      const changes = {
         name: form.value.name,
         sort_order: form.value.sort_order || 0
-      })
+      }
+      await categoryApi.updateCategory(editingCategory.value.id, changes)
+      behaviorTracker.trackCategoryEdit(editingCategory.value.id, changes, '/categories')
       ElMessage.success('更新成功')
     }
     dialogVisible.value = false
@@ -178,6 +184,7 @@ async function handleDelete(id) {
   try {
     await ElMessageBox.confirm('确定删除该品类？会同时删除其下所有二级目录', '提示', { type: 'warning' })
     await categoryApi.deleteCategory(id)
+    behaviorTracker.trackCategoryDelete(id, '/categories')
     ElMessage.success('删除成功')
     loadCategories()
   } catch (e) {
@@ -189,6 +196,7 @@ async function handleDeleteSubcategory(id) {
   try {
     await ElMessageBox.confirm('确定删除该二级目录？', '提示', { type: 'warning' })
     await categoryApi.deleteCategory(id)
+    behaviorTracker.trackCategoryDelete(id, '/categories')
     ElMessage.success('删除成功')
     loadCategories()
   } catch (e) {

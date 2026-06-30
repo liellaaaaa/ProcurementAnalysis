@@ -170,7 +170,7 @@
                 placeholder="选择产品（可选）"
                 size="small"
                 style="width: 160px"
-                @change="loadSupplierComparison"
+                @change="onSupplierProductChange"
               >
                 <el-option
                   v-for="p in latestPrices"
@@ -416,6 +416,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { priceApi } from '../api/price.js'
+import { behaviorTracker } from '../utils/behaviorTracker.js'
 import * as echarts from 'echarts/core'
 import { LineChart, BarChart, PieChart, TreemapChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent, LegendComponent, TitleComponent } from 'echarts/components'
@@ -452,9 +453,9 @@ const filter1End = ref(null)
 const filter1Source = ref(null)
 const filter1Industry = ref(null)
 
-watch(filter1Source, () => { loadFilter1Charts() })
-watch(filter1Industry, () => { loadFilter1Charts() })
-watch([filter1Start, filter1End], () => { loadFilter1Charts() })
+watch(filter1Source, (val) => { behaviorTracker.trackFilterChange('filter1Source', val, '/'); loadFilter1Charts() })
+watch(filter1Industry, (val) => { behaviorTracker.trackFilterChange('filter1Industry', val, '/'); loadFilter1Charts() })
+watch([filter1Start, filter1End], () => { behaviorTracker.trackFilterChange('filter1DateRange', { start: filter1Start.value, end: filter1End.value }, '/'); loadFilter1Charts() })
 
 
 const filter2Start = ref(null)
@@ -462,21 +463,32 @@ const filter2End = ref(null)
 const filter2Source = ref(null)
 const filter2Industry = ref(null)
 
-watch(filter2Source, () => { loadFilter2Charts() })
-watch(filter2Industry, () => { loadFilter2Charts() })
-watch([filter2Start, filter2End], () => { loadFilter2Charts() })
+watch(filter2Source, (val) => { behaviorTracker.trackFilterChange('filter2Source', val, '/'); loadFilter2Charts() })
+watch(filter2Industry, (val) => { behaviorTracker.trackFilterChange('filter2Industry', val, '/'); loadFilter2Charts() })
+watch([filter2Start, filter2End], () => { behaviorTracker.trackFilterChange('filter2DateRange', { start: filter2Start.value, end: filter2End.value }, '/'); loadFilter2Charts() })
 
 const filter3Industry = ref(null)
 const filter3SupplierIndustry = ref(null)
 const filter3Source = ref(null)
 
-watch(filter3Industry, () => { loadLatestPrices() })
-watch(filter3Source, () => { loadLatestPrices() })
-watch(filter3SupplierIndustry, () => { loadSupplierComparison(); loadLatestPrices() })
+watch(filter3Industry, (val) => { behaviorTracker.trackFilterChange('filter3Industry', val, '/'); loadLatestPrices() })
+watch(filter3Source, (val) => { behaviorTracker.trackFilterChange('filter3Source', val, '/'); loadLatestPrices() })
+watch(filter3SupplierIndustry, (val) => { behaviorTracker.trackFilterChange('filter3SupplierIndustry', val, '/'); loadSupplierComparison(); loadLatestPrices() })
 
 const searchKeyword = ref('')
 const detailStart = ref(null)
 const detailEnd = ref(null)
+
+// 搜索关键词追踪（防抖）
+let searchTimer = null
+watch(searchKeyword, (val) => {
+  clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => {
+    if (val.trim()) {
+      behaviorTracker.trackSearch(val.trim(), '/')
+    }
+  }, 500)
+})
 
 watch([detailStart, detailEnd], () => { loadLatestPrices() })
 watch([detailStart, detailEnd], () => {
@@ -505,8 +517,8 @@ const supplierStart = ref(null)
 const supplierEnd = ref(null)
 const supplierSortField = ref('count')
 
-watch([supplierStart, supplierEnd], () => { loadSupplierComparison() })
-watch(supplierSortField, () => { resortSupplierTreemap() })
+watch([supplierStart, supplierEnd], () => { behaviorTracker.trackFilterChange('supplierDateRange', { start: supplierStart.value, end: supplierEnd.value }, '/'); loadSupplierComparison() })
+watch(supplierSortField, (val) => { behaviorTracker.trackSort(val, null, '/'); resortSupplierTreemap() })
 
 const indicatorCards = ref([
   { metricType: 'yoy', metricLabel: '同比涨幅', productName: '-', changePercent: 0, trend: 'rise', price: 0, hasData: true },
@@ -621,10 +633,12 @@ async function loadLatestPrices() {
 }
 
 function handlePageChange(page) {
+  behaviorTracker.trackPagination(page, pagination.value.pageSize, '/')
   pagination.value.page = page
 }
 
 function handleSizeChange(size) {
+  behaviorTracker.trackPagination(pagination.value.page, size, '/')
   pagination.value.pageSize = size
   pagination.value.page = 1
 }
@@ -662,6 +676,7 @@ async function handleExpandChange(row) {
   if (expandedRows.value.includes(id)) {
     expandedRows.value = []
   } else {
+    behaviorTracker.trackExpand(id, '/')
     expandedRows.value = [id]
     if (!historyPaginations.value[id]) {
       historyPaginations.value[id] = { page: 1, pageSize: 10 }
@@ -849,6 +864,8 @@ async function loadIndicatorCards() {
 
 async function onMetricTypeChange(idx) {
   // 当用户切换指标类型时，重新加载该卡片数据
+  const card = indicatorCards.value[idx]
+  behaviorTracker.trackIndicatorSwitch(card.metricType, '/')
   try {
     const card = indicatorCards.value[idx]
     const params = {
@@ -1180,6 +1197,11 @@ async function loadSupplierComparison() {
   }
 }
 
+function onSupplierProductChange(val) {
+  behaviorTracker.trackFilterChange('supplierProduct', val, '/')
+  loadSupplierComparison()
+}
+
 function resortSupplierTreemap() {
   const counts = supplierCountsCache.value
   if (!counts || !counts.length) return
@@ -1244,6 +1266,7 @@ function getSupplierProducts(supplierName) {
 }
 
 function showChartDetail(type) {
+  behaviorTracker.trackChartViewDetail(type, '/')
   if (type === 'line') {
     chartDetailTitle.value = '价格走势 - 详细数据'
     const { dates, series } = lineChartRawData.value
@@ -1305,6 +1328,7 @@ function showChartDetail(type) {
 }
 
 function downloadChart(type) {
+  behaviorTracker.trackChartDownload(type, '/')
   let chartInstance = null
   let filename = ''
   if (type === 'line') {
@@ -1449,6 +1473,7 @@ function initSupplierTreemap() {
   supplierTreemap.off('click')
   supplierTreemap.on('click', (params) => {
     if (params.data.id === 'others') return
+    behaviorTracker.trackClick('treemap-supplier-' + params.data.name, 'treemap', '/')
     selectedSupplier.value = params.data
   })
 }

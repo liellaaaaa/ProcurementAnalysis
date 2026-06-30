@@ -56,4 +56,15 @@ router.beforeEach((to, from, next) => {
   }
 })
 
+// 行为日志：页面浏览追踪
+router.afterEach((to, from) => {
+  // 跳过登录页
+  if (to.path === '/login') return
+
+  // 动态导入 behaviorTracker 避免循环依赖
+  import('../utils/behaviorTracker').then(({ behaviorTracker }) => {
+    behaviorTracker.trackPageView(to.path)
+  })
+})
+
 export default router

@@ -19,7 +19,7 @@
         </div>
 
         <div class="nav-links">
-          <router-link to="/" class="nav-link">
+          <router-link to="/" class="nav-link" @click="trackNavClick('nav-dashboard', 'Dashboard')">
             <span class="link-icon">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="3" y="3" width="7" height="7" rx="1"/>
@@ -31,7 +31,7 @@
             <span class="link-text">数据看板</span>
           </router-link>
 
-          <router-link to="/compare" class="nav-link">
+          <router-link to="/compare" class="nav-link" @click="trackNavClick('nav-compare', 'ProductCompare')">
             <span class="link-icon">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="20" x2="18" y2="10"/>
@@ -42,7 +42,7 @@
             <span class="link-text">产品对比</span>
           </router-link>
 
-          <router-link to="/reports" class="nav-link">
+          <router-link to="/reports" class="nav-link" @click="trackNavClick('nav-reports', 'ReportView')">
             <span class="link-icon">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -164,6 +164,7 @@ import { ElMessage, ElIcon } from 'element-plus'
 import { Loading } from '@element-plus/icons-vue'
 import { feedbackApi } from './api/feedback'
 import { updateLogApi, getToken, removeToken } from './api/auth'
+import { behaviorTracker } from './utils/behaviorTracker'
 
 const router = useRouter()
 const route = useRoute()
@@ -178,8 +179,10 @@ const loadingLogs = ref(false)
 
 const currentUser = ref('')
 
-// 判断当前是否为登录页
-const isLoginPage = computed(() => route.path === '/login')
+// 导航栏点击追踪
+function trackNavClick(elementId, pageName) {
+  behaviorTracker.trackClick(elementId, 'nav-link', route.path)
+}
 
 function parseUsernameFromToken() {
   const token = getToken()
@@ -233,13 +236,17 @@ async function loadUpdateLogs() {
 function handleCommand(command) {
   switch (command) {
     case 'feedback':
+      behaviorTracker.trackDialogOpen('feedback-dialog', route.path)
       showFeedbackDialog.value = true
       break
     case 'updateLog':
+      behaviorTracker.trackDialogOpen('update-log-dialog', route.path)
       loadUpdateLogs()
       showUpdateLogDialog.value = true
       break
     case 'logout':
+      // 在 removeToken 之前调用，确保能获取当前用户身份
+      behaviorTracker.trackLogout(route.path)
       removeToken()
       ElMessage.success('已退出登录')
       router.push('/login')

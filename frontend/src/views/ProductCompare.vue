@@ -93,6 +93,7 @@
 import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
 import { priceApi } from '../api/price.js'
 import { productApi } from '../api/product.js'
+import { behaviorTracker } from '../utils/behaviorTracker.js'
 import SourceSelector from '../components/SourceSelector.vue'
 import IndustrySelector from '../components/IndustrySelector.vue'
 import PeriodSelector from '../components/PeriodSelector.vue'
@@ -120,11 +121,26 @@ const filteredProducts = computed(() => {
 
 // 监听行业变化，重新加载产品列表
 watch(selectedIndustry, (newIndustry) => {
+  behaviorTracker.trackCompareFilterChange({ industry: newIndustry }, '/compare')
   selectedProducts.value = []
   loadProducts()
 })
 
-watch([compareStart, compareEnd], () => { loadComparison() })
+watch([compareStart, compareEnd], () => {
+  behaviorTracker.trackCompareFilterChange({ start: compareStart.value, end: compareEnd.value }, '/compare')
+  loadComparison()
+})
+
+// 监听产品选择变化
+watch(selectedProducts, (newVal, oldVal) => {
+  const added = newVal.filter(id => !oldVal?.includes(id))
+  const removed = oldVal?.filter(id => !newVal.includes(id)) || []
+  if (added.length > 0) {
+    added.forEach(id => {
+      behaviorTracker.trackProductSelect(id, newVal.length, '/compare')
+    })
+  }
+}, { deep: true })
 
 function getProductColor(id) {
   const idx = selectedProducts.value.indexOf(id)

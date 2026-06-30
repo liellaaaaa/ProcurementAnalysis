@@ -100,6 +100,7 @@ import { ref, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { reportApi } from '../api/report.js'
 import { priceApi } from '../api/price.js'
+import { behaviorTracker } from '../utils/behaviorTracker.js'
 import SourceSelector from '../components/SourceSelector.vue'
 import IndustrySelector from '../components/IndustrySelector.vue'
 import PeriodSelector from '../components/PeriodSelector.vue'
@@ -120,11 +121,19 @@ const statCards = ref([
 
 // 行业或数据源变化时自动刷新统计
 watch([selectedSource, selectedIndustry], () => {
+  behaviorTracker.trackReportFilterChange({
+    source: selectedSource.value,
+    industry: selectedIndustry.value
+  }, '/reports')
   loadStats()
 })
 
 // 时间范围变化时自动刷新统计
 watch([reportStart, reportEnd], () => {
+  behaviorTracker.trackReportFilterChange({
+    start: reportStart.value,
+    end: reportEnd.value
+  }, '/reports')
   loadStats()
 })
 
@@ -213,6 +222,7 @@ async function downloadPdf() {
     a.download = `price_report_${new Date().toISOString().slice(0, 10)}.pdf`
     a.click()
     window.URL.revokeObjectURL(url)
+    behaviorTracker.trackDownload('pdf', '/reports')
     ElMessage.success('PDF 下载成功')
   } catch (e) {
     ElMessage.error('PDF 下载失败')
@@ -231,6 +241,7 @@ async function downloadExcel() {
     a.download = `price_report_${new Date().toISOString().slice(0, 10)}.xlsx`
     a.click()
     window.URL.revokeObjectURL(url)
+    behaviorTracker.trackDownload('excel', '/reports')
     ElMessage.success('Excel 下载成功')
   } catch (e) {
     ElMessage.error('Excel 下载失败')
@@ -249,6 +260,7 @@ async function downloadHtml() {
     a.download = `price_report_${new Date().toISOString().slice(0, 10)}.html`
     a.click()
     window.URL.revokeObjectURL(url)
+    behaviorTracker.trackDownload('html', '/reports')
     ElMessage.success('HTML 下载成功')
   } catch (e) {
     ElMessage.error('HTML 下载失败')
