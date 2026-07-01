@@ -114,6 +114,7 @@ class BehaviorTracker {
     const data = JSON.stringify({ events })
 
     // Use sendBeacon for reliable delivery on unload
+    // Note: sendBeacon doesn't support custom headers, so we put token in body
     if (navigator.sendBeacon) {
       navigator.sendBeacon(`${API_BASE}/operation-logs/behavior`, data)
     } else {
@@ -124,6 +125,10 @@ class BehaviorTracker {
       if (this.sessionId) {
         xhr.setRequestHeader('X-Session-ID', this.sessionId)
       }
+      const token = getToken()
+      if (token) {
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+      }
       xhr.send(data)
     }
   }
@@ -133,14 +138,19 @@ class BehaviorTracker {
     this.flushLocked = true
 
     const events = this.queue.splice(0, this.queue.length)
+    const token = getToken()
 
     try {
+      const headers = {
+        'Content-Type': 'application/json',
+        'X-Session-ID': this.sessionId || ''
+      }
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
       const res = await fetch(`${API_BASE}/operation-logs/behavior`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Session-ID': this.sessionId || ''
-        },
+        headers,
         body: JSON.stringify({ events }),
         keepalive: true
       })
