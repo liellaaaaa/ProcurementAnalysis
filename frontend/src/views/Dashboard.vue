@@ -277,7 +277,33 @@
             <div class="controls">
               <SourceSelector v-model="filter3Source" />
               <IndustrySelector v-model="filter3Industry" />
-              <PeriodSelector v-model:startDate="detailStart" v-model:endDate="detailEnd" />
+              <el-select v-model="detailMode" style="width: 90px; margin-right: 8px">
+                <el-option label="按日" value="single" />
+                <el-option label="区间" value="range" />
+              </el-select>
+
+              <el-date-picker
+                v-if="detailMode === 'single'"
+                v-model="detailSingleDate"
+                type="date"
+                placeholder="选择日期"
+                :clearable="false"
+                format="YYYY/MM/DD"
+                value-format="YYYY-MM-DD"
+                style="width: 140px"
+              />
+
+              <el-date-picker
+                v-else
+                v-model="detailRange"
+                type="daterange"
+                range-separator="至"
+                start-placeholder="开始日期"
+                end-placeholder="结束日期"
+                format="YYYY/MM/DD"
+                value-format="YYYY-MM-DD"
+                style="width: 240px"
+              />
 
               <el-input
                 v-model="searchKeyword"
@@ -476,8 +502,9 @@ watch(filter3Source, (val) => { behaviorTracker.trackFilterChange('filter3Source
 watch(filter3SupplierIndustry, (val) => { behaviorTracker.trackFilterChange('filter3SupplierIndustry', val, '/'); loadSupplierComparison(); loadLatestPrices() })
 
 const searchKeyword = ref('')
-const detailStart = ref(null)
-const detailEnd = ref(null)
+const detailMode = ref('single')  // 'single' | 'range'
+const detailSingleDate = ref('')
+const detailRange = ref([])
 
 // 搜索关键词追踪（防抖）
 watch(searchKeyword, (val) => {
@@ -489,8 +516,10 @@ watch(searchKeyword, (val) => {
   }, 500)
 })
 
-watch([detailStart, detailEnd], () => { loadLatestPrices() })
-watch([detailStart, detailEnd], () => {
+watch(detailSingleDate, () => { loadLatestPrices() })
+watch(detailRange, () => { loadLatestPrices() })
+watch(detailMode, () => { loadLatestPrices() })
+watch(detailSingleDate, () => {
   if (expandedRows.value.length > 0) {
     const expandedId = expandedRows.value[0]
     const row = latestPrices.value.find(p => p.product_id === expandedId)
@@ -619,9 +648,14 @@ async function loadLatestPrices() {
       category_id: null,
       subcategory_id: null,
       source: filter3Source.value || null,
-      industry: filter3Industry.value || null,
-      start_date: detailStart.value || null,
-      end_date: detailEnd.value || null
+      industry: filter3Industry.value || null
+    }
+    if (detailMode.value === 'single') {
+      params.start_date = detailSingleDate.value
+      params.end_date = detailSingleDate.value
+    } else {
+      params.start_date = detailRange.value?.[0] || null
+      params.end_date = detailRange.value?.[1] || null
     }
     const res = await priceApi.getLatestPrices(params)
     latestPrices.value = res.data.data || []
@@ -693,12 +727,12 @@ async function loadExpandChart(row) {
   const chart = echarts.init(el)
   try {
     let days = 7
-    if (detailStart.value && detailEnd.value) {
-      const start = new Date(detailStart.value + 'T00:00:00')
-      const end = new Date(detailEnd.value + 'T00:00:00')
+    if (detailMode.value === 'single') {
+      days = 1
+    } else if (detailRange.value) {
+      const start = new Date(detailRange.value[0] + 'T00:00:00')
+      const end = new Date(detailRange.value[1] + 'T00:00:00')
       days = Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1)
-    } else if (!detailStart.value && !detailEnd.value) {
-      days = 365
     }
     // 使用基准价历史数据（与表格数据源一致）
     const res = await priceApi.getBenchmarkHistory(
@@ -1491,6 +1525,15 @@ onMounted(async () => {
   await nextTick()
   await nextTick()
   await nextTick()
+  // 获取最新报价日期作为默认单日期
+  try {
+    const res = await priceApi.getLatestPrices({ page: 1, pageSize: 1 })
+    if (res.data.data?.length > 0) {
+      detailSingleDate.value = res.data.data[0].record_date
+    }
+  } catch (e) {
+    console.error('Failed to get latest date', e)
+  }
   setTimeout(() => {
     loadLatestPrices()
     loadFilter1Charts()
